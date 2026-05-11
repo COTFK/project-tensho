@@ -1,2 +1,4 @@
 /target
 /tools/
+assets/ocgcore.js
+assets/ocgcore.wasm
