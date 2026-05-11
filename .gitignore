@@ -2,3 +2,5 @@
 /tools/
 assets/ocgcore.js
 assets/ocgcore.wasm
+edopro/
+*.ydk

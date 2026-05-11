@@ -8,7 +8,14 @@ edition = "2024"
 
 [dependencies]
 dioxus = { version = "0.7", features = ["web"] }
+getrandom = { version = "0.2", features = ["js"] }
+gloo-net = { version = "0.5", features = ["http"] }
+gloo-timers = { version = "0.3", features = ["futures"] }
 js-sys = "0.3"
+rand = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 web-sys = { version = "0.3", features = ["Window", "Response"] }

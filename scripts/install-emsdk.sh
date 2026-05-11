@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="$(pwd)"
 TOOLS_DIR="$ROOT_DIR/tools"
 EMSDK_DIR="$TOOLS_DIR/emsdk"
 

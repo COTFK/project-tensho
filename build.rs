@@ -1,7 +1,7 @@
 use std::env;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::fs;
 
 fn main() {
     let out_dir = env::var("OUT_DIR").expect("OUT_DIR not set");
@@ -23,12 +23,13 @@ fn main() {
 
     let emsdk = candidates
         .into_iter()
-        .find(|path| path.join("upstream").join("emscripten").join("em++").exists())
-        .unwrap_or_else(|| {
-            panic!(
-                "emsdk not found. Install it under tools/emsdk or set EMSDK"
-            )
-        });
+        .find(|path| {
+            path.join("upstream")
+                .join("emscripten")
+                .join("em++")
+                .exists()
+        })
+        .unwrap_or_else(|| panic!("emsdk not found. Install it under tools/emsdk or set EMSDK"));
 
     let empp = emsdk.join("upstream").join("emscripten").join("em++");
     if !empp.exists() {
@@ -43,7 +44,9 @@ fn main() {
         .arg("-fexceptions")
         .arg("-sMODULARIZE=1")
         .arg("-sEXPORT_ES6=1")
-        .arg("-sEXPORT_ALL=1")
+        .arg("-sEXPORT_NAME=ocgcore")
+        .arg("-sEXPORTED_FUNCTIONS=['_OCG_GetVersion','_OCG_CreateDuel','_OCG_CreateDuelWithStubs','_OCG_DestroyDuel','_OCG_DuelNewCard','_OCG_StartDuel','_OCG_DuelProcess','_OCG_DuelGetMessage','_OCG_DuelSetResponse','_OCG_LoadScript','_OCG_DuelQueryCount','_OCG_DuelQuery','_OCG_DuelQueryLocation','_OCG_RegisterCardData','_malloc','_free']")
+        .arg("-sEXPORTED_RUNTIME_METHODS=['getValue','setValue','ccall','cwrap','wasmMemory']")
         .arg("-sALLOW_MEMORY_GROWTH=1")
         .arg("-sENVIRONMENT=web")
         .arg("-I")
@@ -78,17 +81,16 @@ fn main() {
     }
 
     cmd.arg(lua_dir.join("onelua.c"));
+    
+    // Add stubs for required OCG callbacks (not modifying ocgcore itself)
+    cmd.arg(manifest_dir.join("src/stubs.c"));
 
     let status = cmd.status().expect("failed to invoke em++");
     if !status.success() {
         panic!("em++ failed with status {status}");
     }
 
-    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-    let assets_dir = manifest_dir
-        .parent()
-        .unwrap()
-        .join("assets");
+    let assets_dir = manifest_dir.join("assets");
     fs::create_dir_all(&assets_dir).expect("failed to create assets directory");
     let assets_wasm = assets_dir.join("ocgcore.wasm");
     let assets_js = assets_dir.join("ocgcore.js");
