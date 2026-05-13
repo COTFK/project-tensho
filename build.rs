@@ -10,6 +10,7 @@ fn main() {
 
     println!("cargo:rerun-if-changed={}", ocgcore_dir.display());
     println!("cargo:rerun-if-changed={}", lua_dir.display());
+    println!("cargo:rerun-if-changed=src/stubs.c");
 
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
 

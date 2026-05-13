@@ -43,7 +43,7 @@ void stub_data_reader(void* payload, uint32_t code, OCG_CardData* data) {
         return;
     }
 
-    // Search registry first for registered card data
+    // Search registry for registered card data only
     for (int i = 0; i < g_card_db_size; i++) {
         if (g_card_db[i].code == code) {
             *data = g_card_db[i].data;
@@ -51,8 +51,8 @@ void stub_data_reader(void* payload, uint32_t code, OCG_CardData* data) {
         }
     }
 
-    // Fallback: provide reasonable defaults for unknown cards
-    fill_card_data(data, code, TYPE_MONSTER | TYPE_EFFECT, 4u, ATTRIBUTE_LIGHT, RACE_WARRIOR, 1000, 1000);
+    // No fallback - leave data zeroed out if card not found
+    // Cards without registered data will fail to load
 }
 
 void stub_data_reader_done(void* payload, OCG_CardData* data) {

@@ -1,4 +1,5 @@
 mod card;
+mod deck;
 mod hand;
 mod ocgcore;
 
@@ -7,7 +8,6 @@ use crate::hand::Hand;
 use dioxus::prelude::*;
 use gloo_timers::future::TimeoutFuture;
 use js_sys::Uint8Array;
-use tracing::{debug, info, warn};
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
 
@@ -70,22 +70,23 @@ fn App() -> Element {
     let mut current_phase = use_signal(|| None::<u32>);
     let mut current_turn = use_signal(|| None::<u8>);
     let available_summons = use_signal(|| Vec::<u32>::new());
+    let mut waiting_for_engine_input = use_signal(|| false);
     let mut waiting_for_zone_selection = use_signal(|| false);
     let mut selected_zone_for_summon = use_signal(|| 0usize);
 
     // Field zones: Modern Yu-Gi-Oh layout
     // Spell/Trap zones (5 zones)
-    let mut szone_contents = use_signal(|| vec!["0"; 5].iter().map(|s| s.to_string()).collect::<Vec<_>>());
+    let szone_contents = use_signal(|| Vec::<String>::new());
     // Monster zones (5 main + 2 extra)
-    let mut mzone_contents = use_signal(|| vec!["0"; 5].iter().map(|s| s.to_string()).collect::<Vec<_>>());
-    let mut emzone_left = use_signal(|| "0".to_string());
-    let mut emzone_right = use_signal(|| "0".to_string());
+    let mzone_contents = use_signal(|| Vec::<String>::new());
+    let emzone_left = use_signal(|| "0".to_string());
+    let emzone_right = use_signal(|| "0".to_string());
     // Other zones
-    let mut field_zone = use_signal(|| "0".to_string());
-    let mut deck_count = use_signal(|| 0usize);
-    let mut gy_contents = use_signal(|| Vec::<String>::new());
-    let mut banish_contents = use_signal(|| Vec::<String>::new());
-    let mut extra_deck_count = use_signal(|| 0usize);
+    let field_zone = use_signal(|| "0".to_string());
+    let deck_count = use_signal(|| 0usize);
+    let gy_contents = use_signal(|| Vec::<String>::new());
+    let banish_contents = use_signal(|| Vec::<String>::new());
+    let extra_deck_count = use_signal(|| 0usize);
 
     // Load ocgcore and get version
     let ocgcore_version = use_resource(move || async move {
@@ -136,64 +137,24 @@ fn App() -> Element {
         let response = (summon_index as u32) << 16;
         info!("Sending response: 0x{:08x}", response);
         ocgcore::send_response_u32(duel, response);
+        waiting_for_engine_input.set(false);
         // Don't call process_duel_step here - let the polling loop handle it
         // This avoids conflicts between the button handler and the polling loop
     };
 
     let create_duel = move |_| {
         println!("=== Create duel button clicked ===");
-        match ocgcore::create_duel_with_random_seed() {
-            Ok(duel_handle) => {
-                println!("Duel created with handle: {}", duel_handle);
-                current_duel.set(Some(duel_handle));
-                current_phase.set(None);
-                current_turn.set(None);
-                // Sync the UI from the engine immediately, then keep polling while the duel is active.
-                let cards = ocgcore::query_hand(duel_handle, 0);
-                println!("Initial hand: {:?}", cards);
-                hand_contents.set(cards);
-                // Query monster zones (LOCATION_MZONE = 0x04)
-                let mzone_cards = ocgcore::query_location_codes(duel_handle, 0, 0x04u32);
-                let mzone_vec: Vec<String> = (0..5)
-                    .map(|i| mzone_cards.get(i).copied().unwrap_or(0).to_string())
-                    .collect();
-                mzone_contents.set(mzone_vec);
-
-                // Query spell/trap zones (LOCATION_SZONE = 0x08)
-                let szone_cards = ocgcore::query_location_codes(duel_handle, 0, 0x08u32);
-                let szone_vec: Vec<String> = (0..5)
-                    .map(|i| szone_cards.get(i).copied().unwrap_or(0).to_string())
-                    .collect();
-                szone_contents.set(szone_vec);
-
-                // Query extra monster zones (LOCATION_EMZONE = 0x40, but only 2 cards)
-                let emz_cards = ocgcore::query_location_codes(duel_handle, 0, 0x40u32);
-                emzone_left.set(emz_cards.get(0).copied().unwrap_or(0).to_string());
-                emzone_right.set(emz_cards.get(1).copied().unwrap_or(0).to_string());
-
-                // Query field zone (LOCATION_FZONE = 0x100)
-                let fzone_cards = ocgcore::query_location_codes(duel_handle, 0, 0x100u32);
-                field_zone.set(fzone_cards.get(0).copied().unwrap_or(0).to_string());
-
-                // Query graveyard (LOCATION_GRAVE = 0x10)
-                let gy_cards = ocgcore::query_location_codes(duel_handle, 0, 0x10u32);
-                let gy_vec: Vec<String> = gy_cards.into_iter()
-                    .filter(|code| *code != 0)
-                    .map(|code| code.to_string())
-                    .collect();
-                gy_contents.set(gy_vec);
-
-                // Query banishment (LOCATION_REMOVED = 0x20)
-                let banish_cards = ocgcore::query_location_codes(duel_handle, 0, 0x20u32);
-                let banish_vec: Vec<String> = banish_cards.into_iter()
-                    .filter(|code| *code != 0)
-                    .map(|code| code.to_string())
-                    .collect();
-                banish_contents.set(banish_vec);
-
-                // Query deck and extra deck counts
-                deck_count.set(ocgcore::get_deck_count(duel_handle, 0) as usize);
-                extra_deck_count.set(ocgcore::get_extra_deck_count(duel_handle, 0) as usize);
+        spawn_local(async move {
+            match deck::initialize_duel().await {
+                Ok(duel_handle) => {
+                    println!("Duel initialized with handle: {}", duel_handle);
+                    current_duel.set(Some(duel_handle));
+                    current_phase.set(None);
+                    current_turn.set(None);
+                    // Sync the UI from the engine immediately, then keep polling while the duel is active.
+                    let cards = ocgcore::query_hand(duel_handle, 0);
+                    debug!("Initial hand: {:?}", cards);
+                    hand_contents.set(cards);
 
                 let duel_state = current_duel;
                 let mut phase_state = current_phase;
@@ -209,23 +170,80 @@ fn App() -> Element {
                 let mut gy_state = gy_contents;
                 let mut banish_state = banish_contents;
                 let mut extra_deck_state = extra_deck_count;
+                let mut engine_wait_state = waiting_for_engine_input;
                 let mut waiting_zone_state = waiting_for_zone_selection;
                 let mut selected_zone_state = selected_zone_for_summon;
                 spawn_local(async move {
                     info!("Polling loop started");
-                    let mut iteration = 0;
+
+                    // Query field zones - called only when state changes
+                    let mut query_field_zones = |duel: u32| {
+                        let mzone_cards = ocgcore::query_location_codes(duel, 0, 0x04u32);
+                        let mzone_vec: Vec<String> = mzone_cards
+                            .iter()
+                            .take(5)
+                            .map(|code| code.to_string())
+                            .collect();
+                        mzone_state.set(mzone_vec);
+
+                        emz_left_state.set(mzone_cards.get(5).copied().unwrap_or(0).to_string());
+                        emz_right_state.set(mzone_cards.get(6).copied().unwrap_or(0).to_string());
+
+                        let szone_cards = ocgcore::query_location_codes(duel, 0, 0x08u32);
+                        let szone_vec: Vec<String> = szone_cards
+                            .iter()
+                            .take(5)
+                            .map(|code| code.to_string())
+                            .collect();
+                        szone_state.set(szone_vec);
+
+                        fzone_state.set(szone_cards.get(5).copied().unwrap_or(0).to_string());
+
+                        let gy_cards = ocgcore::query_location_codes(duel, 0, 0x10u32);
+                        let gy_vec: Vec<String> = gy_cards.into_iter()
+                            .filter(|code| *code != 0)
+                            .map(|code| code.to_string())
+                            .collect();
+                        gy_state.set(gy_vec);
+
+                        let banish_cards = ocgcore::query_location_codes(duel, 0, 0x20u32);
+                        let banish_vec: Vec<String> = banish_cards.into_iter()
+                            .filter(|code| *code != 0)
+                            .map(|code| code.to_string())
+                            .collect();
+                        banish_state.set(banish_vec);
+
+                        deck_state.set(ocgcore::get_deck_count(duel, 0) as usize);
+                        extra_deck_state.set(ocgcore::get_extra_deck_count(duel, 0) as usize);
+                    };
+
                     loop {
                         TimeoutFuture::new(100).await;
-                        iteration += 1;
                         let duel_opt = *duel_state.read();
                         let Some(duel) = duel_opt else {
                             info!("Duel was destroyed");
                             break;
                         };
 
+                        // Only call duelProcess if we're not waiting for input
+                        // Return 0 = more to process, 1 = waiting for input, 2 = chain/event needed
                         let step_result = ocgcore::process_duel_step(duel);
-                        if iteration <= 3 {
-                            debug!("Iteration {}: duelProcess={}", iteration, step_result);
+                        if step_result != 1 {
+                            engine_wait_state.set(false);
+                            debug!("duelProcess returned: {}", step_result);
+                        }
+                        
+                        // Log the first waiting tick, but keep advancing the core on later ticks.
+                        if step_result == 1 && !*engine_wait_state.read() {
+                            debug!("duelProcess returned: 1");
+                            engine_wait_state.set(true);
+                        }
+
+                        if step_result == 1 && ocgcore::poll_messages(duel).is_none() {
+                            if !*engine_wait_state.read() {
+                                debug!("duelProcess returned: 1");
+                                engine_wait_state.set(true);
+                            }
                         }
 
                         if let Some(messages) = ocgcore::poll_messages(duel) {
@@ -259,6 +277,7 @@ fn App() -> Element {
                                                 debug!(
                                                     "MSG_SELECT_IDLECMD for player 0 (human) - waiting for input"
                                                 );
+                                                engine_wait_state.set(true);
                                                 if payload.len() >= 5 {
                                                     // Normal summon count is u32 at bytes 1-4
                                                     let summon_count = u32::from_le_bytes([
@@ -352,11 +371,9 @@ fn App() -> Element {
                                                 }
                                             }
                                             5 => {
-                                                // MSG_UPDATE_DATA - data update message
-                                                debug!(
-                                                    "MSG_UPDATE_DATA: payload_len={}",
-                                                    payload.len()
-                                                );
+                                                // MSG_UPDATE_DATA - field state has changed, query zones
+                                                debug!("MSG_UPDATE_DATA: querying field zones");
+                                                query_field_zones(duel);
                                             }
                                             90 => {
                                                 // Unknown/unhandled message type
@@ -377,6 +394,7 @@ fn App() -> Element {
                                             61 => {
                                                 // MSG_CHAINING_DISABLED or action end
                                                 debug!("MSG_61 (action end): payload_len={}", payload.len());
+                                                query_field_zones(duel);
                                             }
                                             _ => {
                                                 if msg_id != 1 {
@@ -393,62 +411,21 @@ fn App() -> Element {
                             }
                         }
 
-                        let cards = ocgcore::query_hand(duel, 0);
-                        hand_state.set(cards);
-
-                        // Query all field zones
-                        let mzone_cards = ocgcore::query_location_codes(duel, 0, 0x04u32);
-                        let mzone_vec: Vec<String> = (0..5)
-                            .map(|i| mzone_cards.get(i).copied().unwrap_or(0).to_string())
-                            .collect();
-                        mzone_state.set(mzone_vec);
-
-                        let szone_cards = ocgcore::query_location_codes(duel, 0, 0x08u32);
-                        let szone_vec: Vec<String> = (0..5)
-                            .map(|i| szone_cards.get(i).copied().unwrap_or(0).to_string())
-                            .collect();
-                        szone_state.set(szone_vec);
-
-                        let emz_cards = ocgcore::query_location_codes(duel, 0, 0x40u32);
-                        emz_left_state.set(emz_cards.get(0).copied().unwrap_or(0).to_string());
-                        emz_right_state.set(emz_cards.get(1).copied().unwrap_or(0).to_string());
-
-                        let fzone_cards = ocgcore::query_location_codes(duel, 0, 0x100u32);
-                        fzone_state.set(fzone_cards.get(0).copied().unwrap_or(0).to_string());
-
-                        let gy_cards = ocgcore::query_location_codes(duel, 0, 0x10u32);
-                        let gy_vec: Vec<String> = gy_cards.into_iter()
-                            .filter(|code| *code != 0)
-                            .map(|code| code.to_string())
-                            .collect();
-                        gy_state.set(gy_vec);
-
-                        let banish_cards = ocgcore::query_location_codes(duel, 0, 0x20u32);
-                        let banish_vec: Vec<String> = banish_cards.into_iter()
-                            .filter(|code| *code != 0)
-                            .map(|code| code.to_string())
-                            .collect();
-                        banish_state.set(banish_vec);
-
-                        deck_state.set(ocgcore::get_deck_count(duel, 0) as usize);
-                        extra_deck_state.set(ocgcore::get_extra_deck_count(duel, 0) as usize);
-
-                        if iteration <= 10 || (iteration % 20 == 0) {
-                            debug!("Field query complete");
-                        }
-
-                        if iteration <= 10 {
-                            debug!("Iteration {} complete, looping...", iteration);
+                        // Only query hand when we actually have messages to process
+                        if step_result != 1 {
+                            let cards = ocgcore::query_hand(duel, 0);
+                            hand_state.set(cards);
                         }
                     }
                 });
 
                 println!("Created duel: {duel_handle}");
             }
-            Err(e) => {
-                println!("Failed to create duel: {e}");
+                Err(e) => {
+                    println!("Failed to create duel: {e}");
+                }
             }
-        }
+        });
     };
 
     let destroy_duel = move |_| {
@@ -613,6 +590,7 @@ fn App() -> Element {
                                                     let response = [0u8, 0x04u8, idx as u8];
                                                     info!("Sending MSG_SELECT_PLACE response: zone {}", idx);
                                                     ocgcore::duelSetResponse(duel, &response);
+                                                    waiting_for_engine_input.set(false);
                                                     waiting_for_zone_selection.set(false);
                                                 }
                                             }
@@ -691,6 +669,7 @@ fn App() -> Element {
             Hand {
                 cards: hand_contents,
                 selected_card: selected_card,
+                available_summons: available_summons,
                 on_normal_summon: normal_summon,
             }
         }

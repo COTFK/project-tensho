@@ -35,6 +35,7 @@ extern "C" {
         controller: u8,
         location: u32,
     ) -> Option<js_sys::Uint8Array>;
+    pub fn registerCardData(code: u32, type_: u32, level: u32, attribute: u32, race: u32, atk: i32, def: i32);
 }
 
 pub async fn load_ocgcore() -> Result<(), String> {
@@ -83,7 +84,7 @@ pub fn get_version() -> Result<(i32, i32), String> {
     Ok((major, minor))
 }
 
-pub fn create_duel_with_random_seed() -> Result<u32, String> {
+pub fn create_duel() -> Result<u32, String> {
     use rand::Rng;
     let mut rng = rand::thread_rng();
     let seed = [
@@ -92,45 +93,9 @@ pub fn create_duel_with_random_seed() -> Result<u32, String> {
         rng.r#gen::<u64>() as f64,
         rng.r#gen::<u64>() as f64,
     ];
-    println!("Creating duel with seed");
+    println!("Creating duel with random seed");
     let duel = createDuel(seed[0], seed[1], seed[2], seed[3]);
     println!("Duel created: {}", duel);
-
-    // Fire King deck - main deck (40 cards)
-    let main_deck = [
-        66431519u32, 66431519, 66431519, 23015896, 44455560, 44455560, 44455560, 90681088,
-        90681088, 90681088, 18621798, 2526224, 2526224, 2526224, 14558128, 14558128,
-        14558128, 97268402, 97268402, 97268402, 24508238, 33854624, 6637331, 65305978,
-        65305978, 65305978, 57554544, 91703676, 91703676, 84211599, 49238328, 49238328,
-        49238328, 24224830, 10045474, 10045474, 10045474, 40366667, 40366667, 40366667,
-    ];
-
-    // Fire King deck - extra deck (16 cards)
-    let extra_deck = [
-        94259633u32, 60303245, 87871125, 2772337, 2772337, 2772337, 48815792, 48815792,
-        8264361, 29301450, 29301450, 93039339, 64182380, 64182380, 64182380, 0u32,
-    ];
-
-    println!("Populating main deck ({} cards)", main_deck.len());
-    for (idx, card_id) in main_deck.iter().enumerate() {
-        // LOCATION_DECK = 0x01, sequence is the position in deck
-        duelNewCard(duel, 0, 0, *card_id, 0, 0x01, idx as u32, 0);
-    }
-
-    println!("Populating extra deck ({} cards)", extra_deck.len());
-    for (idx, card_id) in extra_deck.iter().enumerate() {
-        if *card_id == 0 {
-            continue; // Skip empty slots
-        }
-        // LOCATION_EXTRA = 0x40, extra deck cards use sequence for ordering
-        duelNewCard(duel, 0, 0, *card_id, 0, 0x40, idx as u32, 0);
-    }
-
-    // Start the duel - let the frontend loop take it from here
-    println!("Starting duel");
-    startDuel(duel);
-    println!("Duel started");
-
     Ok(duel)
 }
 
