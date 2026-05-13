@@ -1,342 +1,414 @@
-use wasm_bindgen::prelude::*;
+use crate::wasm::WASMMemoryAllocation;
+use crate::wasm::get_memory_view;
+use crate::wasm::get_module_function;
+use crate::wasm::get_wasm_memory;
+use js_sys::Int32Array;
+use js_sys::Uint8Array;
+use wasm_bindgen::JsValue;
 
-#[wasm_bindgen(module = "/assets/ocgcore-helpers.js")]
-extern "C" {
-    pub fn initOCGCore(module: &JsValue);
-    pub fn getOCGVersion() -> js_sys::Array;
-    pub fn createDuel(seed1: f64, seed2: f64, seed3: f64, seed4: f64) -> u32;
-    pub fn destroyDuel(duel: u32);
-    pub fn duelNewCard(
-        duel: u32,
-        team: u8,
-        duelist: u8,
-        code: u32,
-        controller: u8,
-        location: u32,
-        sequence: u32,
-        position: u32,
-    );
-    pub fn startDuel(duel: u32);
-    pub fn duelProcess(duel: u32) -> i32;
-    pub fn duelGetMessage(duel: u32) -> Option<js_sys::Uint8Array>;
-    pub fn duelSetResponse(duel: u32, buffer: &[u8]);
-    pub fn loadScript(duel: u32, script_content: &str, script_name: &str) -> i32;
-    pub fn duelQueryCount(duel: u32, team: u8, location: u32) -> u32;
-    pub fn duelQuery(
-        duel: u32,
-        flags: u32,
-        controller: u8,
-        location: u32,
-        sequence: u32,
-    ) -> Option<js_sys::Uint8Array>;
-    pub fn duelQueryLocation(
-        duel: u32,
-        flags: u32,
-        controller: u8,
-        location: u32,
-    ) -> Option<js_sys::Uint8Array>;
-    pub fn registerCardData(code: u32, type_: u32, level: u32, attribute: u32, race: u32, atk: i32, def: i32);
+pub fn get_version() -> anyhow::Result<(i32, i32)> {
+    let ocg_get_version = get_module_function("_OCG_GetVersion")?;
+
+    // Allocate 8 bytes (two ints) once instead of 4 bytes (one int) twice
+    let version_alloc = WASMMemoryAllocation::new(8)?;
+    let major_version_offset = version_alloc.get_pointer();
+    let minor_version_offset = major_version_offset + 4.0;
+
+    ocg_get_version.call2(
+        &JsValue::undefined(),
+        &JsValue::from_f64(major_version_offset),
+        &JsValue::from_f64(minor_version_offset),
+    ).map_err(|e| anyhow::anyhow!("Failed to get version: {e:#?}"))?;
+
+    let view = get_memory_view()?;
+
+    // Read sequentially from the single allocation
+    let major = view.get_int32_endian(major_version_offset as usize, true);
+    let minor = view.get_int32_endian(minor_version_offset as usize, true);
+
+    Ok((major, minor))
 }
 
-pub async fn load_ocgcore() -> Result<(), String> {
-    let import_fn = js_sys::Function::new_with_args("u", "return import(u);");
-    let promise = import_fn
-        .call1(&js_sys::global(), &"/assets/ocgcore.js".into())
-        .map_err(|err| format!("dynamic import failed: {err:?}"))?;
-    let promise: js_sys::Promise = promise
-        .dyn_into()
-        .map_err(|_| "import did not return a promise")?;
-    let module = wasm_bindgen_futures::JsFuture::from(promise)
-        .await
-        .map_err(|err| format!("import await failed: {err:?}"))?;
+pub fn create_duel() -> anyhow::Result<u32> {
+    let ocg_create_duel = get_module_function("_OCG_CreateDuel")?;
 
-    let default_export = js_sys::Reflect::get(&module, &"default".into())
-        .map_err(|_| "missing default export")?;
-    let init_fn: js_sys::Function = default_export
-        .dyn_into()
-        .map_err(|_| "default export is not a function")?;
-    let init_promise = init_fn
-        .call0(&js_sys::global())
-        .map_err(|err| format!("module init failed: {err:?}"))?;
-    let init_promise: js_sys::Promise = init_promise
-        .dyn_into()
-        .map_err(|_| "init did not return a promise")?;
-    let module_obj = wasm_bindgen_futures::JsFuture::from(init_promise)
-        .await
-        .map_err(|err| format!("init await failed: {err:?}"))?;
+    let result = ocg_create_duel
+        .call0(&JsValue::undefined())
+        .map_err(|e| anyhow::anyhow!("Failed to create duel: {e:#?}"))?;
 
-    // Pass the initialized Module object to helpers
-    initOCGCore(&module_obj);
+    Ok(result.as_f64().unwrap() as u32)
+}
+
+pub fn destroy_duel(duel: u32) -> anyhow::Result<()> {
+    let ocg_destroy_duel = get_module_function("_OCG_DestroyDuel")?;
+
+    ocg_destroy_duel
+        .call1(&JsValue::undefined(), &(duel as f64).into())
+        .map_err(|e| anyhow::anyhow!("_OCG_DestroyDuel call failed: {e:?}"))?;
 
     Ok(())
 }
 
-pub fn get_version() -> Result<(i32, i32), String> {
-    let arr = getOCGVersion();
-    let major = arr
-        .get(0)
+pub fn duel_new_card(
+    duel: u32,
+    team: u8,
+    _duelist: u8,
+    code: u32,
+    controller: u8,
+    location: u32,
+    sequence: u32,
+    position: u32,
+) -> anyhow::Result<()> {
+    let ocg_new_card = get_module_function("_OCG_DuelNewCard")?;
+    let malloc = get_module_function("_malloc")?;
+    let free = get_module_function("_free")?;
+
+    let info_ptr = malloc
+        .call1(&JsValue::undefined(), &32.0.into())
+        .map_err(|e| format!("malloc failed: {e:?}"))?
         .as_f64()
-        .ok_or("major version not a number")? as i32;
-    let minor = arr
-        .get(1)
-        .as_f64()
-        .ok_or("minor version not a number")? as i32;
-    Ok((major, minor))
+        .ok_or("malloc did not return a number")? as u32;
+
+    let memory = get_wasm_memory()?;
+    let memory_buf = memory.buffer();
+
+    // Zero-fill the card info structure
+    let u8_view = Uint8Array::new_with_byte_offset(&memory_buf, info_ptr);
+    for i in 0..32 {
+        u8_view.set_index(i, 0);
+    }
+
+    // Set card info fields
+    let i32_view = Int32Array::new_with_byte_offset(&memory_buf, info_ptr);
+    i32_view.set_index(0, team as i32);
+    i32_view.set_index(1, code as i32);
+    i32_view.set_index(2, controller as i32);
+    i32_view.set_index(3, location as i32);
+    i32_view.set_index(4, sequence as i32);
+    i32_view.set_index(5, (position | 1) as i32);
+
+    ocg_new_card
+        .call2(
+            &JsValue::undefined(),
+            &(duel as f64).into(),
+            &(info_ptr as f64).into(),
+        )
+        .map_err(|e| format!("_OCG_DuelNewCard call failed: {e:?}"))?;
+
+    let _ = free.call1(&JsValue::undefined(), &(info_ptr as f64).into());
+
+    Ok(())
 }
 
-pub fn create_duel() -> Result<u32, String> {
-    use rand::Rng;
-    let mut rng = rand::thread_rng();
-    let seed = [
-        rng.r#gen::<u64>() as f64,
-        rng.r#gen::<u64>() as f64,
-        rng.r#gen::<u64>() as f64,
-        rng.r#gen::<u64>() as f64,
-    ];
-    println!("Creating duel with random seed");
-    let duel = createDuel(seed[0], seed[1], seed[2], seed[3]);
-    println!("Duel created: {}", duel);
-    Ok(duel)
+pub fn start_duel(duel: u32) -> Result<(), String> {
+    let ocg_start_duel = get_module_function("_OCG_StartDuel")?;
+
+    ocg_start_duel
+        .call1(&JsValue::undefined(), &(duel as f64).into())
+        .map_err(|e| format!("_OCG_StartDuel call failed: {e:?}"))?;
+
+    Ok(())
 }
+
+pub fn duel_process(duel: u32) -> Result<i32, String> {
+    let ocg_duel_process = get_module_function("_OCG_DuelProcess")?;
+
+    let result = ocg_duel_process
+        .call1(&JsValue::undefined(), &(duel as f64).into())
+        .map_err(|e| format!("_OCG_DuelProcess call failed: {e:?}"))?
+        .as_f64()
+        .ok_or("_OCG_DuelProcess did not return a number")? as i32;
+
+    Ok(result)
+}
+
+pub fn duel_get_message(duel: u32) -> Result<Option<Uint8Array>, String> {
+    let ocg_get_message = get_module_function("_OCG_DuelGetMessage")?;
+
+    let msg_ptr = ocg_get_message
+        .call1(&JsValue::undefined(), &(duel as f64).into())
+        .map_err(|e| format!("_OCG_DuelGetMessage call failed: {e:?}"))?
+        .as_f64()
+        .ok_or("_OCG_DuelGetMessage did not return a number")? as u32;
+
+    if msg_ptr == 0 {
+        return Ok(None);
+    }
+
+    let memory = get_wasm_memory()?;
+    let memory_buf = memory.buffer();
+
+    let msg_view = Uint8Array::new_with_byte_offset(&memory_buf, msg_ptr);
+    Ok(Some(msg_view))
+}
+
+pub fn duel_set_response(duel: u32, buffer: &[u8]) -> Result<(), String> {
+    let ocg_set_response = get_module_function("_OCG_DuelSetResponse")?;
+    let malloc = get_module_function("_malloc")?;
+    let free = get_module_function("_free")?;
+
+    let buf_ptr = malloc
+        .call1(&JsValue::undefined(), &(buffer.len() as f64).into())
+        .map_err(|e| format!("malloc failed: {e:?}"))?
+        .as_f64()
+        .ok_or("malloc did not return a number")? as u32;
+
+    let memory = get_wasm_memory()?;
+    let memory_buf = memory.buffer();
+    let u8_view = Uint8Array::new_with_byte_offset(&memory_buf, buf_ptr);
+    u8_view.copy_from(buffer);
+
+    ocg_set_response
+        .call2(
+            &JsValue::undefined(),
+            &(duel as f64).into(),
+            &(buf_ptr as f64).into(),
+        )
+        .map_err(|e| format!("_OCG_DuelSetResponse call failed: {e:?}"))?;
+
+    let _ = free.call1(&JsValue::undefined(), &(buf_ptr as f64).into());
+
+    Ok(())
+}
+
+pub fn load_script(duel: u32, script: &str, name: &str) -> Result<i32, String> {
+    let ocg_load_script = get_module_function("_OCG_LoadScript")?;
+    let malloc = get_module_function("_malloc")?;
+    let free = get_module_function("_free")?;
+
+    let script_bytes = script.as_bytes();
+    let name_bytes = name.as_bytes();
+
+    let script_ptr = malloc
+        .call1(&JsValue::undefined(), &(script_bytes.len() as f64).into())
+        .map_err(|e| format!("malloc for script failed: {e:?}"))?
+        .as_f64()
+        .ok_or("malloc did not return a number")? as u32;
+
+    let name_ptr = malloc
+        .call1(
+            &JsValue::undefined(),
+            &((name_bytes.len() + 1) as f64).into(),
+        )
+        .map_err(|e| format!("malloc for name failed: {e:?}"))?
+        .as_f64()
+        .ok_or("malloc did not return a number")? as u32;
+
+    let memory = get_wasm_memory()?;
+    let memory_buf = memory.buffer();
+
+    let script_view = Uint8Array::new_with_byte_offset(&memory_buf, script_ptr);
+    script_view.copy_from(script_bytes);
+
+    let name_view = Uint8Array::new_with_byte_offset(&memory_buf, name_ptr);
+    name_view.copy_from(name_bytes);
+    name_view.set_index(name_bytes.len() as u32, 0);
+
+    let result = ocg_load_script
+        .call4(
+            &JsValue::undefined(),
+            &(duel as f64).into(),
+            &(script_ptr as f64).into(),
+            &(script_bytes.len() as f64).into(),
+            &(name_ptr as f64).into(),
+        )
+        .map_err(|e| format!("_OCG_LoadScript call failed: {e:?}"))?
+        .as_f64()
+        .ok_or("_OCG_LoadScript did not return a number")? as i32;
+
+    let _ = free.call1(&JsValue::undefined(), &(script_ptr as f64).into());
+    let _ = free.call1(&JsValue::undefined(), &(name_ptr as f64).into());
+
+    Ok(result)
+}
+
+fn duel_query_count(duel: u32, team: u8, location: u32) -> Result<u32, String> {
+    let ocg_query_count = get_module_function("_OCG_DuelQueryCount")?;
+
+    let result = ocg_query_count
+        .call3(
+            &JsValue::undefined(),
+            &(duel as f64).into(),
+            &(team as f64).into(),
+            &(location as f64).into(),
+        )
+        .map_err(|e| format!("_OCG_DuelQueryCount call failed: {e:?}"))?
+        .as_f64()
+        .ok_or("_OCG_DuelQueryCount did not return a number")? as u32;
+
+    Ok(result)
+}
+
+fn duel_query_location(
+    duel: u32,
+    flags: u32,
+    team: u8,
+    location: u32,
+) -> Result<Option<Uint8Array>, String> {
+    let ocg_query_location = get_module_function("_OCG_DuelQueryLocation")?;
+
+    let data_ptr = ocg_query_location
+        .call4(
+            &JsValue::undefined(),
+            &(duel as f64).into(),
+            &(flags as f64).into(),
+            &(team as f64).into(),
+            &(location as f64).into(),
+        )
+        .map_err(|e| format!("_OCG_DuelQueryLocation call failed: {e:?}"))?
+        .as_f64()
+        .ok_or("_OCG_DuelQueryLocation did not return a number")? as u32;
+
+    if data_ptr == 0 {
+        return Ok(None);
+    }
+
+    let memory = get_wasm_memory()?;
+    let memory_buf = memory.buffer();
+
+    let data_view = Uint8Array::new_with_byte_offset(&memory_buf, data_ptr);
+    Ok(Some(data_view))
+}
+
+// ============================================================================
+// Higher-level Query Functions
+// ============================================================================
 
 pub fn query_hand(duel: u32, team: u8) -> Vec<String> {
-    let location = 2u32;  // Hand location (LOCATION_HAND == 0x02)
-    
-    // Get count of cards in hand
-    let count = duelQueryCount(duel, team, location);
-    println!("Hand count: {}", count);
-    
-    let mut cards = Vec::new();
-    
-    // Query all cards in location at once - gets full structure for each card
-    if let Some(query_data) = duelQueryLocation(duel, 0xFFFFFFFF, team, location) {
-        let data_vec = query_data.to_vec();
-        println!("QueryLocation data length: {} bytes", data_vec.len());
+    query_location_codes(duel, team, 0x02u32)
+        .into_iter()
+        .map(|code| code.to_string())
+        .collect()
+}
 
-        // Format: first 4 bytes = total size (u32, little-endian)
-        // Then for each card: a sequence of fields. Each field is:
-        //   u16 field_len (includes 4 bytes of flag + value size)
-        //   u32 flag
-        //   value (field_len - 4 bytes)
-        // Fields repeat until a field with flag == QUERY_END (0x80000000) is encountered.
-        // A null card is encoded as a single int16==0.
+pub fn query_location_codes(duel: u32, team: u8, location: u32) -> Vec<u32> {
+    match duel_query_location(duel, 0xFFFFFFFF, team, location)
+        .ok()
+        .flatten()
+    {
+        Some(buf) => {
+            let data_vec = buf.to_vec();
+            let mut codes = Vec::new();
+            let mut offset = 0usize;
 
-        let mut offset = 0usize;
-        // skip leading total size u32 if present
-        if data_vec.len() >= 4 {
-            offset += 4;
-        }
-
-        for card_idx in 0..count as usize {
-            if offset + 2 > data_vec.len() {
-                println!("Not enough data for card {} header", card_idx);
-                break;
-            }
-            // read int16 length for the first field (or 0 for null card)
-            let field_len = i16::from_le_bytes([data_vec[offset], data_vec[offset + 1]]);
-            offset += 2;
-            if field_len == 0 {
-                // null card
-                println!("Card {}: null slot", card_idx);
-                cards.push("0".to_string());
-                continue;
-            }
-
-            // field_len is for the first field; we'll loop reading fields until QUERY_END
-            // Note: each field has its own u16 length prefix
-            let mut found_code: Option<u32> = None;
-            // We already consumed the first field_len, so process fields in a loop
-            let mut curr_field_len = field_len as usize;
-            loop {
-                if offset + 4 > data_vec.len() {
-                    println!("Truncated field flag for card {}", card_idx);
-                    break;
-                }
-                // read flag
-                let flag = u32::from_le_bytes([
-                    data_vec[offset],
-                    data_vec[offset + 1],
-                    data_vec[offset + 2],
-                    data_vec[offset + 3],
-                ]);
+            if data_vec.len() >= 4 {
                 offset += 4;
+            }
 
-                let value_size = if curr_field_len >= 4 { curr_field_len - 4 } else { 0 };
-                if offset + value_size > data_vec.len() {
-                    println!("Truncated field value for card {}", card_idx);
-                    break;
+            while offset + 2 <= data_vec.len() {
+                let field_len = i16::from_le_bytes([data_vec[offset], data_vec[offset + 1]]);
+                offset += 2;
+
+                if field_len == 0 {
+                    codes.push(0);
+                    continue;
                 }
 
-                if flag == 0x80000000 {
-                    // QUERY_END
-                    println!("Card {}: end of fields", card_idx);
-                    // no value bytes for QUERY_END
-                } else if flag == 0x1 {
-                    // QUERY_CODE: value is u32
-                    if value_size >= 4 {
+                let mut curr_field_len = field_len as usize;
+                let mut found_code = None;
+
+                loop {
+                    if offset + 4 > data_vec.len() {
+                        break;
+                    }
+
+                    let flag = u32::from_le_bytes([
+                        data_vec[offset],
+                        data_vec[offset + 1],
+                        data_vec[offset + 2],
+                        data_vec[offset + 3],
+                    ]);
+                    offset += 4;
+
+                    let value_size = if curr_field_len >= 4 {
+                        curr_field_len - 4
+                    } else {
+                        0
+                    };
+
+                    if offset + value_size > data_vec.len() {
+                        break;
+                    }
+
+                    if flag == 0x1 && value_size >= 4 {
                         let code = u32::from_le_bytes([
                             data_vec[offset],
                             data_vec[offset + 1],
                             data_vec[offset + 2],
                             data_vec[offset + 3],
                         ]);
-                        println!("Card {}: code={} (0x{:08x})", card_idx, code, code);
                         found_code = Some(code);
                     }
-                } else {
-                    // skip value_size bytes for other flags
+
+                    offset += value_size;
+
+                    if flag == 0x80000000 {
+                        break;
+                    }
+
+                    if offset + 2 > data_vec.len() {
+                        break;
+                    }
+
+                    curr_field_len =
+                        u16::from_le_bytes([data_vec[offset], data_vec[offset + 1]]) as usize;
+                    offset += 2;
                 }
 
-                // advance past the value bytes for this field
-                offset += value_size;
-
-                // if this field was QUERY_END, stop card loop, otherwise read next field_len
-                if flag == 0x80000000 {
-                    break;
-                }
-
-                // read next field_len for this card
-                if offset + 2 > data_vec.len() {
-                    println!("Missing next field length for card {}", card_idx);
-                    break;
-                }
-                curr_field_len = u16::from_le_bytes([data_vec[offset], data_vec[offset + 1]]) as usize;
-                offset += 2;
+                codes.push(found_code.unwrap_or(0));
             }
 
-            if let Some(code) = found_code {
-                cards.push(code.to_string());
-            } else {
-                // if no code field found, push 0 or empty
-                cards.push("0".to_string());
-            }
+            codes
         }
+        None => Vec::new(),
     }
-    
-    cards
 }
 
-pub fn query_location_codes(duel: u32, team: u8, location: u32) -> Vec<u32> {
-    let mut codes: Vec<u32> = Vec::new();
-    if let Some(query_data) = duelQueryLocation(duel, 0xFFFFFFFF, team, location) {
-        let data_vec = query_data.to_vec();
-        let mut offset = 0usize;
-        if data_vec.len() >= 4 {
-            offset += 4;
-        }
-        while offset + 2 <= data_vec.len() {
-            let field_len = i16::from_le_bytes([data_vec[offset], data_vec[offset + 1]]);
-            offset += 2;
-            if field_len == 0 {
-                codes.push(0);
-                continue;
-            }
-            let mut curr_field_len = field_len as usize;
-            let mut found_code: Option<u32> = None;
-            loop {
-                if offset + 4 > data_vec.len() {
-                    break;
-                }
-                let flag = u32::from_le_bytes([
+pub fn get_deck_count(duel: u32, team: u8) -> u32 {
+    duel_query_count(duel, team, 0x01u32).unwrap_or(0)
+}
+
+pub fn get_extra_deck_count(duel: u32, team: u8) -> u32 {
+    duel_query_count(duel, team, 0x40u32).unwrap_or(0)
+}
+
+// ============================================================================
+// Main.rs-style Wrappers
+// ============================================================================
+
+pub fn send_response_u32(duel: u32, value: u32) {
+    duel_set_response(duel, &value.to_le_bytes());
+}
+
+pub fn poll_messages(duel: u32) -> Option<js_sys::Array> {
+    match duel_get_message(duel).ok().flatten() {
+        Some(buf) => {
+            let data_vec = buf.to_vec();
+            let out = js_sys::Array::new();
+            let mut offset = 0usize;
+
+            while offset + 4 <= data_vec.len() {
+                let size = u32::from_le_bytes([
                     data_vec[offset],
                     data_vec[offset + 1],
                     data_vec[offset + 2],
                     data_vec[offset + 3],
-                ]);
+                ]) as usize;
                 offset += 4;
-                let value_size = if curr_field_len >= 4 { curr_field_len - 4 } else { 0 };
-                if offset + value_size > data_vec.len() {
+
+                if offset + size > data_vec.len() {
                     break;
                 }
-                if flag == 0x1 && value_size >= 4 {
-                    let code = u32::from_le_bytes([
-                        data_vec[offset],
-                        data_vec[offset + 1],
-                        data_vec[offset + 2],
-                        data_vec[offset + 3],
-                    ]);
-                    found_code = Some(code);
-                }
-                offset += value_size;
-                if flag == 0x80000000 {
-                    break;
-                }
-                if offset + 2 > data_vec.len() {
-                    break;
-                }
-                curr_field_len = u16::from_le_bytes([data_vec[offset], data_vec[offset + 1]]) as usize;
-                offset += 2;
+
+                let slice = &data_vec[offset..offset + size];
+                let ua = Uint8Array::new_with_length(size as u32);
+                ua.copy_from(slice);
+                out.push(&ua);
+                offset += size;
             }
-            codes.push(found_code.unwrap_or(0));
+
+            Some(out)
         }
-    }
-    codes
-}
-
-#[wasm_bindgen]
-pub fn get_hand_count(duel: u32, team: u8) -> u32 {
-    duelQueryCount(duel, team, 2u32)
-}
-
-pub fn get_deck_count(duel: u32, team: u8) -> u32 {
-    duelQueryCount(duel, team, 0x01u32)
-}
-
-pub fn get_extra_deck_count(duel: u32, team: u8) -> u32 {
-    duelQueryCount(duel, team, 0x40u32)
-}
-
-#[wasm_bindgen]
-pub fn get_hand_codes(duel: u32, team: u8) -> js_sys::Uint32Array {
-    let codes = query_location_codes(duel, team, 2u32);
-    let out = js_sys::Uint32Array::new_with_length(codes.len() as u32);
-    out.copy_from(&codes);
-    out
-}
-
-#[wasm_bindgen]
-pub fn send_response_u32(duel: u32, value: u32) {
-    duelSetResponse(duel, &value.to_le_bytes());
-}
-
-#[wasm_bindgen]
-pub fn process_duel_step(duel: u32) -> i32 {
-    duelProcess(duel)
-}
-
-/// Polls `duelGetMessage` and splits the returned buffer into individual messages.
-/// Each message is returned as a `Uint8Array` inside a JS `Array` (or `None` if no messages).
-#[wasm_bindgen]
-pub fn poll_messages(duel: u32) -> Option<js_sys::Array> {
-    if let Some(buf) = duelGetMessage(duel) {
-        let data_vec = buf.to_vec();
-        let out = js_sys::Array::new();
-        let mut offset = 0usize;
-        while offset + 4 <= data_vec.len() {
-            let size = u32::from_le_bytes([
-                data_vec[offset],
-                data_vec[offset + 1],
-                data_vec[offset + 2],
-                data_vec[offset + 3],
-            ]) as usize;
-            offset += 4;
-            if offset + size > data_vec.len() {
-                break;
-            }
-            // Inspect message id for phase/turn updates
-            if size > 0 {
-                let msg_id = data_vec[offset];
-                let _ = msg_id;
-            }
-            let slice = &data_vec[offset..offset + size];
-            let ua = js_sys::Uint8Array::new_with_length(size as u32);
-            ua.copy_from(slice);
-            out.push(&ua);
-            offset += size;
-        }
-        Some(out)
-    } else {
-        None
+        None => None,
     }
 }
-

@@ -2,7 +2,9 @@ mod card;
 mod deck;
 mod hand;
 mod ocgcore;
+mod wasm;
 
+use crate::wasm::load_ocgcore;
 use crate::card::Card;
 use crate::hand::Hand;
 use dioxus::prelude::*;
@@ -90,8 +92,25 @@ fn App() -> Element {
 
     // Load ocgcore and get version
     let ocgcore_version = use_resource(move || async move {
-        ocgcore::load_ocgcore().await.ok()?;
-        ocgcore::get_version().ok()
+        match load_ocgcore().await {
+            Ok(_) => {
+                tracing::info!("WASM module loaded successfully");
+                match ocgcore::get_version() {
+                    Ok(version) => {
+                        tracing::info!("Version retrieved: {:?}", version);
+                        Some(version)
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to get version: {:#?}", e);
+                        None
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::error!("Failed to load ocgcore: {}", e);
+                None
+            }
+        }
     });
 
     let normal_summon = move |_| {
@@ -227,19 +246,19 @@ fn App() -> Element {
 
                         // Only call duelProcess if we're not waiting for input
                         // Return 0 = more to process, 1 = waiting for input, 2 = chain/event needed
-                        let step_result = ocgcore::process_duel_step(duel);
-                        if step_result != 1 {
+                        let step_result = ocgcore::duel_process(duel);
+                        if step_result != Ok(1) {
                             engine_wait_state.set(false);
-                            debug!("duelProcess returned: {}", step_result);
+                            debug!("duelProcess returned: {:#?}", step_result);
                         }
                         
                         // Log the first waiting tick, but keep advancing the core on later ticks.
-                        if step_result == 1 && !*engine_wait_state.read() {
+                        if step_result == Ok(1) && !*engine_wait_state.read() {
                             debug!("duelProcess returned: 1");
                             engine_wait_state.set(true);
                         }
 
-                        if step_result == 1 && ocgcore::poll_messages(duel).is_none() {
+                        if step_result == Ok(1) && ocgcore::poll_messages(duel).is_none() {
                             if !*engine_wait_state.read() {
                                 debug!("duelProcess returned: 1");
                                 engine_wait_state.set(true);
@@ -412,7 +431,7 @@ fn App() -> Element {
                         }
 
                         // Only query hand when we actually have messages to process
-                        if step_result != 1 {
+                        if step_result != Ok(1) {
                             let cards = ocgcore::query_hand(duel, 0);
                             hand_state.set(cards);
                         }
@@ -431,7 +450,7 @@ fn App() -> Element {
     let destroy_duel = move |_| {
         let duel_opt = *current_duel.read();
         if let Some(duel) = duel_opt {
-            ocgcore::destroyDuel(duel);
+            ocgcore::destroy_duel(duel);
             current_duel.set(None);
             current_phase.set(None);
             current_turn.set(None);
@@ -454,7 +473,7 @@ fn App() -> Element {
                     Some(Some((major, minor))) => rsx! {
                         p { "OCG Version: {major}.{minor}" }
                     },
-                    Some(None) => rsx! { p { "Version error" } },
+                    Some(None) => rsx! { p { "Version error - check console logs" } },
                     None => rsx! { p { "Loading version..." } },
                 }
             }
@@ -589,7 +608,7 @@ fn App() -> Element {
                                                     // byte 2: sequence (zone index)
                                                     let response = [0u8, 0x04u8, idx as u8];
                                                     info!("Sending MSG_SELECT_PLACE response: zone {}", idx);
-                                                    ocgcore::duelSetResponse(duel, &response);
+                                                    ocgcore::duel_set_response(duel, &response);
                                                     waiting_for_engine_input.set(false);
                                                     waiting_for_zone_selection.set(false);
                                                 }

@@ -7,11 +7,13 @@ edition = "2024"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = "1.0.102"
 dioxus = { version = "0.7", features = ["web"] }
 getrandom = { version = "0.2", features = ["js"] }
 gloo-net = { version = "0.5", features = ["http"] }
 gloo-timers = { version = "0.3", features = ["futures"] }
 js-sys = "0.3"
+lazy_static = "1.4"
 rand = "0.8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

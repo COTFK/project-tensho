@@ -81,15 +81,15 @@ fn register_card_from_static(id: u32, card: StaticCard) {
         "Registering static card 0x{:08x}: type=0x{:x}, level={}, attr=0x{:x}, race=0x{:x}",
         id, card.type_, card.level, card.attribute, card.race
     );
-    crate::ocgcore::registerCardData(
-        id,
-        card.type_,
-        card.level,
-        card.attribute,
-        card.race,
-        card.atk,
-        card.def,
-    );
+    // crate::ocgcore::register_card_data(
+    //     id,
+    //     card.type_,
+    //     card.level,
+    //     card.attribute,
+    //     card.race,
+    //     card.atk,
+    //     card.def,
+    // );
 }
 
 pub async fn fetch_and_load_script(duel: u32, id: u32) -> Result<(), String> {
@@ -156,7 +156,7 @@ fn load_card_script_content(duel: u32, id: u32, content: &str) -> bool {
 }
 
 fn load_named_script_content(duel: u32, script_name: &str, content: &str) -> bool {
-    let result = crate::ocgcore::loadScript(duel, content, script_name);
+    let result = crate::ocgcore::load_script(duel, content, script_name).unwrap_or(0);
     if result != 0 {
         debug!("Loaded script {}", script_name);
         true
@@ -317,7 +317,7 @@ pub async fn preload_support_scripts(duel: u32) {
     );
 }
 
-pub async fn initialize_duel() -> Result<u32, String> {
+pub async fn initialize_duel() -> anyhow::Result<u32> {
     // Collect unique card IDs from main and extra deck
     let mut unique_ids: BTreeSet<u32> = BTreeSet::new();
     for id in MAIN_DECK.iter() {
@@ -365,20 +365,20 @@ pub async fn initialize_duel() -> Result<u32, String> {
     // Add main deck cards in REVERSE order (excluding unloaded cards)
     for i in (0..MAIN_DECK.len()).rev() {
         if loaded_ids.contains(&MAIN_DECK[i]) {
-            crate::ocgcore::duelNewCard(duel, 0, 0, MAIN_DECK[i], 0, LOCATION_DECK, 0, POS_FACEDOWN_DEFENSE);
+            crate::ocgcore::duel_new_card(duel, 0, 0, MAIN_DECK[i], 0, LOCATION_DECK, 0, POS_FACEDOWN_DEFENSE);
         }
     }
 
     // Add extra deck cards in REVERSE order (excluding unloaded cards)
     for i in (0..EXTRA_DECK.len()).rev() {
         if loaded_ids.contains(&EXTRA_DECK[i]) {
-            crate::ocgcore::duelNewCard(duel, 0, 0, EXTRA_DECK[i], 0, LOCATION_EXTRA, 0, POS_FACEDOWN_DEFENSE);
+            crate::ocgcore::duel_new_card(duel, 0, 0, EXTRA_DECK[i], 0, LOCATION_EXTRA, 0, POS_FACEDOWN_DEFENSE);
         }
     }
 
     // 5. Start the duel
     debug!("Duel initialized successfully with loaded cards");
-    crate::ocgcore::startDuel(duel);
+    crate::ocgcore::start_duel(duel);
 
     Ok(duel)
 }
