@@ -10,8 +10,6 @@ fn main() {
 
     println!("cargo:rerun-if-changed={}", ocgcore_dir.display());
     println!("cargo:rerun-if-changed={}", lua_dir.display());
-    println!("cargo:rerun-if-changed=src/stubs.c");
-
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
 
     println!("cargo:rerun-if-env-changed=EMSDK");
@@ -46,9 +44,10 @@ fn main() {
         .arg("-sMODULARIZE=1")
         .arg("-sEXPORT_ES6=1")
         .arg("-sEXPORT_NAME=ocgcore")
-        .arg("-sEXPORTED_FUNCTIONS=['_OCG_GetVersion','_OCG_CreateDuel','_OCG_CreateDuelWithStubs','_OCG_DestroyDuel','_OCG_DuelNewCard','_OCG_StartDuel','_OCG_DuelProcess','_OCG_DuelGetMessage','_OCG_DuelSetResponse','_OCG_LoadScript','_OCG_DuelQueryCount','_OCG_DuelQuery','_OCG_DuelQueryLocation','_OCG_RegisterCardData','_malloc','_free']")
-        .arg("-sEXPORTED_RUNTIME_METHODS=['getValue','setValue','ccall','cwrap','wasmMemory']")
+        .arg("-sEXPORTED_FUNCTIONS=['_OCG_GetVersion','_OCG_CreateDuel','_OCG_DestroyDuel','_OCG_DuelNewCard','_OCG_StartDuel','_OCG_DuelProcess','_OCG_DuelGetMessage','_OCG_DuelSetResponse','_OCG_LoadScript','_OCG_DuelQueryCount','_OCG_DuelQuery','_OCG_DuelQueryLocation','_malloc','_free']")
+        .arg("-sEXPORTED_RUNTIME_METHODS=['getValue','setValue','ccall','cwrap','wasmMemory','addFunction']")
         .arg("-sALLOW_MEMORY_GROWTH=1")
+        .arg("-sALLOW_TABLE_GROWTH=1")
         .arg("-sENVIRONMENT=web")
         .arg("-I")
         .arg(lua_dir.as_os_str())
@@ -83,9 +82,6 @@ fn main() {
 
     cmd.arg(lua_dir.join("onelua.c"));
     
-    // Add stubs for required OCG callbacks (not modifying ocgcore itself)
-    cmd.arg(manifest_dir.join("src/stubs.c"));
-
     let status = cmd.status().expect("failed to invoke em++");
     if !status.success() {
         panic!("em++ failed with status {status}");
