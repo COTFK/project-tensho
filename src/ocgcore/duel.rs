@@ -1,16 +1,13 @@
 use super::constants::*;
-use super::data::OCGDuelOptions;
 use crate::ocgcore::OCGCore;
-use crate::ocgcore::memory::CoreMemoryAllocation;
 use crate::ocgcore::memory::CorePointer;
 use anyhow::anyhow;
+use js_sys::ArrayBuffer;
+use js_sys::DataView;
 use js_sys::Int32Array;
 use js_sys::Uint8Array;
-use js_sys::WebAssembly::Memory;
-use std::cell::RefCell;
-use std::mem::size_of;
+use wasm_bindgen::JsCast;
 use wasm_bindgen::JsValue;
-use wasm_bindgen::closure::Closure;
 
 #[derive(Debug, Clone)]
 pub struct Duel<'a> {
@@ -18,105 +15,54 @@ pub struct Duel<'a> {
     core: &'a OCGCore,
 }
 
-impl Duel<'_> {
-    pub fn new(core: &OCGCore) -> anyhow::Result<Duel> {
-        let ocg_create_duel = core.get_function("_OCG_CreateDuel")?;
-        let (card_reader, script_reader, log_handler, card_reader_done) =
-            ensure_duel_callbacks(&core)?;
-
-        let mut options = OCGDuelOptions::default();
-        options.card_reader = card_reader;
-        options.script_reader = script_reader;
-        options.log_handler = log_handler;
-        options.card_reader_done = card_reader_done;
-
-        let options_alloc = core.allocate_memory(size_of::<OCGDuelOptions>() as u32)?;
-        let options_ptr = options_alloc.get_pointer();
-        let options_memory = core.get_wasm_memory()?;
-        let options_buffer = options_memory.buffer();
-        let options_bytes = unsafe {
-            std::slice::from_raw_parts(
-                (&options as *const OCGDuelOptions) as *const u8,
-                size_of::<OCGDuelOptions>(),
-            )
-        };
-        let options_view =
-            Uint8Array::new_with_byte_offset(&options_buffer, usize::from(options_ptr) as u32);
-        for (index, byte) in options_bytes.iter().enumerate() {
-            options_view.set_index(index as u32, *byte);
-        }
-
-        let duel_alloc = core.allocate_memory(4)?;
-        let duel_ptr = duel_alloc.get_pointer();
-
-        let status = ocg_create_duel
-            .call2(&JsValue::undefined(), &duel_ptr.into(), &options_ptr.into())
-            .map_err(|e| anyhow!("Failed to create duel: {e:#?}"))?;
-
-        let status = status
-            .as_f64()
-            .ok_or_else(|| anyhow!("Create duel returned a non-numeric status"))?
-            as i32;
-
-        if status != 0 {
-            return Err(anyhow!("_OCG_CreateDuel failed with status {status}"));
-        }
-
-        Ok(Duel {
-            handle: duel_ptr,
-            core,
-        })
+impl<'a> Duel<'a> {
+    pub fn new(handle: CorePointer, core: &'a OCGCore) -> Self {
+        Self { handle, core }
     }
 
     pub fn start(&self) -> anyhow::Result<()> {
-        let ocg_start_duel = self.core.get_function("_OCG_StartDuel")?;
-
-        ocg_start_duel
-            .call1(&JsValue::undefined(), &self.handle.into())
-            .map_err(|e| anyhow!("_OCG_StartDuel call failed: {e:?}"))?;
+        self.core.0.start_duel(self.handle.0);
 
         Ok(())
     }
 
     pub fn set_response(&self, buffer: &[u8]) -> anyhow::Result<()> {
-        let ocg_set_response = self.core.get_function("_OCG_DuelSetResponse")?;
-
-        let buf_ptr = self.core.allocate_memory(buffer.len() as u32)?;
+        let buf_len = buffer.len() as u32;
+        let buf_alloc = self.core.allocate_memory(buf_len)?;
+        let buf_ptr = buf_alloc.get_pointer();
 
         let memory = self.core.get_wasm_memory()?;
-        let memory_buf = memory.buffer();
-        let u8_view = Uint8Array::new_with_byte_offset(&memory_buf, buf_ptr.get_pointer().into());
-        u8_view.copy_from(buffer);
+        let dest_view = js_sys::Uint8Array::new_with_byte_offset_and_length(
+            &memory.buffer(),
+            buf_ptr.into(),
+            buf_len,
+        );
 
-        ocg_set_response
-            .call2(
-                &JsValue::undefined(),
-                &self.handle.into(),
-                &buf_ptr.get_pointer().into(),
-            )
-            .map_err(|e| anyhow!("_OCG_DuelSetResponse call failed: {e:?}"))?;
+        dest_view.set(&js_sys::Uint8Array::from(buffer), 0);
+
+        self.core.0.set_response(self.handle.0, buf_ptr.into());
 
         Ok(())
     }
 
     pub fn get_message(&self) -> anyhow::Result<Option<Uint8Array>> {
-        let ocg_get_message = self.core.get_function("_OCG_DuelGetMessage")?;
-
-        let msg_ptr = ocg_get_message
-            .call1(&JsValue::undefined(), &self.handle.into())
-            .map_err(|e| anyhow!("_OCG_DuelGetMessage call failed: {e:?}"))?
-            .as_f64()
-            .ok_or(anyhow!("_OCG_DuelGetMessage did not return a number"))?
-            as u32;
-
+        let msg_ptr = self.core.0.get_message(self.handle.0);
         if msg_ptr == 0 {
             return Ok(None);
         }
 
         let memory = self.core.get_wasm_memory()?;
-        let memory_buf = memory.buffer();
+        let buffer: ArrayBuffer = memory.buffer().unchecked_into();
 
-        let msg_view = Uint8Array::new_with_byte_offset(&memory_buf, msg_ptr);
+        let data_view = js_sys::DataView::new(&buffer, msg_ptr as usize, 2);
+        let len = data_view.get_uint16(0) as u32;
+
+        if len == 0 {
+            return Ok(None);
+        }
+
+        let msg_view = Uint8Array::new_with_byte_offset_and_length(&buffer, msg_ptr + 2, len);
+
         Ok(Some(msg_view))
     }
 
@@ -153,43 +99,17 @@ impl Duel<'_> {
         }
     }
 
-    pub fn process(&self) -> anyhow::Result<i32> {
-        let ocg_duel_process = self.core.get_function("_OCG_DuelProcess")?;
-
-        let result = ocg_duel_process
-            .call1(&JsValue::undefined(), &self.handle.into())
-            .map_err(|e| anyhow!("_OCG_DuelProcess call failed: {e:?}"))?
-            .as_f64()
-            .ok_or(anyhow!("_OCG_DuelProcess did not return a number"))?
-            as i32;
-
-        Ok(result)
+    pub fn process(&self) -> u32 {
+        self.core.0.process(self.handle.0)
     }
 
     pub fn destroy(&self) -> anyhow::Result<()> {
-        let ocg_destroy_duel = self.core.get_function("_OCG_DestroyDuel")?;
-
-        ocg_destroy_duel
-            .call1(&JsValue::undefined(), &self.handle.into())
-            .map_err(|e| anyhow!("_OCG_DestroyDuel call failed: {e:?}"))?;
-
+        self.core.0.destroy_duel(self.handle.0);
         Ok(())
     }
 
     fn count_location(&self, team: u8, location: u32) -> anyhow::Result<u32> {
-        let ocg_query_count = self.core.get_function("_OCG_DuelQueryCount")?;
-
-        let result = ocg_query_count
-            .call3(
-                &JsValue::undefined(),
-                &self.handle.into(),
-                &(team as f64).into(),
-                &(location as f64).into(),
-            )
-            .map_err(|e| anyhow!("_OCG_DuelQueryCount call failed: {e:?}"))?
-            .as_f64()
-            .ok_or(anyhow!("_OCG_DuelQueryCount did not return a number"))?
-            as u32;
+        let result = self.core.0.query_count(self.handle.0, team, location);
 
         Ok(result)
     }
@@ -208,30 +128,44 @@ impl Duel<'_> {
         team: u8,
         location: u32,
     ) -> anyhow::Result<Option<Uint8Array>> {
-        let ocg_query_location = self.core.get_function("_OCG_DuelQueryLocation")?;
-
-        let data_ptr = ocg_query_location
-            .call4(
-                &JsValue::undefined(),
-                &self.handle.into(),
-                &(flags as f64).into(),
-                &(team as f64).into(),
-                &(location as f64).into(),
-            )
-            .map_err(|e| anyhow!("_OCG_DuelQueryLocation call failed: {e:?}"))?
-            .as_f64()
-            .ok_or(anyhow!("_OCG_DuelQueryLocation did not return a number"))?
-            as u32;
+        let data_ptr = self
+            .core
+            .0
+            .query_location(self.handle.0, flags, team, location)
+            .map_err(|e| anyhow!("failed to query: {e:#?}"))?;
 
         if data_ptr == 0 {
             return Ok(None);
         }
 
         let memory = self.core.get_wasm_memory()?;
-        let memory_buf = memory.buffer();
+        let buffer: ArrayBuffer = memory.buffer().unchecked_into();
 
-        let data_view = Uint8Array::new_with_byte_offset(&memory_buf, data_ptr);
-        Ok(Some(data_view))
+        if (data_ptr as usize + 4) > buffer.byte_length() as usize {
+            return Err(anyhow::anyhow!(
+                "OCGCore returned pointer {} out of WASM bounds {}",
+                data_ptr,
+                buffer.byte_length()
+            ));
+        }
+
+        let header_view = DataView::new(&buffer, data_ptr as usize, 4);
+        let len = header_view.get_uint32(0);
+
+        if len == 0 {
+            return Ok(None);
+        }
+
+        if (data_ptr as usize + 4 + len as usize) > buffer.byte_length() as usize {
+            return Err(anyhow::anyhow!(
+                "OCGCore message length {} exceeds WASM bounds",
+                len
+            ));
+        }
+
+        let data_view = Uint8Array::new_with_byte_offset_and_length(&buffer, data_ptr + 4, len);
+
+        Ok(Some(data_view.slice(0, len)))
     }
 
     pub fn query_location_codes(&self, team: u8, location: u32) -> Vec<u32> {
@@ -335,8 +269,6 @@ impl Duel<'_> {
         sequence: u32,
         position: u32,
     ) -> anyhow::Result<()> {
-        let ocg_new_card = self.core.get_function("_OCG_DuelNewCard")?;
-
         let info_ptr = self.core.allocate_memory(32)?;
 
         let memory = self.core.get_wasm_memory()?;
@@ -351,194 +283,56 @@ impl Duel<'_> {
         i32_view.set_index(4, sequence as i32);
         i32_view.set_index(5, (position | 1) as i32);
 
-        ocg_new_card
-            .call2(
-                &JsValue::undefined(),
-                &self.handle.into(),
-                &info_ptr.get_pointer().into(),
-            )
-            .map_err(|e| anyhow!("_OCG_DuelNewCard call failed: {e:?}"))?;
+        self.core
+            .0
+            .add_card(self.handle.into(), info_ptr.get_pointer().into());
 
         Ok(())
     }
 
     pub fn load_script(&self, script: &str, name: &str) -> anyhow::Result<i32> {
-        let ocg_load_script = self.core.get_function("_OCG_LoadScript")?;
-
         let script_bytes = script.as_bytes();
         let name_bytes = name.as_bytes();
 
+        // allocate memory for script and name (name needs +1 for null terminator)
         let script_alloc = self.core.allocate_memory(script_bytes.len() as u32)?;
-        let script_ptr = script_alloc.get_pointer();
-
         let name_alloc = self.core.allocate_memory((name_bytes.len() + 1) as u32)?;
+
+        let script_ptr = script_alloc.get_pointer();
         let name_ptr = name_alloc.get_pointer();
 
         let memory = self.core.get_wasm_memory()?;
-        let memory_buf = memory.buffer();
+        let buffer: ArrayBuffer = memory.buffer().unchecked_into();
 
-        // Copy script bytes
-        let script_view =
-            Uint8Array::new_with_byte_offset(&memory_buf, usize::from(script_ptr) as u32);
-        script_view.copy_from(script_bytes);
+        let script_dest = Uint8Array::new_with_byte_offset_and_length(
+            &buffer,
+            script_ptr.into(),
+            script_bytes.len() as u32,
+        );
+        script_dest.set(&Uint8Array::from(script_bytes), 0);
 
-        // Copy name bytes and null-terminate
-        let name_view = Uint8Array::new_with_byte_offset(&memory_buf, usize::from(name_ptr) as u32);
-        name_view.copy_from(name_bytes);
-        name_view.set_index(name_bytes.len() as u32, 0);
+        let name_dest = Uint8Array::new_with_byte_offset_and_length(
+            &buffer,
+            name_ptr.into(),
+            (name_bytes.len() + 1) as u32,
+        );
+        name_dest.set(&Uint8Array::from(name_bytes), 0);
+        name_dest.set_index(name_bytes.len() as u32, 0); // Null terminator
 
-        // Call the OCG function
-        let result = ocg_load_script
-            .call4(
-                &JsValue::undefined(),
-                &self.handle.into(),
-                &script_ptr.into(),
-                &(script_bytes.len() as f64).into(),
-                &name_ptr.into(),
-            )
-            .map_err(|e| anyhow!("_OCG_LoadScript call failed: {e:?}"))?
-            .as_f64()
-            .ok_or(anyhow!("_OCG_LoadScript did not return a number"))? as i32;
+        // 5. Direct call to the typed method
+        let result = self.core.0.load_script(
+            self.handle.0,
+            script_ptr.into(),
+            script_bytes.len() as u32,
+            name_ptr.into(),
+        );
 
         Ok(result)
     }
 }
 
-thread_local! {
-    // Hold JsValue representations of closures so they are not dropped and stay registered with the wasm runtime.
-    static CALLBACK_KEEP_ALIVE: RefCell<Vec<JsValue>> = RefCell::new(Vec::new());
-    // Store only numeric callback indices returned by `addFunction`.
-    static DUEL_CALLBACKS: RefCell<Option<(u32, u32, u32, u32)>> = RefCell::new(None);
-}
-
-fn ensure_duel_callbacks(core: &OCGCore) -> anyhow::Result<(u32, u32, u32, u32)> {
-    DUEL_CALLBACKS.with(|slot| -> anyhow::Result<(u32, u32, u32, u32)> {
-        let mut slot = slot.borrow_mut();
-
-        if let Some(indices) = *slot {
-            return Ok(indices);
-        }
-
-        // Build closures
-        let card_reader = Closure::wrap(Box::new(move |payload: f64, code: f64, data_ptr: f64| {
-            web_sys::console::log_1(
-                &format!(
-                    "card_reader called: payload={}, code={}, data_ptr={}",
-                    payload, code, data_ptr
-                )
-                .into(),
-            );
-        }) as Box<dyn FnMut(f64, f64, f64)>);
-
-
-        let script_reader =
-            Closure::wrap(Box::new(move |payload: f64, duel: f64, name: f64| -> i32 {
-                let memory = core.get_wasm_memory().unwrap();
-                let script_name = read_c_string(memory, name).unwrap_or_else(|_| format!("<ptr:{name}>") );
-                web_sys::console::warn_1(
-                    &format!(
-                        "script_reader asked for '{}' (payload={}, duel={}) but dynamic loading is not wired; returning failure",
-                        script_name, payload, duel
-                    )
-                    .into(),
-                );
-                0
-            }) as Box<dyn FnMut(f64, f64, f64) -> i32>);
-
-        let log_handler =
-            Closure::wrap(Box::new(move |_payload: f64, _string: f64, _type: f64| {
-                web_sys::console::log_1(
-                    &format!(
-                        "log_handler called: payload={}, _string={}, _type={}",
-                        _payload, _string, _type
-                    )
-                    .into(),
-                );
-            })
-                as Box<dyn FnMut(f64, f64, f64)>);
-
-        let card_reader_done = Closure::wrap(
-            Box::new(move |_payload: f64, _data_ptr: f64| {
-                web_sys::console::log_1(
-                    &format!(
-                        "card_reader_done called: payload={}, _data_ptr={}",
-                        _payload, _data_ptr
-                    )
-                    .into(),
-                );
-            }) as Box<dyn FnMut(f64, f64)>
-        );
-
-        let add_function = core.get_function("addFunction")?;
-
-        let card_reader_index = add_function
-            .call2(&JsValue::undefined(), card_reader.as_ref(), &"viii".into())
-            .map_err(|e| anyhow!("Failed to register card reader callback: {e:#?}"))?
-            .as_f64()
-            .ok_or_else(|| anyhow!("Card reader callback index was not numeric"))?
-            as u32;
-        let script_reader_index = add_function
-            .call2(
-                &JsValue::undefined(),
-                script_reader.as_ref(),
-                &"iiii".into(),
-            )
-            .map_err(|e| anyhow!("Failed to register script reader callback: {e:#?}"))?
-            .as_f64()
-            .ok_or_else(|| anyhow!("Script reader callback index was not numeric"))?
-            as u32;
-        let log_handler_index = add_function
-            .call2(&JsValue::undefined(), log_handler.as_ref(), &"viii".into())
-            .map_err(|e| anyhow!("Failed to register log handler callback: {e:#?}"))?
-            .as_f64()
-            .ok_or_else(|| anyhow!("Log handler callback index was not numeric"))?
-            as u32;
-        let card_reader_done_index = add_function
-            .call2(
-                &JsValue::undefined(),
-                card_reader_done.as_ref(),
-                &"vii".into(),
-            )
-            .map_err(|e| anyhow!("Failed to register card reader done callback: {e:#?}"))?
-            .as_f64()
-            .ok_or_else(|| anyhow!("Card reader done callback index was not numeric"))?
-            as u32;
-
-        // Keep closures alive by storing their JsValue representations in CALLBACK_KEEP_ALIVE
-        CALLBACK_KEEP_ALIVE.with(|vec| {
-            let mut v = vec.borrow_mut();
-            v.push(card_reader.into_js_value());
-            v.push(script_reader.into_js_value());
-            v.push(log_handler.into_js_value());
-            v.push(card_reader_done.into_js_value());
-        });
-
-        let indices = (
-            card_reader_index,
-            script_reader_index,
-            log_handler_index,
-            card_reader_done_index,
-        );
-        *slot = Some(indices);
-        Ok(indices)
-    })
-}
-
-fn read_c_string(memory: Memory, ptr: f64) -> anyhow::Result<String> {
-    let buffer = memory.buffer();
-    let bytes = Uint8Array::new(&buffer);
-    let mut offset = ptr as u32;
-    let mut out = Vec::new();
-
-    while offset < bytes.length() {
-        let byte = bytes.get_index(offset);
-        if byte == 0 {
-            break;
-        }
-
-        out.push(byte);
-        offset += 1;
+impl Drop for Duel<'_> {
+    fn drop(&mut self) {
+        let _ = self.destroy();
     }
-
-    String::from_utf8(out).map_err(|e| anyhow!("Invalid UTF-8 in script name: {e}"))
 }

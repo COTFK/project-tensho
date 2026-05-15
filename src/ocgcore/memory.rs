@@ -8,7 +8,7 @@ use wasm_bindgen::JsValue;
 /// Preferable to accidentally feeding the FFI
 /// a random [`u32`] that doesn't belong.
 #[derive(Debug, Clone, Copy)]
-pub struct CorePointer(u32);
+pub struct CorePointer(pub(super) u32);
 
 impl CorePointer {
     pub fn new(address: u32) -> Self {
@@ -29,7 +29,7 @@ impl From<CorePointer> for usize {
 
 impl From<CorePointer> for u32 {
     fn from(ptr: CorePointer) -> Self {
-        ptr.0 as u32
+        ptr.0
     }
 }
 
@@ -70,7 +70,6 @@ impl<'a> CoreMemoryAllocation<'a> {
 impl Drop for CoreMemoryAllocation<'_> {
     /// Free the allocated memory.
     fn drop(&mut self) {
-        tracing::debug!("Freeing pointer {:?}", self.pointer);
         self.core.0.free(self.pointer.0);
     }
 }

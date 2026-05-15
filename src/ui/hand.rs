@@ -1,4 +1,4 @@
-use super::Card;
+use super::card::Card;
 use dioxus::prelude::*;
 
 #[component]

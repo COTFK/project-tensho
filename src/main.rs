@@ -4,8 +4,7 @@ mod ui;
 use dioxus::prelude::*;
 
 use crate::ocgcore::OCGCore;
-
-static TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
+use crate::ui::App;
 
 fn main() {
     dioxus::launch(AppContainer);
@@ -19,9 +18,8 @@ pub fn AppContainer() -> Element {
     match &*core_resource.read() {
         Some(result) => match result {
             Ok(core) => {
-                let (major, minor) = core.get_version().unwrap();
-
-                rsx!("core v{major}.{minor}")
+                use_context_provider(|| core.clone());
+                rsx!(App { })
             }
             Err(e) => {
                 rsx!("{e:#?}")
