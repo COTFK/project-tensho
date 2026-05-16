@@ -9,13 +9,13 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.102"
 dioxus = { version = "0.7.9", features = ["web"] }
-# getrandom = { version = "0.2", features = ["js"] }
+getrandom = { version = "0.4", features = ["wasm_js"] }
 # gloo-net = { version = "0.5", features = ["http"] }
 # gloo-timers = { version = "0.3", features = ["futures"] }
 js-sys = "0.3.98"
 # lazy_static = "1.4"
 # manganis = "0.7.9"
-# rand = "0.8"
+rand = "0.10"
 # serde = { version = "1", features = ["derive"] }
 # serde_json = "1"
 tracing = "0.1.44"

@@ -5,7 +5,6 @@ mod memory;
 
 use anyhow::anyhow;
 use dioxus::prelude::*;
-use js_sys::Function;
 use js_sys::Reflect;
 use js_sys::Uint8Array;
 use js_sys::Uint32Array;
@@ -15,6 +14,7 @@ use std::cell::RefCell;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 
+use crate::ocgcore::data::OCGCardData;
 use crate::ocgcore::data::OCGDuelOptions;
 pub use crate::ocgcore::duel::Duel;
 use crate::ocgcore::memory::CoreMemoryAllocation;
@@ -53,14 +53,14 @@ extern "C" {
     fn process(this: &OCGCoreInstance, duel: u32) -> u32;
 
     #[wasm_bindgen(method, js_name = _OCG_DuelGetMessage)]
-    fn get_message(this: &OCGCoreInstance, duel: u32) -> u32;
+    fn get_message(this: &OCGCoreInstance, duel: u32, length_ptr: u32) -> u32;
 
     #[wasm_bindgen(method, js_name = _OCG_DuelSetResponse)]
     fn set_response(this: &OCGCoreInstance, duel: u32, response_ptr: u32);
 
     #[wasm_bindgen(method, js_name = _OCG_DuelNewCard)]
     fn add_card(this: &OCGCoreInstance, duel: u32, info: u32);
-    
+
     #[wasm_bindgen(method, js_name = _OCG_LoadScript)]
     fn load_script(this: &OCGCoreInstance, duel: u32, buffer: u32, len: u32, name: u32) -> i32;
 
@@ -71,7 +71,12 @@ extern "C" {
     fn query_count(this: &OCGCoreInstance, duel: u32, team: u8, location: u32) -> u32;
 
     #[wasm_bindgen(method, js_name = _OCG_DuelQueryLocation, catch)]
-    fn query_location(this: &OCGCoreInstance, duel: u32, flags: u32, team: u8, location: u32) -> Result<u32, JsValue>;
+    fn query_location(
+        this: &OCGCoreInstance,
+        duel: u32,
+        length_ptr: u32,
+        info_ptr: u32,
+    ) -> Result<u32, JsValue>;
 
     // Emscripten helpers
     #[wasm_bindgen(method, js_name = _malloc)]
@@ -100,25 +105,6 @@ impl OCGCore {
 
         tracing::debug!("Core loaded successfully.");
         Ok(OCGCore(instance))
-    }
-
-    /// Get the core version as [`(major, minor)`].
-    pub fn get_version(&self) -> anyhow::Result<(i32, i32)> {
-        // Allocate 8 bytes (two ints) once instead of 4 bytes (one int) twice
-        let version_alloc = self.allocate_memory(8)?;
-        let major_version_ptr = version_alloc.get_pointer();
-        let minor_version_ptr = major_version_ptr.offset_by(4);
-
-        self.0
-            .get_version(major_version_ptr.into(), minor_version_ptr.into());
-
-        let view = self.get_memory_view()?;
-
-        // Read sequentially from the single allocation
-        let major = view.get_int32_endian(major_version_ptr.into(), true);
-        let minor = view.get_int32_endian(minor_version_ptr.into(), true);
-
-        Ok((major, minor))
     }
 
     pub fn create_duel(&self) -> anyhow::Result<Duel<'_>> {
@@ -171,7 +157,7 @@ impl OCGCore {
         Ok(Duel::new(CorePointer(handle), self))
     }
 
-    pub fn allocate_memory(&self, length: u32) -> anyhow::Result<CoreMemoryAllocation> {
+    pub fn allocate_memory(&self, length: u32) -> anyhow::Result<CoreMemoryAllocation<'_>> {
         let pointer = self.0.malloc(length);
 
         Ok(CoreMemoryAllocation::new(self, CorePointer::new(pointer)))
@@ -186,14 +172,6 @@ impl OCGCore {
         })?;
 
         Ok(memory)
-    }
-
-    pub fn get_memory_view(&self) -> anyhow::Result<js_sys::DataView> {
-        let memory = self.get_wasm_memory()?;
-        let buffer: js_sys::ArrayBuffer = memory.buffer().into();
-        let view = js_sys::DataView::new(&buffer, 0, buffer.byte_length() as usize);
-
-        Ok(view)
     }
 }
 
@@ -214,10 +192,24 @@ fn ensure_duel_callbacks(core: &OCGCore) -> anyhow::Result<(u32, u32, u32, u32)>
 
         // 1. Build closures
         // Use u32 for parameters that represent pointers or IDs in WASM
-        let card_reader = Closure::wrap(Box::new(move |payload: u32, code: u32, data_ptr: u32| {
-            web_sys::console::log_1(
-                &format!("card_reader called: payload={payload}, code={code}, data_ptr={data_ptr}").into(),
+        let card_reader = Closure::wrap(Box::new(move |_payload: u32, code: u32, data_ptr: u32| {
+            if data_ptr == 0 {
+                tracing::warn!(target: "ocgcore", "card_reader received null output pointer for code {code}");
+                return;
+            }
+
+            let data = OCGCardData::with_code(code);
+            let data_size = std::mem::size_of::<OCGCardData>();
+            let mut data_bytes = [0u8; std::mem::size_of::<OCGCardData>()];
+            data.write_bytes(&mut data_bytes);
+
+            let wasm_mem = core.get_wasm_memory().unwrap();
+            let dest_view = Uint8Array::new_with_byte_offset_and_length(
+                &wasm_mem.buffer(),
+                data_ptr,
+                data_size as u32,
             );
+            dest_view.set(&Uint8Array::from(data_bytes.as_slice()), 0);
         }) as Box<dyn FnMut(u32, u32, u32)>);
 
         // Clone a reference to core so the closure can use its allocation tools
@@ -225,7 +217,7 @@ fn ensure_duel_callbacks(core: &OCGCore) -> anyhow::Result<(u32, u32, u32, u32)>
 
         let script_reader = Closure::wrap(Box::new(move |_payload: u32, duel: u32, name_ptr: u32| -> i32 {
             let memory = core_clone.get_wasm_memory().unwrap();
-            
+
             // 1. Read the requested script name from Emscripten memory
             let script_name = read_c_string(memory, name_ptr.into())
                 .unwrap_or_else(|_| "unknown.lua".to_string());
@@ -268,7 +260,7 @@ fn ensure_duel_callbacks(core: &OCGCore) -> anyhow::Result<(u32, u32, u32, u32)>
 
             // 5. Copy the actual bytes into the allocated WASM memory buffers
             let wasm_mem = core_clone.get_wasm_memory().unwrap();
-            
+
             let content_view = Uint8Array::new_with_byte_offset_and_length(
                 &wasm_mem.buffer(),
                 content_ptr.into(),
@@ -309,7 +301,7 @@ fn ensure_duel_callbacks(core: &OCGCore) -> anyhow::Result<(u32, u32, u32, u32)>
 
             let memory = core.get_wasm_memory().unwrap();
             let buffer = memory.buffer();
-            
+
             // 2. Find the null terminator manually in the buffer
             let view = Uint8Array::new_with_byte_offset_and_length(&buffer, string_ptr, 2048); // limit to 2kb
             let mut length = 0;
@@ -329,9 +321,6 @@ fn ensure_duel_callbacks(core: &OCGCore) -> anyhow::Result<(u32, u32, u32, u32)>
         }) as Box<dyn FnMut(u32, u32, u32)>);
 
         let card_reader_done = Closure::wrap(Box::new(move |payload: u32, data_ptr: u32| {
-            web_sys::console::log_1(
-                &format!("card_reader_done called: payload={payload}, data_ptr={data_ptr}").into(),
-            );
         }) as Box<dyn FnMut(u32, u32)>);
 
         // 2. Register functions using the new typed declaration
@@ -339,11 +328,11 @@ fn ensure_duel_callbacks(core: &OCGCore) -> anyhow::Result<(u32, u32, u32, u32)>
         let instance = &core.0;
 
         let card_reader_index = instance.add_function(card_reader.as_ref().unchecked_ref(), "viii");
-        
+
         let script_reader_index = instance.add_function(script_reader.as_ref().unchecked_ref(), "iiii");
-        
+
         let log_handler_index = instance.add_function(log_handler.as_ref().unchecked_ref(), "viii");
-        
+
         let card_reader_done_index = instance.add_function(card_reader_done.as_ref().unchecked_ref(), "vii");
 
         // 3. Keep closures alive

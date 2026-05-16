@@ -8,8 +8,6 @@
     --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
     monospace;
     --spacing: 0.25rem;
-    --text-xs: 0.75rem;
-    --text-xs--line-height: calc(1 / 0.75);
     --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
     --default-transition-duration: 150ms;
     --default-transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
@@ -205,9 +203,6 @@
   .-mx-\[2\%\] {
     margin-inline: calc(2% * -1);
   }
-  .mt-4 {
-    margin-top: calc(var(--spacing) * 4);
-  }
   .block {
     display: block;
   }
@@ -225,6 +220,12 @@
   }
   .table {
     display: table;
+  }
+  .h-dvh {
+    height: 100dvh;
+  }
+  .w-dvw {
+    width: 100dvw;
   }
   .shrink {
     flex-shrink: 1;
@@ -266,18 +267,8 @@
     border-style: var(--tw-border-style);
     border-width: 1px;
   }
-  .p-8 {
-    padding: calc(var(--spacing) * 8);
-  }
   .p-4000 {
     padding: calc(var(--spacing) * 4000);
-  }
-  .font-mono {
-    font-family: var(--font-mono);
-  }
-  .text-xs {
-    font-size: var(--text-xs);
-    line-height: var(--tw-leading, var(--text-xs--line-height));
   }
   .lowercase {
     text-transform: lowercase;

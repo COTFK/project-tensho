@@ -2,10 +2,7 @@ use super::card::Card;
 use dioxus::prelude::*;
 
 #[component]
-pub fn Hand(
-    cards: ReadSignal<Vec<String>>,
-    selected_card: WriteSignal<i32>,
-) -> Element {
+pub fn Hand(cards: ReadSignal<Vec<String>>, selected_card: WriteSignal<i32>) -> Element {
     let hand_size = cards().len() as i32;
     let center = hand_size - 1;
 

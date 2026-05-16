@@ -1,5 +1,4 @@
 /// WASM memory management tools.
-
 use crate::ocgcore::OCGCore;
 use std::ops::Add;
 use wasm_bindgen::JsValue;
@@ -25,7 +24,6 @@ impl From<CorePointer> for usize {
         ptr.0 as usize
     }
 }
-
 
 impl From<CorePointer> for u32 {
     fn from(ptr: CorePointer) -> Self {
@@ -73,4 +71,3 @@ impl Drop for CoreMemoryAllocation<'_> {
         self.core.0.free(self.pointer.0);
     }
 }
-

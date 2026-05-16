@@ -30,7 +30,7 @@ static BASE_SCRIPTS: [&'static str; 25] = [
     "proc_gemini.lua",
     "proc_spirit.lua",
     "proc_unofficial.lua",
-    "deprecated_functions.lua"
+    "deprecated_functions.lua",
 ];
 
 std::thread_local! {
@@ -44,9 +44,7 @@ fn cache_script(name: &str, data: Vec<u8>) {
 }
 
 pub fn get_cached_script(name: &str) -> Option<Vec<u8>> {
-    SCRIPT_CACHE.with(|cache| {
-        cache.borrow().get(name).cloned()
-    })
+    SCRIPT_CACHE.with(|cache| cache.borrow().get(name).cloned())
 }
 
 async fn get_script_data(name: &str) -> anyhow::Result<Vec<u8>> {
@@ -57,7 +55,7 @@ async fn get_script_data(name: &str) -> anyhow::Result<Vec<u8>> {
         .map_err(|e| anyhow!("Unable to load script bytes: {e}"))
 }
 
-pub async fn cache_scripts(deck_card_ids: Vec<u32>) {
+pub async fn cache_scripts(mut deck_card_ids: Vec<u32>) {
     // Add helper scripts
     for script in BASE_SCRIPTS {
         if let Ok(bytes) = get_script_data(script).await {
@@ -70,9 +68,16 @@ pub async fn cache_scripts(deck_card_ids: Vec<u32>) {
     }
 
     // Batch fetch all individual card scripts based on the deck lists
+    deck_card_ids.sort();
+    deck_card_ids.dedup();
+
     for id in deck_card_ids {
         let script_name = format!("c{}.lua", id);
         if let Ok(bytes) = get_script_data(&script_name).await {
+            if bytes.len() == 0 {
+                warn!("Failed to load {script_name} - got 0 bytes.");
+                continue;
+            }
             cache_script(&script_name, bytes);
         }
     }

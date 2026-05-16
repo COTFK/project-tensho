@@ -81,7 +81,7 @@ fn main() {
     }
 
     cmd.arg(lua_dir.join("onelua.c"));
-    
+
     let status = cmd.status().expect("failed to invoke em++");
     if !status.success() {
         panic!("em++ failed with status {status}");

@@ -42,6 +42,32 @@ impl Default for OCGCardData {
     }
 }
 
+impl OCGCardData {
+    pub fn with_code(code: u32) -> Self {
+        Self {
+            code,
+            ..Self::default()
+        }
+    }
+
+    pub fn write_bytes(&self, out: &mut [u8]) {
+        assert!(out.len() >= std::mem::size_of::<Self>());
+
+        out[0..4].copy_from_slice(&self.code.to_le_bytes());
+        out[4..8].copy_from_slice(&self.alias.to_le_bytes());
+        out[8..12].copy_from_slice(&self.setcodes.to_le_bytes());
+        out[12..16].copy_from_slice(&self.type_.to_le_bytes());
+        out[16..20].copy_from_slice(&self.level.to_le_bytes());
+        out[20..24].copy_from_slice(&self.attribute.to_le_bytes());
+        out[24..32].copy_from_slice(&self.race.to_le_bytes());
+        out[32..36].copy_from_slice(&self.attack.to_le_bytes());
+        out[36..40].copy_from_slice(&self.defense.to_le_bytes());
+        out[40..44].copy_from_slice(&self.lscale.to_le_bytes());
+        out[44..48].copy_from_slice(&self.rscale.to_le_bytes());
+        out[48..52].copy_from_slice(&self.link_marker.to_le_bytes());
+    }
+}
+
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct OCGDuelOptions {
@@ -64,7 +90,12 @@ pub struct OCGDuelOptions {
 impl Default for OCGDuelOptions {
     fn default() -> Self {
         Self {
-            seed: [1, 2, 3, 4],
+            seed: [
+                rand::random(),
+                rand::random(),
+                rand::random(),
+                rand::random(),
+            ],
             flags: 0,
             team1: OCGPlayer {
                 starting_lp: 8000,

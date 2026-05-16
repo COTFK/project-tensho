@@ -3,15 +3,65 @@ use crate::ocgcore::OCGCore;
 use crate::ocgcore::memory::CorePointer;
 use anyhow::anyhow;
 use js_sys::ArrayBuffer;
-use js_sys::DataView;
-use js_sys::Int32Array;
 use js_sys::Uint8Array;
+use js_sys::Uint32Array;
 use wasm_bindgen::JsCast;
 
 #[derive(Debug, Clone)]
 pub struct Duel<'a> {
     handle: CorePointer,
     core: &'a OCGCore,
+}
+
+/// Helper to write little-endian bytes to a Uint8Array view
+fn write_le_bytes(view: &Uint8Array, offset: u32, bytes: &[u8]) {
+    for (i, byte) in bytes.iter().enumerate() {
+        view.set_index(offset + i as u32, *byte);
+    }
+}
+
+/// Helper to read a u32 from a byte slice as little-endian
+fn read_u32_le(bytes: &[u8]) -> u32 {
+    u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
+}
+
+/// Parse card code from OCG query data field
+fn extract_card_code(data: &[u8], offset: &mut usize, field_len: usize) -> u32 {
+    let mut remaining = field_len;
+    let mut code = 0;
+
+    while remaining > 0 && *offset + 4 <= data.len() {
+        let flag = read_u32_le(&data[*offset..*offset + 4]);
+        *offset += 4;
+        remaining = remaining.saturating_sub(4);
+
+        let value_size = remaining;
+        if *offset + value_size > data.len() {
+            break;
+        }
+
+        // Flag 0x1 = card code
+        if flag == 0x1 && value_size >= 4 {
+            code = read_u32_le(&data[*offset..*offset + 4]);
+        }
+
+        *offset += value_size;
+
+        // Flag 0x80000000 = end of card
+        if flag == 0x80000000 {
+            break;
+        }
+
+        // Read next field length
+        if *offset + 2 <= data.len() {
+            remaining = u16::from_le_bytes([data[*offset], data[*offset + 1]]) as usize;
+            *offset += 2;
+        } else {
+            break;
+        }
+    }
+
+    code
 }
 
 impl<'a> Duel<'a> {
@@ -45,7 +95,10 @@ impl<'a> Duel<'a> {
     }
 
     pub fn get_message(&self) -> anyhow::Result<Option<Uint8Array>> {
-        let msg_ptr = self.core.0.get_message(self.handle.0);
+        let length_alloc = self.core.allocate_memory(4)?;
+        let length_ptr = length_alloc.get_pointer();
+
+        let msg_ptr = self.core.0.get_message(self.handle.0, length_ptr.into());
         if msg_ptr == 0 {
             return Ok(None);
         }
@@ -53,49 +106,39 @@ impl<'a> Duel<'a> {
         let memory = self.core.get_wasm_memory()?;
         let buffer: ArrayBuffer = memory.buffer().unchecked_into();
 
-        let data_view = js_sys::DataView::new(&buffer, msg_ptr as usize, 2);
-        let len = data_view.get_uint16(0) as u32;
+        let len = Uint32Array::new_with_byte_offset_and_length(&buffer, length_ptr.into(), 1)
+            .get_index(0);
 
         if len == 0 {
             return Ok(None);
         }
 
-        let msg_view = Uint8Array::new_with_byte_offset_and_length(&buffer, msg_ptr + 2, len);
-
-        Ok(Some(msg_view))
+        Ok(Some(Uint8Array::new_with_byte_offset_and_length(
+            &buffer, msg_ptr, len,
+        )))
     }
 
     pub fn poll_messages(&self) -> Option<js_sys::Array> {
-        match self.get_message().ok().flatten() {
-            Some(buf) => {
-                let data_vec = buf.to_vec();
-                let out = js_sys::Array::new();
-                let mut offset = 0usize;
+        let buf = self.get_message().ok().flatten()?;
+        let data_vec = buf.to_vec();
+        let out = js_sys::Array::new();
+        let mut offset = 0usize;
 
-                while offset + 4 <= data_vec.len() {
-                    let size = u32::from_le_bytes([
-                        data_vec[offset],
-                        data_vec[offset + 1],
-                        data_vec[offset + 2],
-                        data_vec[offset + 3],
-                    ]) as usize;
-                    offset += 4;
+        while offset + 4 <= data_vec.len() {
+            let size = read_u32_le(&data_vec[offset..offset + 4]) as usize;
+            offset += 4;
 
-                    if offset + size > data_vec.len() {
-                        break;
-                    }
-
-                    let slice = &data_vec[offset..offset + size];
-                    let ua = Uint8Array::new_with_length(size as u32);
-                    ua.copy_from(slice);
-                    out.push(&ua);
-                    offset += size;
-                }
-
-                Some(out)
+            if offset + size > data_vec.len() {
+                break;
             }
-            None => None,
+
+            let ua = Uint8Array::new_with_length(size as u32);
+            ua.copy_from(&data_vec[offset..offset + size]);
+            out.push(&ua);
+            offset += size;
         }
+
+        Some(out)
     }
 
     pub fn process(&self) -> u32 {
@@ -107,18 +150,8 @@ impl<'a> Duel<'a> {
         Ok(())
     }
 
-    fn count_location(&self, team: u8, location: u32) -> anyhow::Result<u32> {
-        let result = self.core.0.query_count(self.handle.0, team, location);
-
-        Ok(result)
-    }
-
-    pub fn count_deck(&self, team: u8) -> u32 {
-        self.count_location(team, LOCATION_DECK).unwrap_or(0)
-    }
-
-    pub fn count_extra_deck(&self, team: u8) -> u32 {
-        self.count_location(team, LOCATION_EXTRA).unwrap_or(0)
+    pub fn count_location(&self, team: u8, location: u32) -> u32 {
+        self.core.0.query_count(self.handle.0, team, location)
     }
 
     fn query_location(
@@ -127,132 +160,90 @@ impl<'a> Duel<'a> {
         team: u8,
         location: u32,
     ) -> anyhow::Result<Option<Uint8Array>> {
-        let data_ptr = self
-            .core
-            .0
-            .query_location(self.handle.0, flags, team, location)
-            .map_err(|e| anyhow!("failed to query: {e:#?}"))?;
-
-        if data_ptr == 0 {
-            return Ok(None);
-        }
-
         let memory = self.core.get_wasm_memory()?;
         let buffer: ArrayBuffer = memory.buffer().unchecked_into();
 
-        if (data_ptr as usize + 4) > buffer.byte_length() as usize {
-            return Err(anyhow::anyhow!(
-                "OCGCore returned pointer {} out of WASM bounds {}",
+        // Allocate OCG_QueryInfo struct (20 bytes)
+        let info_alloc = self.core.allocate_memory(20)?;
+        let length_alloc = self.core.allocate_memory(4)?;
+
+        let info_ptr = info_alloc.get_pointer();
+        let length_ptr = length_alloc.get_pointer();
+
+        // Build OCG_QueryInfo struct: flags (u32) + team (u8) + pad (3) + location (u32) + seq (u32) + overlay_seq (u32)
+        let info_view = Uint8Array::new_with_byte_offset_and_length(&buffer, info_ptr.into(), 20);
+        write_le_bytes(&info_view, 0, &flags.to_le_bytes());
+        info_view.set_index(4, team);
+        write_le_bytes(&info_view, 8, &location.to_le_bytes());
+
+        let data_ptr = self
+            .core
+            .0
+            .query_location(self.handle.0, length_ptr.into(), info_ptr.into())
+            .map_err(|e| anyhow!("query_location failed: {e:?}"))?;
+
+        // Read returned length
+        let length_view =
+            Uint8Array::new_with_byte_offset_and_length(&buffer, length_ptr.into(), 4);
+        let query_length = read_u32_le(&length_view.to_vec());
+
+        // Empty result
+        if query_length <= 4 || data_ptr == 0 {
+            return Ok(None);
+        }
+
+        // Bounds check
+        if (data_ptr as usize + query_length as usize) > buffer.byte_length() as usize {
+            return Err(anyhow!(
+                "OCGCore returned pointer {} with length {} exceeds WASM bounds {}",
                 data_ptr,
+                query_length,
                 buffer.byte_length()
             ));
         }
 
-        let header_view = DataView::new(&buffer, data_ptr as usize, 4);
-        let len = header_view.get_uint32(0);
+        // Skip 4-byte header, read actual data
+        let actual_data_len = query_length - 4;
+        let data_view =
+            Uint8Array::new_with_byte_offset_and_length(&buffer, data_ptr + 4, actual_data_len);
 
-        if len == 0 {
-            return Ok(None);
-        }
-
-        if (data_ptr as usize + 4 + len as usize) > buffer.byte_length() as usize {
-            return Err(anyhow::anyhow!(
-                "OCGCore message length {} exceeds WASM bounds",
-                len
-            ));
-        }
-
-        let data_view = Uint8Array::new_with_byte_offset_and_length(&buffer, data_ptr + 4, len);
-
-        Ok(Some(data_view.slice(0, len)))
+        Ok(Some(data_view.slice(0, actual_data_len)))
     }
 
     pub fn query_location_codes(&self, team: u8, location: u32) -> Vec<u32> {
-        match self
+        let buf = self
             .query_location(0xFFFFFFFF, team, location)
             .ok()
             .flatten()
-        {
-            Some(buf) => {
-                let data_vec = buf.to_vec();
-                let mut codes = Vec::new();
-                let mut offset = 0usize;
+            .map(|b| b.to_vec())
+            .unwrap_or_default();
 
-                if data_vec.len() >= 4 {
-                    offset += 4;
-                }
+        let mut codes = Vec::new();
+        let mut offset = 0usize;
 
-                while offset + 2 <= data_vec.len() {
-                    let field_len = i16::from_le_bytes([data_vec[offset], data_vec[offset + 1]]);
-                    offset += 2;
+        while offset + 2 <= buf.len() {
+            let field_len = i16::from_le_bytes([buf[offset], buf[offset + 1]]) as usize;
+            offset += 2;
 
-                    if field_len == 0 {
-                        codes.push(0);
-                        continue;
-                    }
-
-                    let mut curr_field_len = field_len as usize;
-                    let mut found_code = None;
-
-                    loop {
-                        if offset + 4 > data_vec.len() {
-                            break;
-                        }
-
-                        let flag = u32::from_le_bytes([
-                            data_vec[offset],
-                            data_vec[offset + 1],
-                            data_vec[offset + 2],
-                            data_vec[offset + 3],
-                        ]);
-                        offset += 4;
-
-                        let value_size = if curr_field_len >= 4 {
-                            curr_field_len - 4
-                        } else {
-                            0
-                        };
-
-                        if offset + value_size > data_vec.len() {
-                            break;
-                        }
-
-                        if flag == 0x1 && value_size >= 4 {
-                            let code = u32::from_le_bytes([
-                                data_vec[offset],
-                                data_vec[offset + 1],
-                                data_vec[offset + 2],
-                                data_vec[offset + 3],
-                            ]);
-                            found_code = Some(code);
-                        }
-
-                        offset += value_size;
-
-                        if flag == 0x80000000 {
-                            break;
-                        }
-
-                        if offset + 2 > data_vec.len() {
-                            break;
-                        }
-
-                        curr_field_len =
-                            u16::from_le_bytes([data_vec[offset], data_vec[offset + 1]]) as usize;
-                        offset += 2;
-                    }
-
-                    codes.push(found_code.unwrap_or(0));
-                }
-
-                codes
-            }
-            None => Vec::new(),
+            codes.push(if field_len == 0 {
+                0
+            } else {
+                extract_card_code(&buf, &mut offset, field_len)
+            });
         }
+
+        codes
     }
 
     pub fn query_hand(&self, team: u8) -> Vec<String> {
-        self.query_location_codes(team, 0x02u32)
+        self.query_location_codes(team, LOCATION_HAND)
+            .into_iter()
+            .map(|code| code.to_string())
+            .collect()
+    }
+
+    pub fn query_deck(&self, team: u8) -> Vec<String> {
+        self.query_location_codes(team, 0x01u32)
             .into_iter()
             .map(|code| code.to_string())
             .collect()
@@ -261,30 +252,45 @@ impl<'a> Duel<'a> {
     pub fn add_card(
         &self,
         team: u8,
-        _duelist: u8,
+        duelist: u8,
         code: u32,
         controller: u8,
         location: u32,
         sequence: u32,
         position: u32,
     ) -> anyhow::Result<()> {
-        let info_ptr = self.core.allocate_memory(32)?;
+        let info_ptr = self.core.allocate_memory(24)?;
 
         let memory = self.core.get_wasm_memory()?;
         let memory_buf = memory.buffer();
+        let info_offset = info_ptr.get_pointer().into();
+        let info_view = Uint8Array::new_with_byte_offset_and_length(&memory_buf, info_offset, 24);
 
-        // Set card info fields
-        let i32_view = Int32Array::new_with_byte_offset(&memory_buf, info_ptr.get_pointer().into());
-        i32_view.set_index(0, team as i32);
-        i32_view.set_index(1, code as i32);
-        i32_view.set_index(2, controller as i32);
-        i32_view.set_index(3, location as i32);
-        i32_view.set_index(4, sequence as i32);
-        i32_view.set_index(5, (position | 1) as i32);
+        // OCG_NewCardInfo struct layout:
+        // uint8_t team;       // offset 0
+        // uint8_t duelist;    // offset 1
+        // [2 bytes padding]   // offset 2-3
+        // uint32_t code;      // offset 4-7
+        // uint8_t con;        // offset 8
+        // [3 bytes padding]   // offset 9-11
+        // uint32_t loc;       // offset 12-15
+        // uint32_t seq;       // offset 16-19
+        // uint32_t pos;       // offset 20-23
 
-        self.core
-            .0
-            .add_card(self.handle.into(), info_ptr.get_pointer().into());
+        info_view.set_index(0, team);
+        info_view.set_index(1, duelist);
+        // Padding at 2-3 is left as-is (zeros from allocation)
+
+        write_le_bytes(&info_view, 4, &code.to_le_bytes());
+
+        info_view.set_index(8, controller);
+        // Padding at 9-11 is left as-is
+
+        write_le_bytes(&info_view, 12, &location.to_le_bytes());
+        write_le_bytes(&info_view, 16, &sequence.to_le_bytes());
+        write_le_bytes(&info_view, 20, &position.to_le_bytes());
+
+        self.core.0.add_card(self.handle.into(), info_offset as u32);
 
         Ok(())
     }
