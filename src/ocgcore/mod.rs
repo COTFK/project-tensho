@@ -16,9 +16,10 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 
 use crate::ocgcore::data::OCGDuelOptions;
-use crate::ocgcore::duel::Duel;
+pub use crate::ocgcore::duel::Duel;
 use crate::ocgcore::memory::CoreMemoryAllocation;
 use crate::ocgcore::memory::CorePointer;
+pub use crate::utility::get_cached_script;
 
 static OCGCORE_WASM: Asset = asset!(
     "/assets/ocgcore.wasm",
@@ -219,13 +220,85 @@ fn ensure_duel_callbacks(core: &OCGCore) -> anyhow::Result<(u32, u32, u32, u32)>
             );
         }) as Box<dyn FnMut(u32, u32, u32)>);
 
-        let script_reader = Closure::wrap(Box::new(move |payload: u32, duel: u32, name_ptr: u32| -> i32 {
-            let memory = core.get_wasm_memory().unwrap();
-            let script_name = read_c_string(memory, name_ptr.into()).unwrap_or_else(|_| format!("<ptr:{name_ptr}>"));
-            web_sys::console::warn_1(
-                &format!("script_reader asked for '{script_name}' (payload={payload}, duel={duel}) but dynamic loading is not wired; returning failure").into(),
+        // Clone a reference to core so the closure can use its allocation tools
+        let core_clone = core.clone();
+
+        let script_reader = Closure::wrap(Box::new(move |_payload: u32, duel: u32, name_ptr: u32| -> i32 {
+            let memory = core_clone.get_wasm_memory().unwrap();
+            
+            // 1. Read the requested script name from Emscripten memory
+            let script_name = read_c_string(memory, name_ptr.into())
+                .unwrap_or_else(|_| "unknown.lua".to_string());
+
+            if script_name == "c0.lua" {
+                return 0;
+            }
+
+            // 2. Fetch script text via a synchronous cache lookup
+            let script_bytes = match get_cached_script(&script_name) {
+                Some(bytes) => bytes,
+                None => {
+                    tracing::error!(target: "ocgcore", "CRITICAL: Cache miss for script '{}'!", script_name);
+                    return 0; // Return 0 to indicate failure to ocgcore
+                }
+            };
+
+            // 3. Allocate space in WASM heap for the script content text
+            let content_len = script_bytes.len() as u32;
+            let content_alloc = match core_clone.allocate_memory(content_len) {
+                Ok(alloc) => alloc,
+                Err(e) => {
+                    tracing::error!(target: "ocgcore", "Failed to allocate buffer for script content: {e}");
+                    return 0;
+                }
+            };
+            let content_ptr = content_alloc.get_pointer();
+
+            // 4. Allocate space in WASM heap for the script name string (including null-terminator)
+            let name_bytes = format!("{}\0", script_name).into_bytes();
+            let name_len = name_bytes.len() as u32;
+            let name_alloc = match core_clone.allocate_memory(name_len) {
+                Ok(alloc) => alloc,
+                Err(e) => {
+                    tracing::error!(target: "ocgcore", "Failed to allocate buffer for script name: {e}");
+                    return 0;
+                }
+            };
+            let script_name_ptr = name_alloc.get_pointer();
+
+            // 5. Copy the actual bytes into the allocated WASM memory buffers
+            let wasm_mem = core_clone.get_wasm_memory().unwrap();
+            
+            let content_view = Uint8Array::new_with_byte_offset_and_length(
+                &wasm_mem.buffer(),
+                content_ptr.into(),
+                content_len,
             );
-            0
+            content_view.set(&Uint8Array::from(script_bytes.as_slice()), 0);
+
+            let name_view = Uint8Array::new_with_byte_offset_and_length(
+                &wasm_mem.buffer(),
+                script_name_ptr.into(),
+                name_len,
+            );
+            name_view.set(&Uint8Array::from(name_bytes.as_slice()), 0);
+
+            // 6. Invoke the underlying JS Emscripten function binding
+            // Signature: load_script(this, duel, buffer_ptr, len, name_ptr)
+            let result = core_clone.0.load_script(
+                duel,
+                content_ptr.into(),
+                content_len,
+                script_name_ptr.into()
+            );
+
+            // Memory cleanup: CoreMemoryAllocation implements Drop and will free automatically,
+            // but ensure they survive until after the function call executes.
+            std::mem::drop(content_alloc);
+            std::mem::drop(name_alloc);
+
+            // Return 1 for success, 0 for failure back to ocgcore
+            if result >= 0 { 1 } else { 0 }
         }) as Box<dyn FnMut(u32, u32, u32) -> i32>);
 
         let log_handler = Closure::wrap(Box::new(move |_payload: u32, string_ptr: u32, log_type: u32| {

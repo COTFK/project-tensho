@@ -7,7 +7,6 @@ use js_sys::DataView;
 use js_sys::Int32Array;
 use js_sys::Uint8Array;
 use wasm_bindgen::JsCast;
-use wasm_bindgen::JsValue;
 
 #[derive(Debug, Clone)]
 pub struct Duel<'a> {
@@ -290,12 +289,11 @@ impl<'a> Duel<'a> {
         Ok(())
     }
 
-    pub fn load_script(&self, script: &str, name: &str) -> anyhow::Result<i32> {
-        let script_bytes = script.as_bytes();
+    pub fn load_script(&self, script: Vec<u8>, name: &str) -> anyhow::Result<i32> {
         let name_bytes = name.as_bytes();
 
         // allocate memory for script and name (name needs +1 for null terminator)
-        let script_alloc = self.core.allocate_memory(script_bytes.len() as u32)?;
+        let script_alloc = self.core.allocate_memory(script.len() as u32)?;
         let name_alloc = self.core.allocate_memory((name_bytes.len() + 1) as u32)?;
 
         let script_ptr = script_alloc.get_pointer();
@@ -307,9 +305,9 @@ impl<'a> Duel<'a> {
         let script_dest = Uint8Array::new_with_byte_offset_and_length(
             &buffer,
             script_ptr.into(),
-            script_bytes.len() as u32,
+            script.len() as u32,
         );
-        script_dest.set(&Uint8Array::from(script_bytes), 0);
+        script_dest.set(&Uint8Array::from(script.as_slice()), 0);
 
         let name_dest = Uint8Array::new_with_byte_offset_and_length(
             &buffer,
@@ -323,7 +321,7 @@ impl<'a> Duel<'a> {
         let result = self.core.0.load_script(
             self.handle.0,
             script_ptr.into(),
-            script_bytes.len() as u32,
+            script.len() as u32,
             name_ptr.into(),
         );
 

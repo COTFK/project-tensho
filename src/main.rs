@@ -1,10 +1,12 @@
+mod app;
 mod ocgcore;
 mod ui;
+mod utility;
 
 use dioxus::prelude::*;
 
+use crate::app::App;
 use crate::ocgcore::OCGCore;
-use crate::ui::App;
 
 fn main() {
     dioxus::launch(AppContainer);
@@ -19,7 +21,7 @@ pub fn AppContainer() -> Element {
         Some(result) => match result {
             Ok(core) => {
                 use_context_provider(|| core.clone());
-                rsx!(App { })
+                rsx!(App {})
             }
             Err(e) => {
                 rsx!("{e:#?}")
