@@ -1,10 +1,9 @@
 use dioxus::prelude::*;
 use rand::seq::SliceRandom;
 
-use crate::ocgcore::AvailableActions;
+use crate::ocgcore::constants::*;
 use crate::ocgcore::DuelStatus;
 use crate::ocgcore::OCGCore;
-use crate::ocgcore::constants::*;
 use crate::ui::Hand;
 use crate::utility::EXTRA_DECK_IDS;
 use crate::utility::MAIN_DECK_IDS;
@@ -36,7 +35,7 @@ pub fn App() -> Element {
             .unwrap();
 
         for card_id in main_deck {
-            duel.add_card(0, 0, card_id, 0, LOCATION_DECK, 0, 0)
+            duel.add_card(CardOwner::Player, card_id, CardController::Player, CardLocation::Deck, 0, 0)
                 .unwrap();
         }
 
@@ -46,9 +45,6 @@ pub fn App() -> Element {
             match duel.process() {
                 DuelStatus::Awaiting => {
                     let actions = duel.get_available_actions();
-
-                    debug!("{actions:?}");
-
                     break;
                 }
                 DuelStatus::Continue => {
@@ -60,7 +56,7 @@ pub fn App() -> Element {
             }
         }
 
-        hand_contents.set(duel.query_hand(0));
+        hand_contents.set(duel.get_cards_at_location(CardOwner::Player, CardLocation::Hand));
     });
 
     rsx!(

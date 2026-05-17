@@ -1,3 +1,9 @@
+#![warn(
+    clippy::all,
+    clippy::pedantic,
+    clippy::nursery,
+)]
+
 mod app;
 mod ocgcore;
 mod ui;
@@ -7,6 +13,17 @@ use dioxus::prelude::*;
 
 use crate::app::App;
 use crate::ocgcore::OCGCore;
+
+static _OCGCORE_WASM: Asset = asset!(
+    "/assets/ocgcore.wasm",
+    AssetOptions::builder()
+        .with_hash_suffix(false)
+        .into_asset_options()
+);
+static _OCGCORE_JS: Asset = asset!(
+    "/assets/ocgcore.js",
+    AssetOptions::js().with_hash_suffix(false)
+);
 
 fn main() {
     dioxus::launch(AppContainer);

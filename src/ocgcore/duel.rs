@@ -1,21 +1,21 @@
-use super::constants::*;
-use super::duel_status::DuelStatus;
-use crate::ocgcore::AvailableActions;
-use crate::ocgcore::OCGCore;
-use crate::ocgcore::memory::CorePointer;
 use anyhow::anyhow;
 use js_sys::ArrayBuffer;
 use js_sys::Uint8Array;
 use js_sys::Uint32Array;
 use wasm_bindgen::JsCast;
 
+use crate::ocgcore::constants::*;
+use super::OCGCore;
+use super::actions::AvailableActions;
+use super::duel_status::DuelStatus;
+use super::memory::CorePointer;
+use super::constants::CardLocation;
+
 #[derive(Debug, Clone)]
 pub struct Duel<'a> {
     handle: CorePointer,
     core: &'a OCGCore,
 }
-
-
 
 /// Helper to write little-endian bytes to a Uint8Array view
 fn write_le_bytes(view: &Uint8Array, offset: u32, bytes: &[u8]) {
@@ -91,7 +91,9 @@ impl<'a> Duel<'a> {
 
         dest_view.set(&js_sys::Uint8Array::from(buffer), 0);
 
-        self.core.instance.set_response(self.handle.0, buf_ptr.into());
+        self.core
+            .instance
+            .set_response(self.handle.0, buf_ptr.into());
 
         Ok(())
     }
@@ -100,16 +102,17 @@ impl<'a> Duel<'a> {
         let length_alloc = self.core.allocate_memory(4);
         let length_ptr = length_alloc.get_pointer();
 
-        let msg_ptr = self.core.instance.get_message(self.handle.0, length_ptr.into());
+        let msg_ptr = self
+            .core
+            .instance
+            .get_message(self.handle.0, length_ptr.into());
         let memory = self.core.get_wasm_memory();
         let buffer: ArrayBuffer = memory.buffer().unchecked_into();
 
         let len = Uint32Array::new_with_byte_offset_and_length(&buffer, length_ptr.into(), 1)
             .get_index(0);
 
-        Ok(Uint8Array::new_with_byte_offset_and_length(
-            &buffer, msg_ptr, len,
-        ).to_vec())
+        Ok(Uint8Array::new_with_byte_offset_and_length(&buffer, msg_ptr, len).to_vec())
     }
 
     pub fn get_available_actions(&self) -> anyhow::Result<AvailableActions> {
@@ -127,15 +130,17 @@ impl<'a> Duel<'a> {
         Ok(())
     }
 
-    pub fn count_location(&self, team: u8, location: u32) -> u32 {
-        self.core.instance.query_count(self.handle.0, team, location)
+    pub fn count_location(&self, team: CardOwner, location: u32) -> u32 {
+        self.core
+            .instance
+            .query_count(self.handle.0, team as u8, location)
     }
 
     fn query_location(
         &self,
         flags: u32,
-        team: u8,
-        location: u32,
+        team: CardOwner,
+        location: CardLocation,
     ) -> anyhow::Result<Option<Uint8Array>> {
         let memory = self.core.get_wasm_memory();
         let buffer: ArrayBuffer = memory.buffer().unchecked_into();
@@ -150,8 +155,8 @@ impl<'a> Duel<'a> {
         // Build OCG_QueryInfo struct: flags (u32) + team (u8) + pad (3) + location (u32) + seq (u32) + overlay_seq (u32)
         let info_view = Uint8Array::new_with_byte_offset_and_length(&buffer, info_ptr.into(), 20);
         write_le_bytes(&info_view, 0, &flags.to_le_bytes());
-        info_view.set_index(4, team);
-        write_le_bytes(&info_view, 8, &location.to_le_bytes());
+        info_view.set_index(4, team as u8);
+        write_le_bytes(&info_view, 8, &(location as isize).to_le_bytes());
 
         let data_ptr = self
             .core
@@ -187,7 +192,7 @@ impl<'a> Duel<'a> {
         Ok(Some(data_view.slice(0, actual_data_len)))
     }
 
-    pub fn query_location_codes(&self, team: u8, location: u32) -> Vec<u32> {
+    pub fn get_cards_at_location(&self, team: CardOwner, location: CardLocation) -> Vec<u32> {
         let buf = self
             .query_location(0xFFFFFFFF, team, location)
             .ok()
@@ -212,27 +217,12 @@ impl<'a> Duel<'a> {
         codes
     }
 
-    pub fn query_hand(&self, team: u8) -> Vec<String> {
-        self.query_location_codes(team, LOCATION_HAND)
-            .into_iter()
-            .map(|code| code.to_string())
-            .collect()
-    }
-
-    pub fn query_deck(&self, team: u8) -> Vec<String> {
-        self.query_location_codes(team, 0x01u32)
-            .into_iter()
-            .map(|code| code.to_string())
-            .collect()
-    }
-
     pub fn add_card(
         &self,
-        team: u8,
-        duelist: u8,
+        owner: CardOwner,
         code: u32,
-        controller: u8,
-        location: u32,
+        controller: CardController,
+        location: CardLocation,
         sequence: u32,
         position: u32,
     ) -> anyhow::Result<()> {
@@ -254,20 +244,22 @@ impl<'a> Duel<'a> {
         // uint32_t seq;       // offset 16-19
         // uint32_t pos;       // offset 20-23
 
-        info_view.set_index(0, team);
-        info_view.set_index(1, duelist);
+        info_view.set_index(0, owner as u8);
+        info_view.set_index(1, 0); // Hardcode duelist - this won't ever support tag
         // Padding at 2-3 is left as-is (zeros from allocation)
 
         write_le_bytes(&info_view, 4, &code.to_le_bytes());
 
-        info_view.set_index(8, controller);
+        info_view.set_index(8, controller as u8);
         // Padding at 9-11 is left as-is
 
-        write_le_bytes(&info_view, 12, &location.to_le_bytes());
+        write_le_bytes(&info_view, 12, &(location as isize).to_le_bytes());
         write_le_bytes(&info_view, 16, &sequence.to_le_bytes());
         write_le_bytes(&info_view, 20, &position.to_le_bytes());
 
-        self.core.instance.add_card(self.handle.into(), info_offset as u32);
+        self.core
+            .instance
+            .add_card(self.handle.into(), info_offset as u32);
 
         Ok(())
     }
