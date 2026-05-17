@@ -9,7 +9,6 @@ use anyhow::anyhow;
 use dioxus::prelude::*;
 use js_sys::Uint8Array;
 use js_sys::Uint32Array;
-use js_sys::WebAssembly::Memory;
 use js_sys::futures::JsFuture;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
@@ -202,13 +201,13 @@ impl OCGCore {
             let mut data_bytes = [0u8; std::mem::size_of::<OCGCardData>()];
             data.write_bytes(&mut data_bytes);
 
-            let memory = inst.get_wasm_memory();
-            let view = Uint8Array::new_with_byte_offset_and_length(
-                &memory.buffer(),
+            let buffer = inst.get_wasm_memory().buffer();
+            Uint8Array::new_with_byte_offset_and_length(
+                &buffer,
                 data_ptr,
                 std::mem::size_of::<OCGCardData>() as u32,
-            );
-            view.set(&Uint8Array::from(data_bytes.as_slice()), 0);
+            )
+            .set(&Uint8Array::from(data_bytes.as_slice()), 0);
         }) as Box<dyn FnMut(u32, u32, u32)>);
         callback_refs.push(card_reader.into_js_value());
         let card_reader_index =
@@ -218,10 +217,18 @@ impl OCGCore {
         let inst = instance.clone();
         let script_reader =
             Closure::wrap(Box::new(move |_: u32, duel: u32, name_ptr: u32| -> i32 {
-                let memory = inst.get_wasm_memory();
+                let buffer = inst.get_wasm_memory().buffer();
+                let bytes = Uint8Array::new(&buffer);
+                let mut offset = name_ptr;
+                let mut out = Vec::new();
 
-                let script_name = read_c_string(memory.clone(), name_ptr.into())
-                    .unwrap_or_else(|_| "unknown.lua".to_string());
+                while offset < bytes.length() && bytes.get_index(offset) != 0 {
+                    out.push(bytes.get_index(offset));
+                    offset += 1;
+                }
+
+                let script_name =
+                    String::from_utf8(out).unwrap_or_else(|_| "unknown.lua".to_string());
 
                 if script_name == "c0.lua" {
                     return 0;
@@ -246,8 +253,10 @@ impl OCGCore {
                     return 0;
                 }
 
-                write_to_memory(&inst, content_ptr, &script_bytes);
-                write_to_memory(&inst, script_name_ptr, &name_bytes);
+                Uint8Array::new_with_byte_offset_and_length(&buffer, content_ptr, content_len)
+                    .set(&Uint8Array::from(script_bytes.as_slice()), 0);
+                Uint8Array::new_with_byte_offset_and_length(&buffer, script_name_ptr, name_len)
+                    .set(&Uint8Array::from(name_bytes.as_slice()), 0);
 
                 let result = inst.load_script(duel, content_ptr, content_len, script_name_ptr);
                 inst.free(content_ptr);
@@ -262,8 +271,7 @@ impl OCGCore {
         // Log handler callback
         let inst = instance.clone();
         let log_handler = Closure::wrap(Box::new(move |_: u32, string_ptr: u32, log_type: u32| {
-            let memory = inst.get_wasm_memory();
-            let buffer = memory.buffer();
+            let buffer = inst.get_wasm_memory().buffer();
             let view = Uint8Array::new_with_byte_offset_and_length(&buffer, string_ptr, 2048);
             let mut length = 0;
             while length < view.length() && view.get_index(length) != 0 {
@@ -282,31 +290,4 @@ impl OCGCore {
             callback_refs,
         ))
     }
-}
-
-fn write_to_memory(instance: &OCGCoreInstance, ptr: u32, data: &[u8]) {
-    let memory = instance.get_wasm_memory();
-
-    let view =
-        Uint8Array::new_with_byte_offset_and_length(&memory.buffer(), ptr, data.len() as u32);
-    view.set(&Uint8Array::from(data), 0);
-}
-
-fn read_c_string(memory: Memory, ptr: f64) -> anyhow::Result<String> {
-    let buffer = memory.buffer();
-    let bytes = Uint8Array::new(&buffer);
-    let mut offset = ptr as u32;
-    let mut out = Vec::new();
-
-    while offset < bytes.length() {
-        let byte = bytes.get_index(offset);
-        if byte == 0 {
-            break;
-        }
-
-        out.push(byte);
-        offset += 1;
-    }
-
-    String::from_utf8(out).map_err(|e| anyhow!("Invalid UTF-8 in script name: {e}"))
 }
