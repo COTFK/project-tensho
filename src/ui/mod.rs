@@ -1,6 +1,5 @@
 mod card;
-mod hand;
 mod field;
+mod hand;
 
 pub use hand::Hand;
-pub use field::Field;

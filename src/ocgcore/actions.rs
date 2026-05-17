@@ -180,7 +180,7 @@ impl TryFrom<&[u8]> for AvailableActions {
         let can_to_ep = read_u8(raw_bytes, &mut cursor, "can_to_ep")? != 0;
         let can_shuffle = read_u8(raw_bytes, &mut cursor, "can_shuffle")? != 0;
 
-        Ok(AvailableActions {
+        Ok(Self {
             playerid,
             normal_summons,
             special_summons,

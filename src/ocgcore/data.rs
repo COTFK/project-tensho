@@ -7,7 +7,7 @@ pub struct OCGPlayer {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct OCGCardData {
     pub code: u32,
     pub alias: u32,
@@ -21,25 +21,6 @@ pub struct OCGCardData {
     pub lscale: u32,
     pub rscale: u32,
     pub link_marker: u32,
-}
-
-impl Default for OCGCardData {
-    fn default() -> Self {
-        Self {
-            code: 0,
-            alias: 0,
-            setcodes: 0,
-            type_: 0,
-            level: 0,
-            attribute: 0,
-            race: 0,
-            attack: 0,
-            defense: 0,
-            lscale: 0,
-            rscale: 0,
-            link_marker: 0,
-        }
-    }
 }
 
 impl OCGCardData {

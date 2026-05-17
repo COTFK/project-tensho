@@ -38,11 +38,9 @@ pub fn Field() -> Element {
 
 #[component]
 fn Zone() -> Element {
-    rsx!(
-        div {
-            class: "border-0.5 shadow-md bg-slate-50/20",
-            width: "8vw",
-            aspect_ratio: "1/1",
-        }
-    )
+    rsx!(div {
+        class: "border-0.5 shadow-md bg-slate-50/20",
+        width: "8vw",
+        aspect_ratio: "1/1",
+    })
 }

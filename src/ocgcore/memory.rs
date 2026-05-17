@@ -10,18 +10,18 @@ use wasm_bindgen::JsValue;
 pub struct CorePointer(pub(super) u32);
 
 impl CorePointer {
-    pub fn new(address: u32) -> Self {
+    pub const fn new(address: u32) -> Self {
         Self(address)
     }
 
-    pub fn offset_by(&self, offset: usize) -> CorePointer {
+    pub fn offset_by(&self, offset: usize) -> Self {
         *self + offset
     }
 }
 
 impl From<CorePointer> for usize {
     fn from(ptr: CorePointer) -> Self {
-        ptr.0 as usize
+        ptr.0 as Self
     }
 }
 
@@ -33,14 +33,14 @@ impl From<CorePointer> for u32 {
 
 impl From<CorePointer> for JsValue {
     fn from(ptr: CorePointer) -> Self {
-        JsValue::from_f64(ptr.0 as f64)
+        Self::from_f64(f64::from(ptr.0))
     }
 }
 
 impl Add<usize> for CorePointer {
     type Output = Self;
     fn add(self, rhs: usize) -> Self {
-        CorePointer(self.0 + rhs as u32)
+        Self(self.0 + rhs as u32)
     }
 }
 
@@ -56,11 +56,11 @@ pub struct CoreMemoryAllocation<'a> {
 }
 
 impl<'a> CoreMemoryAllocation<'a> {
-    pub fn new(core: &'a OCGCore, pointer: CorePointer) -> Self {
+    pub const fn new(core: &'a OCGCore, pointer: CorePointer) -> Self {
         Self { core, pointer }
     }
 
-    pub fn get_pointer(&self) -> CorePointer {
+    pub const fn get_pointer(&self) -> CorePointer {
         self.pointer
     }
 }

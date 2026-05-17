@@ -1,11 +1,10 @@
 use anyhow::anyhow;
 use dioxus::prelude::*;
-
-// Add this inside your memory or data module
 use std::collections::HashMap;
+use std::collections::HashSet;
 
 static SCRIPT_FOLDER: Asset = asset!("/assets/scripts");
-static BASE_SCRIPTS: [&'static str; 25] = [
+static BASE_SCRIPTS: [&str; 25] = [
     "constant.lua",
     "utility.lua",
     "card_counter_constants.lua",
@@ -48,7 +47,7 @@ pub fn get_cached_script(name: &str) -> Option<Vec<u8>> {
 }
 
 async fn get_script_data(name: &str) -> anyhow::Result<Vec<u8>> {
-    let path = format!("{}/{name}", SCRIPT_FOLDER);
+    let path = format!("{SCRIPT_FOLDER}/{name}");
 
     dioxus::asset_resolver::read_asset_bytes(path)
         .await
@@ -59,7 +58,7 @@ pub async fn cache_scripts(mut deck_card_ids: Vec<u32>) {
     // Add helper scripts
     for script in BASE_SCRIPTS {
         if let Ok(bytes) = get_script_data(script).await {
-            if bytes.len() == 0 {
+            if bytes.is_empty() {
                 warn!("Failed to load {script} - got 0 bytes.");
                 continue;
             }
@@ -68,13 +67,14 @@ pub async fn cache_scripts(mut deck_card_ids: Vec<u32>) {
     }
 
     // Batch fetch all individual card scripts based on the deck lists
-    deck_card_ids.sort();
-    deck_card_ids.dedup();
+    // Preserve original deck order while removing duplicates
+    let mut seen = HashSet::with_capacity(deck_card_ids.len());
+    deck_card_ids.retain(move |id: &u32| seen.insert(*id));
 
     for id in deck_card_ids {
-        let script_name = format!("c{}.lua", id);
+        let script_name = format!("c{id}.lua");
         if let Ok(bytes) = get_script_data(&script_name).await {
-            if bytes.len() == 0 {
+            if bytes.is_empty() {
                 warn!("Failed to load {script_name} - got 0 bytes.");
                 continue;
             }

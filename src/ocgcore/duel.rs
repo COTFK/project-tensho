@@ -4,12 +4,12 @@ use js_sys::Uint8Array;
 use js_sys::Uint32Array;
 use wasm_bindgen::JsCast;
 
-use crate::ocgcore::constants::*;
 use super::OCGCore;
 use super::actions::AvailableActions;
+use super::constants::CardLocation;
 use super::duel_status::DuelStatus;
 use super::memory::CorePointer;
-use super::constants::CardLocation;
+use crate::ocgcore::constants::{CardController, CardOwner};
 
 #[derive(Debug, Clone)]
 pub struct Duel<'a> {
@@ -17,7 +17,7 @@ pub struct Duel<'a> {
     core: &'a OCGCore,
 }
 
-/// Helper to write little-endian bytes to a Uint8Array view
+/// Helper to write little-endian bytes to a `Uint8Array` view
 fn write_le_bytes(view: &Uint8Array, offset: u32, bytes: &[u8]) {
     for (i, byte) in bytes.iter().enumerate() {
         view.set_index(offset + i as u32, *byte);
@@ -69,7 +69,7 @@ fn extract_card_code(data: &[u8], offset: &mut usize, field_len: usize) -> u32 {
 }
 
 impl<'a> Duel<'a> {
-    pub fn new(handle: CorePointer, core: &'a OCGCore) -> Self {
+    pub const fn new(handle: CorePointer, core: &'a OCGCore) -> Self {
         Self { handle, core }
     }
 
@@ -257,9 +257,7 @@ impl<'a> Duel<'a> {
         write_le_bytes(&info_view, 16, &sequence.to_le_bytes());
         write_le_bytes(&info_view, 20, &position.to_le_bytes());
 
-        self.core
-            .instance
-            .add_card(self.handle.into(), info_offset as u32);
+        self.core.instance.add_card(self.handle.into(), info_offset);
 
         Ok(())
     }

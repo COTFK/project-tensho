@@ -1,9 +1,3 @@
-#![warn(
-    clippy::all,
-    clippy::pedantic,
-    clippy::nursery,
-)]
-
 mod app;
 mod ocgcore;
 mod ui;
@@ -32,18 +26,11 @@ fn main() {
 #[component]
 pub fn AppContainer() -> Element {
     // Load and initialize core
-    let core_resource = use_resource(move || OCGCore::load());
+    let core_resource = use_resource(OCGCore::load);
 
     match &*core_resource.read() {
-        Some(result) => match result {
-            Ok(core) => {
-                use_context_provider(|| core.clone());
-                rsx!(App {})
-            }
-            Err(e) => {
-                rsx!("{e:#?}")
-            }
-        },
+        Some(Ok(core)) => rsx!(App { core: core.clone() }),
+        Some(Err(e)) => rsx!("{e:#?}"),
         None => {
             rsx!("Loading...")
         }

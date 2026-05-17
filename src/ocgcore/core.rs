@@ -7,7 +7,7 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 
 use super::data::OCGCardData;
-use super::ffi::*;
+use super::ffi::{OCGCoreInstance, init_core};
 use crate::ocgcore::data::OCGDuelOptions;
 pub use crate::ocgcore::duel::Duel;
 use crate::ocgcore::memory::CoreMemoryAllocation;
@@ -15,8 +15,8 @@ use crate::ocgcore::memory::CorePointer;
 use crate::utility::STATIC_CARD_DATA;
 pub use crate::utility::get_cached_script;
 
-/// Wraps OCGCore WASM instance with persistent callback state.
-#[derive(Debug, Clone)]
+/// Wraps `OCGCore` WASM instance with persistent callback state.
+#[derive(Debug, Clone, PartialEq)]
 pub struct OCGCore {
     pub(super) instance: OCGCoreInstance,
     callback_indices: (u32, u32, u32),
@@ -38,7 +38,7 @@ impl OCGCore {
         let (callback_indices, callback_refs) = Self::build_callbacks(&instance)?;
 
         tracing::debug!("Core loaded successfully.");
-        Ok(OCGCore {
+        Ok(Self {
             instance,
             callback_indices,
             _callback_refs: std::sync::Arc::new(callback_refs),
@@ -58,12 +58,8 @@ impl OCGCore {
         let wasm_mem = self.get_wasm_memory();
 
         // Perform a bulk memory copy (much faster than a loop)
-        let options_bytes = unsafe {
-            std::slice::from_raw_parts(
-                (&options as *const OCGDuelOptions) as *const u8,
-                options_size,
-            )
-        };
+        let options_bytes =
+            unsafe { std::slice::from_raw_parts((&raw const options).cast::<u8>(), options_size) };
         let dest_view = Uint8Array::new_with_byte_offset_and_length(
             &wasm_mem.buffer(),
             options_ptr.into(),
@@ -166,7 +162,7 @@ impl OCGCore {
                     return 0;
                 }
 
-                let name_bytes = format!("{}\0", script_name).into_bytes();
+                let name_bytes = format!("{script_name}\0").into_bytes();
                 let name_len = name_bytes.len() as u32;
                 let script_name_ptr = inst.malloc(name_len);
                 if script_name_ptr == 0 {
@@ -183,7 +179,7 @@ impl OCGCore {
                 inst.free(content_ptr);
                 inst.free(script_name_ptr);
 
-                if result >= 0 { 1 } else { 0 }
+                i32::from(result >= 0)
             }) as Box<dyn FnMut(u32, u32, u32) -> i32>);
         callback_refs.push(script_reader.into_js_value());
         let script_reader_index =
