@@ -27,7 +27,7 @@ pub fn Hand(cards: ReadSignal<Vec<String>>, selected_card: WriteSignal<i32>) -> 
                     rsx! {
                         div {
                             id: index,
-                            class: "transform-gpu transition duration-100 ease-in-out -mx-[2%] relative",
+                            class: "transform-gpu transition duration-150 ease-in-out -mx-[1.1vw] relative",
                             transform: "rotateZ({rotation}deg) translateY({translate_y}%)",
                             z_index: z_index,
                             onclick: move |_| selected_card.set(index as i32),

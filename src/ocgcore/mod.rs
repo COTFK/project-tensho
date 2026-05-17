@@ -14,12 +14,14 @@ use std::cell::RefCell;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 
-use crate::ocgcore::data::OCGCardData;
+pub use crate::ocgcore::data::OCGCardData;
 use crate::ocgcore::data::OCGDuelOptions;
 pub use crate::ocgcore::duel::Duel;
 use crate::ocgcore::memory::CoreMemoryAllocation;
 use crate::ocgcore::memory::CorePointer;
 pub use crate::utility::get_cached_script;
+use crate::utility::STATIC_CARD_DATA;
+pub use crate::ocgcore::duel::IdleCommandPayload;
 
 static OCGCORE_WASM: Asset = asset!(
     "/assets/ocgcore.wasm",
@@ -198,7 +200,12 @@ fn ensure_duel_callbacks(core: &OCGCore) -> anyhow::Result<(u32, u32, u32, u32)>
                 return;
             }
 
-            let data = OCGCardData::with_code(code);
+            let data = STATIC_CARD_DATA
+                .iter()
+                .find(|(id, _)| *id == code)
+                .map(|(_, card_data)| card_data)
+                .copied()
+                .unwrap_or_else(|| OCGCardData::with_code(code));
             let data_size = std::mem::size_of::<OCGCardData>();
             let mut data_bytes = [0u8; std::mem::size_of::<OCGCardData>()];
             data.write_bytes(&mut data_bytes);

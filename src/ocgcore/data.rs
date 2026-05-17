@@ -9,18 +9,18 @@ pub struct OCGPlayer {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct OCGCardData {
-    code: u32,
-    alias: u32,
-    setcodes: u32,
-    type_: u32,
-    level: u32,
-    attribute: u32,
-    race: u64,
-    attack: i32,
-    defense: i32,
-    lscale: u32,
-    rscale: u32,
-    link_marker: u32,
+    pub code: u32,
+    pub alias: u32,
+    pub setcodes: u32,
+    pub type_: u32,
+    pub level: u32,
+    pub attribute: u32,
+    pub race: u64,
+    pub attack: i32,
+    pub defense: i32,
+    pub lscale: u32,
+    pub rscale: u32,
+    pub link_marker: u32,
 }
 
 impl Default for OCGCardData {
