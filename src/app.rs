@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use dioxus::prelude::*;
 use rand::seq::SliceRandom;
 
@@ -18,6 +20,9 @@ pub fn App(core: OCGCore) -> Element {
     let mut hand_contents = use_signal(Vec::new);
     let selected_card = use_signal(|| -1);
 
+    // Actions
+    let mut normal_summons = use_signal(|| HashSet::new());
+
     use_resource(move || async move {
         let core = consume_context::<OCGCore>();
 
@@ -30,10 +35,8 @@ pub fn App(core: OCGCore) -> Element {
         all_cards.append(&mut Vec::from(EXTRA_DECK_IDS));
 
         cache_scripts(all_cards).await;
-        duel.load_script(get_cached_script("constant.lua").unwrap(), "constant.lua")
-            .unwrap();
-        duel.load_script(get_cached_script("utility.lua").unwrap(), "utility.lua")
-            .unwrap();
+        duel.load_script(get_cached_script("constant.lua").unwrap(), "constant.lua");
+        duel.load_script(get_cached_script("utility.lua").unwrap(), "utility.lua");
 
         for card_id in main_deck {
             duel.add_card(
@@ -43,8 +46,7 @@ pub fn App(core: OCGCore) -> Element {
                 CardLocation::Deck,
                 0,
                 0,
-            )
-            .unwrap();
+            );
         }
 
         duel.start();
@@ -52,7 +54,8 @@ pub fn App(core: OCGCore) -> Element {
         loop {
             match duel.process() {
                 DuelStatus::Awaiting => {
-                    let actions = duel.get_available_actions();
+                    let actions = duel.get_available_actions().unwrap();
+                    normal_summons.set(actions.get_normal_summons());
                     break;
                 }
                 DuelStatus::Continue => {
@@ -64,7 +67,7 @@ pub fn App(core: OCGCore) -> Element {
             }
         }
 
-        hand_contents.set(duel.get_cards_at_location(CardOwner::Player, CardLocation::Hand));
+        hand_contents.set(duel.get_cards(CardLocation::Hand));
     });
 
     rsx!(
@@ -75,6 +78,7 @@ pub fn App(core: OCGCore) -> Element {
             Hand {
                 cards: hand_contents,
                 selected_card: selected_card,
+                normal_summons: normal_summons
             }
         }
     )

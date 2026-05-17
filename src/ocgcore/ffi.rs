@@ -38,13 +38,9 @@ extern "C" {
     #[wasm_bindgen(method, js_name = _OCG_DuelQueryCount)]
     pub fn query_count(this: &OCGCoreInstance, duel: u32, team: u8, location: u32) -> u32;
 
-    #[wasm_bindgen(method, js_name = _OCG_DuelQueryLocation, catch)]
-    pub fn query_location(
-        this: &OCGCoreInstance,
-        duel: u32,
-        length_ptr: u32,
-        info_ptr: u32,
-    ) -> Result<u32, JsValue>;
+    #[wasm_bindgen(method, js_name = _OCG_DuelQueryLocation)]
+    pub fn query_location(this: &OCGCoreInstance, duel: u32, length_ptr: u32, info_ptr: u32)
+    -> u32;
 
     // Emscripten helpers
     #[wasm_bindgen(method, getter, js_name = wasmMemory)]

@@ -5,7 +5,6 @@ pub fn Card(id: String) -> Element {
     let image_url = format!("https://images.ygoprodeck.com/images/cards/{id}.jpg");
 
     rsx!(div {
-        class: "shadow-2xl/100",
         image_rendering: "smooth",
         width: "12.5vw",
         aspect_ratio: "59/86",

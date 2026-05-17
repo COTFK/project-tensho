@@ -98,7 +98,7 @@ impl<'a> Duel<'a> {
         Ok(())
     }
 
-    pub fn get_message(&self) -> anyhow::Result<Vec<u8>> {
+    pub fn get_message(&self) -> Vec<u8> {
         let length_alloc = self.core.allocate_memory(4);
         let length_ptr = length_alloc.get_pointer();
 
@@ -112,11 +112,11 @@ impl<'a> Duel<'a> {
         let len = Uint32Array::new_with_byte_offset_and_length(&buffer, length_ptr.into(), 1)
             .get_index(0);
 
-        Ok(Uint8Array::new_with_byte_offset_and_length(&buffer, msg_ptr, len).to_vec())
+        Uint8Array::new_with_byte_offset_and_length(&buffer, msg_ptr, len).to_vec()
     }
 
     pub fn get_available_actions(&self) -> anyhow::Result<AvailableActions> {
-        let messages = self.get_message().unwrap();
+        let messages = self.get_message();
 
         AvailableActions::try_from(&messages[..])
     }
@@ -141,7 +141,7 @@ impl<'a> Duel<'a> {
         flags: u32,
         team: CardOwner,
         location: CardLocation,
-    ) -> anyhow::Result<Option<Uint8Array>> {
+    ) -> Option<Uint8Array> {
         let memory = self.core.get_wasm_memory();
         let buffer: ArrayBuffer = memory.buffer().unchecked_into();
 
@@ -158,45 +158,27 @@ impl<'a> Duel<'a> {
         info_view.set_index(4, team as u8);
         write_le_bytes(&info_view, 8, &(location as isize).to_le_bytes());
 
-        let data_ptr = self
-            .core
-            .instance
-            .query_location(self.handle.0, length_ptr.into(), info_ptr.into())
-            .map_err(|e| anyhow!("query_location failed: {e:?}"))?;
+        let data_ptr =
+            self.core
+                .instance
+                .query_location(self.handle.0, length_ptr.into(), info_ptr.into());
 
         // Read returned length
         let length_view =
             Uint8Array::new_with_byte_offset_and_length(&buffer, length_ptr.into(), 4);
         let query_length = read_u32_le(&length_view.to_vec());
 
-        // Empty result
-        if query_length <= 4 || data_ptr == 0 {
-            return Ok(None);
-        }
-
-        // Bounds check
-        if (data_ptr as usize + query_length as usize) > buffer.byte_length() as usize {
-            return Err(anyhow!(
-                "OCGCore returned pointer {} with length {} exceeds WASM bounds {}",
-                data_ptr,
-                query_length,
-                buffer.byte_length()
-            ));
-        }
-
         // Skip 4-byte header, read actual data
         let actual_data_len = query_length - 4;
         let data_view =
             Uint8Array::new_with_byte_offset_and_length(&buffer, data_ptr + 4, actual_data_len);
 
-        Ok(Some(data_view.slice(0, actual_data_len)))
+        Some(data_view.slice(0, actual_data_len))
     }
 
-    pub fn get_cards_at_location(&self, team: CardOwner, location: CardLocation) -> Vec<u32> {
+    pub fn get_cards(&self, location: CardLocation) -> Vec<u32> {
         let buf = self
-            .query_location(0xFFFFFFFF, team, location)
-            .ok()
-            .flatten()
+            .query_location(0xFFFFFFFF, CardOwner::Player, location)
             .map(|b| b.to_vec())
             .unwrap_or_default();
 
@@ -225,7 +207,7 @@ impl<'a> Duel<'a> {
         location: CardLocation,
         sequence: u32,
         position: u32,
-    ) -> anyhow::Result<()> {
+    ) {
         let info_ptr = self.core.allocate_memory(24);
 
         let memory = self.core.get_wasm_memory();
@@ -258,11 +240,9 @@ impl<'a> Duel<'a> {
         write_le_bytes(&info_view, 20, &position.to_le_bytes());
 
         self.core.instance.add_card(self.handle.into(), info_offset);
-
-        Ok(())
     }
 
-    pub fn load_script(&self, script: Vec<u8>, name: &str) -> anyhow::Result<i32> {
+    pub fn load_script(&self, script: Vec<u8>, name: &str) -> i32 {
         let name_bytes = name.as_bytes();
 
         // allocate memory for script and name (name needs +1 for null terminator)
@@ -290,15 +270,12 @@ impl<'a> Duel<'a> {
         name_dest.set(&Uint8Array::from(name_bytes), 0);
         name_dest.set_index(name_bytes.len() as u32, 0); // Null terminator
 
-        // 5. Direct call to the typed method
-        let result = self.core.instance.load_script(
+        self.core.instance.load_script(
             self.handle.0,
             script_ptr.into(),
             script.len() as u32,
             name_ptr.into(),
-        );
-
-        Ok(result)
+        )
     }
 }
 
