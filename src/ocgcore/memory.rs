@@ -68,6 +68,6 @@ impl<'a> CoreMemoryAllocation<'a> {
 impl Drop for CoreMemoryAllocation<'_> {
     /// Free the allocated memory.
     fn drop(&mut self) {
-        self.core.0.free(self.pointer.0);
+        self.core.instance.free(self.pointer.0);
     }
 }

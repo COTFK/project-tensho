@@ -73,7 +73,7 @@ impl<'a> Duel<'a> {
     }
 
     pub fn start(&self) -> anyhow::Result<()> {
-        self.core.0.start_duel(self.handle.0);
+        self.core.instance.start_duel(self.handle.0);
 
         Ok(())
     }
@@ -83,7 +83,8 @@ impl<'a> Duel<'a> {
         let buf_alloc = self.core.allocate_memory(buf_len)?;
         let buf_ptr = buf_alloc.get_pointer();
 
-        let memory = self.core.get_wasm_memory()?;
+        let memory = self.core.get_wasm_memory()
+            .ok_or_else(|| anyhow::anyhow!("Failed to get WASM memory"))?;
         let dest_view = js_sys::Uint8Array::new_with_byte_offset_and_length(
             &memory.buffer(),
             buf_ptr.into(),
@@ -92,7 +93,7 @@ impl<'a> Duel<'a> {
 
         dest_view.set(&js_sys::Uint8Array::from(buffer), 0);
 
-        self.core.0.set_response(self.handle.0, buf_ptr.into());
+        self.core.instance.set_response(self.handle.0, buf_ptr.into());
 
         Ok(())
     }
@@ -101,12 +102,13 @@ impl<'a> Duel<'a> {
         let length_alloc = self.core.allocate_memory(4)?;
         let length_ptr = length_alloc.get_pointer();
 
-        let msg_ptr = self.core.0.get_message(self.handle.0, length_ptr.into());
+        let msg_ptr = self.core.instance.get_message(self.handle.0, length_ptr.into());
         if msg_ptr == 0 {
             return Err(anyhow!("No messages received"));
         }
 
-        let memory = self.core.get_wasm_memory()?;
+        let memory = self.core.get_wasm_memory()
+            .ok_or_else(|| anyhow::anyhow!("Failed to get WASM memory"))?;
         let buffer: ArrayBuffer = memory.buffer().unchecked_into();
 
         let len = Uint32Array::new_with_byte_offset_and_length(&buffer, length_ptr.into(), 1)
@@ -122,16 +124,16 @@ impl<'a> Duel<'a> {
     }
 
     pub fn process(&self) -> u32 {
-        self.core.0.process(self.handle.0)
+        self.core.instance.process(self.handle.0)
     }
 
     pub fn destroy(&self) -> anyhow::Result<()> {
-        self.core.0.destroy_duel(self.handle.0);
+        self.core.instance.destroy_duel(self.handle.0);
         Ok(())
     }
 
     pub fn count_location(&self, team: u8, location: u32) -> u32 {
-        self.core.0.query_count(self.handle.0, team, location)
+        self.core.instance.query_count(self.handle.0, team, location)
     }
 
     fn query_location(
@@ -140,7 +142,8 @@ impl<'a> Duel<'a> {
         team: u8,
         location: u32,
     ) -> anyhow::Result<Option<Uint8Array>> {
-        let memory = self.core.get_wasm_memory()?;
+        let memory = self.core.get_wasm_memory()
+            .ok_or_else(|| anyhow::anyhow!("Failed to get WASM memory"))?;
         let buffer: ArrayBuffer = memory.buffer().unchecked_into();
 
         // Allocate OCG_QueryInfo struct (20 bytes)
@@ -158,7 +161,7 @@ impl<'a> Duel<'a> {
 
         let data_ptr = self
             .core
-            .0
+            .instance
             .query_location(self.handle.0, length_ptr.into(), info_ptr.into())
             .map_err(|e| anyhow!("query_location failed: {e:?}"))?;
 
@@ -241,7 +244,8 @@ impl<'a> Duel<'a> {
     ) -> anyhow::Result<()> {
         let info_ptr = self.core.allocate_memory(24)?;
 
-        let memory = self.core.get_wasm_memory()?;
+        let memory = self.core.get_wasm_memory()
+            .ok_or_else(|| anyhow::anyhow!("Failed to get WASM memory"))?;
         let memory_buf = memory.buffer();
         let info_offset = info_ptr.get_pointer().into();
         let info_view = Uint8Array::new_with_byte_offset_and_length(&memory_buf, info_offset, 24);
@@ -270,7 +274,7 @@ impl<'a> Duel<'a> {
         write_le_bytes(&info_view, 16, &sequence.to_le_bytes());
         write_le_bytes(&info_view, 20, &position.to_le_bytes());
 
-        self.core.0.add_card(self.handle.into(), info_offset as u32);
+        self.core.instance.add_card(self.handle.into(), info_offset as u32);
 
         Ok(())
     }
@@ -285,7 +289,8 @@ impl<'a> Duel<'a> {
         let script_ptr = script_alloc.get_pointer();
         let name_ptr = name_alloc.get_pointer();
 
-        let memory = self.core.get_wasm_memory()?;
+        let memory = self.core.get_wasm_memory()
+            .ok_or_else(|| anyhow::anyhow!("Failed to get WASM memory"))?;
         let buffer: ArrayBuffer = memory.buffer().unchecked_into();
 
         let script_dest = Uint8Array::new_with_byte_offset_and_length(
@@ -304,7 +309,7 @@ impl<'a> Duel<'a> {
         name_dest.set_index(name_bytes.len() as u32, 0); // Null terminator
 
         // 5. Direct call to the typed method
-        let result = self.core.0.load_script(
+        let result = self.core.instance.load_script(
             self.handle.0,
             script_ptr.into(),
             script.len() as u32,
