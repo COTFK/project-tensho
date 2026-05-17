@@ -110,14 +110,13 @@ impl OCGCore {
     }
 
     pub fn create_duel(&self) -> anyhow::Result<Duel<'_>> {
-        let (card_reader, script_reader, log_handler, card_reader_done) =
+        let (card_reader, script_reader, log_handler) =
             ensure_duel_callbacks(self)?;
 
         let mut options = OCGDuelOptions::default();
         options.card_reader = card_reader;
         options.script_reader = script_reader;
         options.log_handler = log_handler;
-        options.card_reader_done = card_reader_done;
 
         let options_size = std::mem::size_of::<OCGDuelOptions>();
         let options_alloc = self.allocate_memory(options_size as u32)?;
@@ -181,11 +180,11 @@ thread_local! {
     // Hold JsValue representations of closures so they are not dropped and stay registered with the wasm runtime.
     static CALLBACK_KEEP_ALIVE: RefCell<Vec<JsValue>> = RefCell::new(Vec::new());
     // Store only numeric callback indices returned by `addFunction`.
-    static DUEL_CALLBACKS: RefCell<Option<(u32, u32, u32, u32)>> = RefCell::new(None);
+    static DUEL_CALLBACKS: RefCell<Option<(u32, u32, u32)>> = RefCell::new(None);
 }
 
-fn ensure_duel_callbacks(core: &OCGCore) -> anyhow::Result<(u32, u32, u32, u32)> {
-    DUEL_CALLBACKS.with(|slot| -> anyhow::Result<(u32, u32, u32, u32)> {
+fn ensure_duel_callbacks(core: &OCGCore) -> anyhow::Result<(u32, u32, u32)> {
+    DUEL_CALLBACKS.with(|slot| -> anyhow::Result<(u32, u32, u32)> {
         let mut slot = slot.borrow_mut();
 
         if let Some(indices) = *slot {
@@ -327,20 +326,9 @@ fn ensure_duel_callbacks(core: &OCGCore) -> anyhow::Result<(u32, u32, u32, u32)>
             );
         }) as Box<dyn FnMut(u32, u32, u32)>);
 
-        let card_reader_done = Closure::wrap(Box::new(move |payload: u32, data_ptr: u32| {
-        }) as Box<dyn FnMut(u32, u32)>);
-
-        // 2. Register functions using the new typed declaration
-        // The core.0 is your OCGCoreInstance
-        let instance = &core.0;
-
-        let card_reader_index = instance.add_function(card_reader.as_ref().unchecked_ref(), "viii");
-
-        let script_reader_index = instance.add_function(script_reader.as_ref().unchecked_ref(), "iiii");
-
-        let log_handler_index = instance.add_function(log_handler.as_ref().unchecked_ref(), "viii");
-
-        let card_reader_done_index = instance.add_function(card_reader_done.as_ref().unchecked_ref(), "vii");
+        let card_reader_index = core.0.add_function(card_reader.as_ref().unchecked_ref(), "viii");
+        let script_reader_index = core.0.add_function(script_reader.as_ref().unchecked_ref(), "iiii");
+        let log_handler_index = core.0.add_function(log_handler.as_ref().unchecked_ref(), "viii");
 
         // 3. Keep closures alive
         CALLBACK_KEEP_ALIVE.with(|vec| {
@@ -348,14 +336,12 @@ fn ensure_duel_callbacks(core: &OCGCore) -> anyhow::Result<(u32, u32, u32, u32)>
             v.push(card_reader.into_js_value());
             v.push(script_reader.into_js_value());
             v.push(log_handler.into_js_value());
-            v.push(card_reader_done.into_js_value());
         });
 
         let indices = (
             card_reader_index,
             script_reader_index,
-            log_handler_index,
-            card_reader_done_index,
+            log_handler_index
         );
         *slot = Some(indices);
         Ok(indices)
