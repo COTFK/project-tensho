@@ -1,10 +1,9 @@
 use super::constants::*;
+use super::duel_status::DuelStatus;
+use crate::ocgcore::AvailableActions;
 use crate::ocgcore::OCGCore;
 use crate::ocgcore::memory::CorePointer;
 use anyhow::anyhow;
-use anyhow::bail;
-use anyhow::Result;
-use anyhow::Context;
 use js_sys::ArrayBuffer;
 use js_sys::Uint8Array;
 use js_sys::Uint32Array;
@@ -15,6 +14,8 @@ pub struct Duel<'a> {
     handle: CorePointer,
     core: &'a OCGCore,
 }
+
+
 
 /// Helper to write little-endian bytes to a Uint8Array view
 fn write_le_bytes(view: &Uint8Array, offset: u32, bytes: &[u8]) {
@@ -72,19 +73,16 @@ impl<'a> Duel<'a> {
         Self { handle, core }
     }
 
-    pub fn start(&self) -> anyhow::Result<()> {
+    pub fn start(&self) {
         self.core.instance.start_duel(self.handle.0);
-
-        Ok(())
     }
 
     pub fn set_response(&self, buffer: &[u8]) -> anyhow::Result<()> {
         let buf_len = buffer.len() as u32;
-        let buf_alloc = self.core.allocate_memory(buf_len)?;
+        let buf_alloc = self.core.allocate_memory(buf_len);
         let buf_ptr = buf_alloc.get_pointer();
 
-        let memory = self.core.get_wasm_memory()
-            .ok_or_else(|| anyhow::anyhow!("Failed to get WASM memory"))?;
+        let memory = self.core.get_wasm_memory();
         let dest_view = js_sys::Uint8Array::new_with_byte_offset_and_length(
             &memory.buffer(),
             buf_ptr.into(),
@@ -98,33 +96,30 @@ impl<'a> Duel<'a> {
         Ok(())
     }
 
-    pub fn get_message(&self) -> anyhow::Result<Uint8Array> {
-        let length_alloc = self.core.allocate_memory(4)?;
+    pub fn get_message(&self) -> anyhow::Result<Vec<u8>> {
+        let length_alloc = self.core.allocate_memory(4);
         let length_ptr = length_alloc.get_pointer();
 
         let msg_ptr = self.core.instance.get_message(self.handle.0, length_ptr.into());
-        if msg_ptr == 0 {
-            return Err(anyhow!("No messages received"));
-        }
-
-        let memory = self.core.get_wasm_memory()
-            .ok_or_else(|| anyhow::anyhow!("Failed to get WASM memory"))?;
+        let memory = self.core.get_wasm_memory();
         let buffer: ArrayBuffer = memory.buffer().unchecked_into();
 
         let len = Uint32Array::new_with_byte_offset_and_length(&buffer, length_ptr.into(), 1)
             .get_index(0);
 
-        if len == 0 {
-            return Err(anyhow!("Created empty array"));
-        }
-
         Ok(Uint8Array::new_with_byte_offset_and_length(
             &buffer, msg_ptr, len,
-        ))
+        ).to_vec())
     }
 
-    pub fn process(&self) -> u32 {
-        self.core.instance.process(self.handle.0)
+    pub fn get_available_actions(&self) -> anyhow::Result<AvailableActions> {
+        let messages = self.get_message().unwrap();
+
+        AvailableActions::try_from(&messages[..])
+    }
+
+    pub fn process(&self) -> DuelStatus {
+        DuelStatus::try_from(self.core.instance.process(self.handle.0)).unwrap()
     }
 
     pub fn destroy(&self) -> anyhow::Result<()> {
@@ -142,13 +137,12 @@ impl<'a> Duel<'a> {
         team: u8,
         location: u32,
     ) -> anyhow::Result<Option<Uint8Array>> {
-        let memory = self.core.get_wasm_memory()
-            .ok_or_else(|| anyhow::anyhow!("Failed to get WASM memory"))?;
+        let memory = self.core.get_wasm_memory();
         let buffer: ArrayBuffer = memory.buffer().unchecked_into();
 
         // Allocate OCG_QueryInfo struct (20 bytes)
-        let info_alloc = self.core.allocate_memory(20)?;
-        let length_alloc = self.core.allocate_memory(4)?;
+        let info_alloc = self.core.allocate_memory(20);
+        let length_alloc = self.core.allocate_memory(4);
 
         let info_ptr = info_alloc.get_pointer();
         let length_ptr = length_alloc.get_pointer();
@@ -242,10 +236,9 @@ impl<'a> Duel<'a> {
         sequence: u32,
         position: u32,
     ) -> anyhow::Result<()> {
-        let info_ptr = self.core.allocate_memory(24)?;
+        let info_ptr = self.core.allocate_memory(24);
 
-        let memory = self.core.get_wasm_memory()
-            .ok_or_else(|| anyhow::anyhow!("Failed to get WASM memory"))?;
+        let memory = self.core.get_wasm_memory();
         let memory_buf = memory.buffer();
         let info_offset = info_ptr.get_pointer().into();
         let info_view = Uint8Array::new_with_byte_offset_and_length(&memory_buf, info_offset, 24);
@@ -283,14 +276,13 @@ impl<'a> Duel<'a> {
         let name_bytes = name.as_bytes();
 
         // allocate memory for script and name (name needs +1 for null terminator)
-        let script_alloc = self.core.allocate_memory(script.len() as u32)?;
-        let name_alloc = self.core.allocate_memory((name_bytes.len() + 1) as u32)?;
+        let script_alloc = self.core.allocate_memory(script.len() as u32);
+        let name_alloc = self.core.allocate_memory((name_bytes.len() + 1) as u32);
 
         let script_ptr = script_alloc.get_pointer();
         let name_ptr = name_alloc.get_pointer();
 
-        let memory = self.core.get_wasm_memory()
-            .ok_or_else(|| anyhow::anyhow!("Failed to get WASM memory"))?;
+        let memory = self.core.get_wasm_memory();
         let buffer: ArrayBuffer = memory.buffer().unchecked_into();
 
         let script_dest = Uint8Array::new_with_byte_offset_and_length(
@@ -323,192 +315,5 @@ impl<'a> Duel<'a> {
 impl Drop for Duel<'_> {
     fn drop(&mut self) {
         let _ = self.destroy();
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IdleOption {
-    pub card_code: u32,
-    pub controller: u8,
-    pub location: u8,
-    pub sequence: u8,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct IdleCommandPayload {
-    pub playerid: u8,
-    pub normal_summons: Vec<IdleOption>,       // Block 1: Summonable
-    pub special_summons: Vec<IdleOption>,      // Block 2: SpSummonable
-    pub battle_positions: Vec<IdleOption>,     // Block 3: Repositionable
-    pub monster_sets: Vec<IdleOption>,         // Block 4: MSetable (Monster Set)
-    pub spell_trap_sets: Vec<IdleOption>,      // Block 5: Setable (S/T Set)
-    pub activatable_effects: Vec<IdleOption>,  // Block 6: Activatable
-    pub can_to_bp: bool,
-    pub can_to_ep: bool,
-    pub can_shuffle: bool,
-}
-
-impl TryFrom<&[u8]> for IdleCommandPayload {
-    type Error = anyhow::Error;
-
-    fn try_from(raw_bytes: &[u8]) -> Result<Self, Self::Error> {
-        if raw_bytes.len() < 2 {
-            bail!("Buffer too short to contain a valid payload (len: {})", raw_bytes.len());
-        }
-
-        let message_offset = if raw_bytes[0] == 11 {
-            0usize
-        } else if raw_bytes.len() >= 5 && raw_bytes[4] == 11 {
-            let declared_len = u32::from_le_bytes(raw_bytes[0..4].try_into().unwrap()) as usize;
-            if declared_len != raw_bytes.len().saturating_sub(4) {
-                bail!(
-                    "Length prefix mismatch: declared {} but buffer has {} payload bytes",
-                    declared_len,
-                    raw_bytes.len().saturating_sub(4)
-                );
-            }
-
-            4usize
-        } else {
-            0usize
-        };
-
-        if raw_bytes.get(message_offset).copied() != Some(11) {
-            bail!(
-                "Invalid message ID: Expected MSG_SELECT_IDLECMD (11), got {}",
-                raw_bytes.get(message_offset).copied().unwrap_or_default()
-            );
-        }
-
-        fn read_u8(raw_bytes: &[u8], cursor: &mut usize, label: &str) -> Result<u8> {
-            let value = raw_bytes
-                .get(*cursor)
-                .copied()
-                .with_context(|| format!("Missing {label} at offset {}", *cursor))?;
-            *cursor += 1;
-            Ok(value)
-        }
-
-        fn read_u32(raw_bytes: &[u8], cursor: &mut usize, label: &str) -> Result<u32> {
-            let bytes = raw_bytes
-                .get(*cursor..*cursor + 4)
-                .with_context(|| format!("Missing {label} at offset {}", *cursor))?;
-            *cursor += 4;
-            Ok(u32::from_le_bytes(bytes.try_into().unwrap()))
-        }
-
-        fn read_u64(raw_bytes: &[u8], cursor: &mut usize, label: &str) -> Result<u64> {
-            let bytes = raw_bytes
-                .get(*cursor..*cursor + 8)
-                .with_context(|| format!("Missing {label} at offset {}", *cursor))?;
-            *cursor += 8;
-            Ok(u64::from_le_bytes(bytes.try_into().unwrap()))
-        }
-
-        fn read_block_common(
-            raw_bytes: &[u8],
-            cursor: &mut usize,
-            block_name: &'static str,
-            item_reader: impl Fn(&[u8], &mut usize) -> Result<IdleOption>,
-        ) -> Result<Vec<IdleOption>> {
-            let count = read_u32(raw_bytes, cursor, block_name)? as usize;
-
-            if count > 50 {
-                bail!(
-                    "Sanity check failed parsing {} at offset {}. Parsed impossible count {}",
-                    block_name,
-                    *cursor - 4,
-                    count
-                );
-            }
-
-            let mut items = Vec::with_capacity(count);
-            for _ in 0..count {
-                items.push(item_reader(raw_bytes, cursor)?);
-            }
-
-            Ok(items)
-        }
-
-        let mut cursor = message_offset + 1;
-        let playerid = read_u8(raw_bytes, &mut cursor, "playerid")?;
-
-        let normal_summons = read_block_common(raw_bytes, &mut cursor, "normal_summons", |raw, c| {
-            Ok(IdleOption {
-                card_code: read_u32(raw, c, "normal_summons.card_code")?,
-                controller: read_u8(raw, c, "normal_summons.controller")?,
-                location: read_u8(raw, c, "normal_summons.location")?,
-                sequence: read_u32(raw, c, "normal_summons.sequence")? as u8,
-            })
-        })?;
-
-        let special_summons = read_block_common(raw_bytes, &mut cursor, "special_summons", |raw, c| {
-            Ok(IdleOption {
-                card_code: read_u32(raw, c, "special_summons.card_code")?,
-                controller: read_u8(raw, c, "special_summons.controller")?,
-                location: read_u8(raw, c, "special_summons.location")?,
-                sequence: read_u32(raw, c, "special_summons.sequence")? as u8,
-            })
-        })?;
-
-        let battle_positions = read_block_common(raw_bytes, &mut cursor, "battle_positions", |raw, c| {
-            Ok(IdleOption {
-                card_code: read_u32(raw, c, "battle_positions.card_code")?,
-                controller: read_u8(raw, c, "battle_positions.controller")?,
-                location: read_u8(raw, c, "battle_positions.location")?,
-                sequence: read_u8(raw, c, "battle_positions.sequence")?,
-            })
-        })?;
-
-        let monster_sets = read_block_common(raw_bytes, &mut cursor, "monster_sets", |raw, c| {
-            Ok(IdleOption {
-                card_code: read_u32(raw, c, "monster_sets.card_code")?,
-                controller: read_u8(raw, c, "monster_sets.controller")?,
-                location: read_u8(raw, c, "monster_sets.location")?,
-                sequence: read_u32(raw, c, "monster_sets.sequence")? as u8,
-            })
-        })?;
-
-        let spell_trap_sets = read_block_common(raw_bytes, &mut cursor, "spell_trap_sets", |raw, c| {
-            Ok(IdleOption {
-                card_code: read_u32(raw, c, "spell_trap_sets.card_code")?,
-                controller: read_u8(raw, c, "spell_trap_sets.controller")?,
-                location: read_u8(raw, c, "spell_trap_sets.location")?,
-                sequence: read_u32(raw, c, "spell_trap_sets.sequence")? as u8,
-            })
-        })?;
-
-        let activatable_effects = read_block_common(raw_bytes, &mut cursor, "activatable_effects", |raw, c| {
-            let card_code = read_u32(raw, c, "activatable_effects.card_code")?;
-            let controller = read_u8(raw, c, "activatable_effects.controller")?;
-            let location = read_u8(raw, c, "activatable_effects.location")?;
-            let sequence = read_u32(raw, c, "activatable_effects.sequence")? as u8;
-            let _description = read_u64(raw, c, "activatable_effects.description")?;
-            let _client_mode = read_u8(raw, c, "activatable_effects.client_mode")?;
-
-            Ok(IdleOption {
-                card_code,
-                controller,
-                location,
-                sequence,
-            })
-        })?;
-
-        let can_to_bp = read_u8(raw_bytes, &mut cursor, "can_to_bp")? != 0;
-        let can_to_ep = read_u8(raw_bytes, &mut cursor, "can_to_ep")? != 0;
-        let can_shuffle = read_u8(raw_bytes, &mut cursor, "can_shuffle")? != 0;
-
-        Ok(IdleCommandPayload {
-            playerid,
-            normal_summons,
-            special_summons,
-            battle_positions,
-            monster_sets,
-            spell_trap_sets,
-            activatable_effects,
-            can_to_bp,
-            can_to_ep,
-            can_shuffle,
-        })
     }
 }
