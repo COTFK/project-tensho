@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use dioxus::document::eval;
 use dioxus::prelude::*;
 
 use crate::ocgcore::Duel;
@@ -11,8 +12,6 @@ use crate::ocgcore::constants::CoreMessage;
 use crate::ui::Field;
 use crate::ui::Hand;
 
-static TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
-
 #[component]
 pub fn App(duel: Duel) -> Element {
     use_context_provider(move || duel);
@@ -21,6 +20,7 @@ pub fn App(duel: Duel) -> Element {
     let mut monsters = use_signal(Vec::new);
     let mut selected_card = use_signal(|| -1);
     let mut waiting_on_input = use_signal(|| false);
+    let mut card_effect_prompt = use_signal(|| 0u32);
 
     // Actions
     let mut normal_summons = use_signal(|| HashMap::new());
@@ -166,11 +166,11 @@ pub fn App(duel: Duel) -> Element {
                                 // duel.set_response(&response);
 
                                 // If you want your UI to click Yes/No manually later, use this instead:
-                                // current_triggering_card_signal.set(card_code);
+                                card_effect_prompt.set(card_code);
                                 waiting_on_input.set(true);
                             }
                         }
-                        
+
                         break;
                     }
                     DuelStatus::Continue => {
@@ -188,8 +188,7 @@ pub fn App(duel: Duel) -> Element {
     });
 
     rsx!(
-        document::Link { rel: "stylesheet", href: TAILWIND_CSS }
-
+        document::Link { rel: "stylesheet", href: asset!("/assets/tailwind.css") }
         main {
             class: "h-dvh w-dvw bg-slate-800",
             Field {
