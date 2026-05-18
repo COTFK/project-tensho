@@ -6,7 +6,7 @@ use wasm_bindgen::JsValue;
 /// A safe wrapper around an address in WASM memory.
 /// Preferable to accidentally feeding the FFI
 /// a random [`u32`] that doesn't belong.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CorePointer(pub(super) u32);
 
 impl CorePointer {

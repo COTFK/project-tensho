@@ -8,5 +8,7 @@ mod ffi;
 mod memory;
 
 pub use core::OCGCore;
+pub use duel::Duel;
 pub use data::OCGCardData;
 pub use duel_status::DuelStatus;
+pub use actions::HandAction;

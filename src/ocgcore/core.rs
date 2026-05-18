@@ -45,7 +45,7 @@ impl OCGCore {
         })
     }
 
-    pub fn create_duel(&self) -> anyhow::Result<Duel<'_>> {
+    pub fn create_duel(&self) -> anyhow::Result<Duel> {
         let mut options = OCGDuelOptions::default();
         options.card_reader = self.callback_indices.0;
         options.script_reader = self.callback_indices.1;

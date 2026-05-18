@@ -1,10 +1,12 @@
 use dioxus::prelude::*;
 
+use super::card::Card;
+
 #[component]
-pub fn Field() -> Element {
+pub fn Field(monsters: WriteSignal<Vec<u32>>) -> Element {
     rsx!(
         div { // Entire field
-            class: "mx-auto flex flex-col gap-3 w-min",
+            class: "mx-auto flex flex-col gap-3 w-min pt-8",
             div { // Extra Monster Zones
                 class: "flex flex-row gap-3 justify-evenly",
                 div {
@@ -18,11 +20,11 @@ pub fn Field() -> Element {
             }
             div { // Main Monster Zones
                 class: "flex flex-row gap-3 justify-center",
-                Zone {}
-                Zone {}
-                Zone {}
-                Zone {}
-                Zone {}
+                Zone { id: monsters().get(0).copied()}
+                Zone { id: monsters().get(1).copied()}
+                Zone { id: monsters().get(2).copied()}
+                Zone { id: monsters().get(3).copied()}
+                Zone { id: monsters().get(4).copied()}
             }
             div { // Spell/Trap Zones
                 class: "flex flex-row gap-3 justify-center",
@@ -37,10 +39,18 @@ pub fn Field() -> Element {
 }
 
 #[component]
-fn Zone() -> Element {
-    rsx!(div {
-        class: "border-0.5 shadow-md bg-slate-50/20",
-        width: "8vw",
-        aspect_ratio: "1/1",
-    })
+fn Zone(id: Option<u32>) -> Element {
+    rsx!(
+        div {
+            class: "border-0.5 shadow-xl bg-slate-50/2 size-[14vw] aspect-square flex items-center justify-center",
+            if id != Some(0) && id.is_some() {
+                div {
+                    class: "w-[9vw]",
+                    Card {
+                        id: id.unwrap()
+                    }
+                }
+            }
+        }
+    )
 }

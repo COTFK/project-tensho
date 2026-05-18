@@ -24,7 +24,7 @@ extern "C" {
     pub fn get_message(this: &OCGCoreInstance, duel: u32, length_ptr: u32) -> u32;
 
     #[wasm_bindgen(method, js_name = _OCG_DuelSetResponse)]
-    pub fn set_response(this: &OCGCoreInstance, duel: u32, response_ptr: u32);
+    pub fn set_response(this: &OCGCoreInstance, duel: u32, response_ptr: u32, len: u32);
 
     #[wasm_bindgen(method, js_name = _OCG_DuelNewCard)]
     pub fn add_card(this: &OCGCoreInstance, duel: u32, info: u32);

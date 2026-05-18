@@ -1,4 +1,3 @@
-use anyhow::anyhow;
 use js_sys::ArrayBuffer;
 use js_sys::Uint8Array;
 use js_sys::Uint32Array;
@@ -11,10 +10,10 @@ use super::duel_status::DuelStatus;
 use super::memory::CorePointer;
 use crate::ocgcore::constants::{CardController, CardOwner};
 
-#[derive(Debug, Clone)]
-pub struct Duel<'a> {
+#[derive(Debug, Clone, PartialEq)]
+pub struct Duel {
     handle: CorePointer,
-    core: &'a OCGCore,
+    core: OCGCore,
 }
 
 /// Helper to write little-endian bytes to a `Uint8Array` view
@@ -68,16 +67,20 @@ fn extract_card_code(data: &[u8], offset: &mut usize, field_len: usize) -> u32 {
     code
 }
 
-impl<'a> Duel<'a> {
-    pub const fn new(handle: CorePointer, core: &'a OCGCore) -> Self {
-        Self { handle, core }
+impl Duel {
+    pub fn new(handle: CorePointer, core: &OCGCore) -> Self {
+        Self {
+            handle,
+            core: core.clone(),
+        }
     }
 
     pub fn start(&self) {
         self.core.instance.start_duel(self.handle.0);
     }
 
-    pub fn set_response(&self, buffer: &[u8]) -> anyhow::Result<()> {
+    pub fn set_response(&self, buffer: &[u8]) {
+        tracing::debug!("Sending response: {buffer:?}");
         let buf_len = buffer.len() as u32;
         let buf_alloc = self.core.allocate_memory(buf_len);
         let buf_ptr = buf_alloc.get_pointer();
@@ -93,12 +96,10 @@ impl<'a> Duel<'a> {
 
         self.core
             .instance
-            .set_response(self.handle.0, buf_ptr.into());
-
-        Ok(())
+            .set_response(self.handle.0, buf_ptr.into(), buf_len);
     }
 
-    pub fn get_message(&self) -> Vec<u8> {
+    pub fn get_messages(&self) -> Vec<u8> {
         let length_alloc = self.core.allocate_memory(4);
         let length_ptr = length_alloc.get_pointer();
 
@@ -115,9 +116,7 @@ impl<'a> Duel<'a> {
         Uint8Array::new_with_byte_offset_and_length(&buffer, msg_ptr, len).to_vec()
     }
 
-    pub fn get_available_actions(&self) -> anyhow::Result<AvailableActions> {
-        let messages = self.get_message();
-
+    pub fn get_available_actions(&self, messages: Vec<u8>) -> anyhow::Result<AvailableActions> {
         AvailableActions::try_from(&messages[..])
     }
 
@@ -279,8 +278,3 @@ impl<'a> Duel<'a> {
     }
 }
 
-impl Drop for Duel<'_> {
-    fn drop(&mut self) {
-        let _ = self.destroy();
-    }
-}

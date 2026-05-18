@@ -1,8 +1,16 @@
 use anyhow::Context;
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 use super::constants::CardController;
 use super::constants::CardLocation;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HandAction {
+    NormalSummon {
+        card_code: u32,
+        summon_index: u16,
+    },
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ActiveCard {
@@ -27,10 +35,11 @@ pub struct AvailableActions {
 }
 
 impl AvailableActions {
-    pub fn get_normal_summons(&self) -> HashSet<u32> {
+    pub fn get_normal_summons(&self) -> HashMap<u8, u16> {
         self.normal_summons
             .iter()
-            .map(|card| card.card_code)
+            .enumerate()
+            .map(|(summon_index, card)| (card.sequence, summon_index as u16))
             .collect()
     }
 }
