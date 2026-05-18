@@ -167,6 +167,7 @@ pub fn App(duel: Duel) -> Element {
 
                                 // If you want your UI to click Yes/No manually later, use this instead:
                                 card_effect_prompt.set(card_code);
+                                eval("eff_dialog.show();");
                                 waiting_on_input.set(true);
                             }
                         }
@@ -189,17 +190,80 @@ pub fn App(duel: Duel) -> Element {
 
     rsx!(
         document::Link { rel: "stylesheet", href: asset!("/assets/tailwind.css") }
-        main {
-            class: "h-dvh w-dvw bg-slate-800",
-            Field {
-                monsters: monsters
-            }
+        main { class: "h-dvh w-dvw bg-slate-800",
+            Field { monsters }
             Hand {
                 cards: hand_contents,
-                selected_card: selected_card,
-                normal_summons: normal_summons,
-                hand_actions
+                selected_card,
+                normal_summons,
+                hand_actions,
             }
+        }
+        el-dialog {
+            dialog {
+                aria_labelledby: "dialog-title",
+                class: "fixed inset-0 size-auto max-h-none max-w-none overflow-y-auto bg-transparent backdrop:bg-transparent",
+                id: "eff_dialog",
+                // el-dialog-backdrop { class: "fixed inset-0 bg-gray-900/50 transition-opacity data-closed:opacity-0 data-enter:duration-300 data-enter:ease-out data-leave:duration-200 data-leave:ease-in" }
+                div {
+                    class: "flex min-h-full items-end justify-center p-4 text-center focus:outline-none sm:items-center sm:p-0",
+                    tabindex: "0",
+                    el-dialog-panel { class: "relative transform overflow-hidden rounded-lg bg-gray-800 text-left shadow-xl outline -outline-offset-1 outline-white/10 transition-all data-closed:translate-y-4 data-closed:opacity-0 data-enter:duration-300 data-enter:ease-out data-leave:duration-200 data-leave:ease-in sm:my-8 sm:w-full sm:max-w-lg data-closed:sm:translate-y-0 data-closed:sm:scale-95",
+                        div { class: "bg-gray-800 px-4 pt-5 pb-4 sm:p-6 sm:pb-4",
+                            div { class: "sm:flex sm:items-start",
+                                div { class: "mx-auto flex size-12 shrink-0 items-center justify-center rounded-full bg-red-500/10 sm:mx-0 sm:size-10",
+                                    svg {
+                                        // aria_hidden: "true",
+                                        class: "size-6 text-red-400",
+                                        "data-slot": "icon",
+                                        fill: "none",
+                                        stroke: "currentColor",
+                                        stroke_width: "1.5",
+                                        view_box: "0 0 24 24",
+                                        path {
+                                            d: "M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z",
+                                            stroke_linecap: "round",
+                                            stroke_linejoin: "round",
+                                        }
+                                    }
+                                }
+                                div { class: "mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left",
+                                    h3 {
+                                        class: "text-base font-semibold text-white",
+                                        id: "dialog-title",
+                                        "Deactivate account"
+                                    }
+                                    div { class: "mt-2",
+                                        p { class: "text-sm text-gray-400",
+                                            "Are you sure you want to deactivate your account? All of your data will be permanently removed. This action cannot be undone."
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        div { class: "bg-gray-700/25 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6",
+                            button {
+                                class: "inline-flex w-full justify-center rounded-md bg-red-500 px-3 py-2 text-sm font-semibold text-white hover:bg-red-400 sm:ml-3 sm:w-auto",
+                                "command": "close",
+                                "commandfor": "eff_dialog",
+                                r#type: "button",
+                                "Deactivate"
+                            }
+                            button {
+                                class: "mt-3 inline-flex w-full justify-center rounded-md bg-white/10 px-3 py-2 text-sm font-semibold text-white inset-ring inset-ring-white/5 hover:bg-white/20 sm:mt-0 sm:w-auto",
+                                "command": "close",
+                                "commandfor": "eff_dialog",
+                                r#type: "button",
+                                "Cancel"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        document::Script {
+            src: "https://cdn.jsdelivr.net/npm/@tailwindplus/elements@1",
+            r#type: "module",
         }
     )
 }
