@@ -1,12 +1,12 @@
-mod app;
 mod ocgcore;
 mod ui;
 mod utility;
+mod state;
 
 use dioxus::prelude::*;
 use rand::seq::SliceRandom;
 
-use crate::app::App;
+use crate::ui::DuelScreen;
 use crate::ocgcore::OCGCore;
 use crate::ocgcore::constants::*;
 use crate::utility::EXTRA_DECK_IDS;
@@ -68,7 +68,7 @@ pub fn AppContainer() -> Element {
     rsx!(
         document::Link { rel: "stylesheet", href: asset!("/assets/tailwind.css") }
         match &*core_resource.read() {
-            Some(Ok(duel)) => rsx!(App { duel: duel.clone() }),
+            Some(Ok(duel)) => rsx!(DuelScreen { duel: duel.clone() }),
             Some(Err(e)) => rsx!("{e:#?}"),
             None => {
                 rsx!("Loading...")

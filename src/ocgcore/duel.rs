@@ -8,6 +8,7 @@ use super::actions::AvailableActions;
 use super::constants::CardLocation;
 use super::duel_status::DuelStatus;
 use super::memory::CorePointer;
+use crate::ocgcore::UserResponse;
 use crate::ocgcore::constants::{CardController, CardOwner};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -79,8 +80,10 @@ impl Duel {
         self.core.instance.start_duel(self.handle.0);
     }
 
-    pub fn set_response(&self, buffer: &[u8]) {
-        tracing::debug!("Sending response: {buffer:?}");
+    pub fn set_response(&self, response: UserResponse) {
+        tracing::debug!("Sending response: {response:?}");
+        let bytes = response.get_response_bytes();
+        let buffer = bytes.as_slice();
         let buf_len = buffer.len() as u32;
         let buf_alloc = self.core.allocate_memory(buf_len);
         let buf_ptr = buf_alloc.get_pointer();

@@ -3,6 +3,7 @@ pub enum CardLocation {
     Deck = 1,
     Hand = 2,
     MonsterZone = 4,
+    SpellTrapZone = 8
 }
 
 impl TryFrom<u8> for CardLocation {

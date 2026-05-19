@@ -1,18 +1,21 @@
 use dioxus::prelude::*;
-use std::collections::HashMap;
 
 use super::card::Card;
 use super::svg::SummonIcon;
-use crate::ocgcore::HandAction;
+use crate::ocgcore::UserResponse;
+use crate::ocgcore::constants::CardLocation;
+use crate::state::DuelState;
+use crate::state::send_user_response;
+use crate::state::SelectedCard;
 
 #[component]
-pub fn Hand(
-    cards: ReadSignal<Vec<u32>>,
-    selected_card: WriteSignal<i32>,
-    normal_summons: ReadSignal<HashMap<u8, u16>>,
-    hand_chainables: ReadSignal<HashMap<u8, usize>>,
-    hand_actions: Callback<HandAction>,
-) -> Element {
+pub fn Hand() -> Element {
+    let state = use_context::<DuelState>();
+    let cards = state.hand_contents;
+    let normal_summons = state.normal_summons;
+    let chainables = state.card_prompting_to_activate;
+    let mut selected_card = state.selected_card;
+
     let hand_size = cards().len() as i32;
     let center = hand_size - 1;
 
@@ -22,14 +25,25 @@ pub fn Hand(
             for (index, card_id) in cards().iter().copied().enumerate() {
                 {
                     let summon_index = normal_summons().get(&(index as u8)).copied();
-                    let chainable = hand_chainables().get(&(index as u8)).copied().is_some();
+                    let prompted_card = chainables
+                        .iter()
+                        .find(|card| card.location == CardLocation::Hand && card.sequence == index as u8);
+                    let chainable_id_opt = prompted_card.and_then(|card| card.chain_option);
+                    let chainable = chainable_id_opt.is_some();
                     let distance = (index as i32) * 2 - center;
                     let abs_distance = distance.abs();
                     let mut rotation = distance;
                     let mut translate_y = (abs_distance * abs_distance * 4) / 16;
                     let mut z_index = 0;
-                    let is_selected = selected_card() == index as i32;
+
+                    let is_selected = match selected_card() {
+                        Some(card) => card.index == index as u8 && card.location == CardLocation::Hand,
+                        None => false
+                    };
+
                     let summonable = summon_index.is_some();
+
+                    let chainable_id = chainable_id_opt.unwrap_or(0);
 
                     if is_selected {
                         translate_y = -25;
@@ -45,7 +59,13 @@ pub fn Hand(
                             class: "transform-gpu transition duration-150 ease-in-out -mx-[1.1vw] relative group",
                             transform: "rotateZ({rotation}deg) translateY({translate_y}%)",
                             z_index: z_index,
-                            onclick: move |_| selected_card.set(index as i32),
+                            onclick: move |evt| {
+                                evt.stop_propagation();
+                                selected_card.set(Some(SelectedCard{
+                                    location: CardLocation::Hand,
+                                    index: index as u8
+                                }));
+                            },
 
                             if summon_index.is_some() {
                                 div {
@@ -88,10 +108,7 @@ pub fn Hand(
                                                     class: "bg-black size-16 p-2 rounded-full border-3 border-cyan-500 text-cyan-300 cursor-pointer",
                                                     onclick: move |evt| {
                                                         evt.stop_propagation();
-                                                        hand_actions.call(HandAction::NormalSummon {
-                                                            card_code: card_id,
-                                                            summon_index: summon_index.unwrap(),
-                                                        });
+                                                        send_user_response(UserResponse::NormalSummon { sequence: summon_index.unwrap() as u8 });
                                                     },
                                                     SummonIcon {}
                                                 }
@@ -107,10 +124,7 @@ pub fn Hand(
                                                     class: "bg-black size-16 p-2 rounded-full border-3 border-yellow-500 text-yellow-300 cursor-pointer",
                                                     onclick: move |evt| {
                                                         evt.stop_propagation();
-                                                        hand_actions.call(HandAction::Chain {
-                                                            card_code: card_id,
-                                                            sequence: hand_chainables().get(&(index as u8)).copied().unwrap() as u8,
-                                                        });
+                                                        send_user_response(UserResponse::Chain { sequence: chainable_id });
                                                     },
                                                     SummonIcon {}
                                                 }
