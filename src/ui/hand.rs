@@ -42,10 +42,7 @@ pub fn Hand(
                             class: "transform-gpu transition duration-150 ease-in-out -mx-[1.1vw] relative group",
                             transform: "rotateZ({rotation}deg) translateY({translate_y}%)",
                             z_index: z_index,
-                            onclick: move |_| {
-                                debug!("setting index to {index}");
-                                selected_card.set(index as i32)
-                            },
+                            onclick: move |_| selected_card.set(index as i32),
 
                             if summon_index.is_some() {
                                 div {

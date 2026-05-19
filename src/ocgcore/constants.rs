@@ -60,6 +60,7 @@ pub enum CoreMessage {
     Retry = 1,
     Idle = 11,
     SelectEffectYN = 12,
+    SelectCard = 15,
     SelectChain = 16,
     SelectPlace = 18
 }
@@ -72,6 +73,7 @@ impl TryFrom<u8> for CoreMessage {
             1 => Ok(CoreMessage::Retry),
             11 => Ok(CoreMessage::Idle),
             12 => Ok(CoreMessage::SelectEffectYN),
+            15 => Ok(CoreMessage::SelectCard),
             16 => Ok(CoreMessage::SelectChain),
             18 => Ok(CoreMessage::SelectPlace),
             _ => anyhow::bail!("Received wrong message: {value}")

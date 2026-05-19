@@ -54,7 +54,7 @@ async fn get_script_data(name: &str) -> anyhow::Result<Vec<u8>> {
         .map_err(|e| anyhow!("Unable to load script bytes: {e}"))
 }
 
-pub async fn cache_scripts(mut deck_card_ids: Vec<u32>) {
+pub async fn cache_scripts(deck_card_ids: &[u32]) {
     // Add helper scripts
     for script in BASE_SCRIPTS {
         if let Ok(bytes) = get_script_data(script).await {
@@ -68,17 +68,18 @@ pub async fn cache_scripts(mut deck_card_ids: Vec<u32>) {
 
     // Batch fetch all individual card scripts based on the deck lists
     // Preserve original deck order while removing duplicates
-    let mut seen = HashSet::with_capacity(deck_card_ids.len());
-    deck_card_ids.retain(move |id: &u32| seen.insert(*id));
+    let mut seen = HashSet::new();
 
-    for id in deck_card_ids {
-        let script_name = format!("c{id}.lua");
-        if let Ok(bytes) = get_script_data(&script_name).await {
-            if bytes.is_empty() {
-                warn!("Failed to load {script_name} - got 0 bytes.");
-                continue;
+    for &id in deck_card_ids {
+        if seen.insert(id) {
+            let script_name = format!("c{id}.lua");
+            if let Ok(bytes) = get_script_data(&script_name).await {
+                if bytes.is_empty() {
+                    warn!("Failed to load {script_name} - got 0 bytes.");
+                    continue;
+                }
+                cache_script(&script_name, bytes);
             }
-            cache_script(&script_name, bytes);
         }
     }
 }

@@ -13,6 +13,7 @@ use crate::utility::EXTRA_DECK_IDS;
 use crate::utility::MAIN_DECK_IDS;
 use crate::utility::cache_scripts;
 use crate::utility::get_cached_script;
+use crate::utility::cache_labels;
 
 static _OCGCORE_WASM: Asset = asset!(
     "/assets/ocgcore.wasm",
@@ -38,7 +39,8 @@ pub fn AppContainer() -> Element {
 
         let mut all_cards = Vec::from(MAIN_DECK_IDS);
         all_cards.append(&mut Vec::from(EXTRA_DECK_IDS));
-        cache_scripts(all_cards).await;
+        cache_scripts(&all_cards).await;
+        cache_labels(&all_cards).await;
 
         let core = OCGCore::load().await?;
         let duel = core.create_duel().unwrap();
@@ -63,11 +65,18 @@ pub fn AppContainer() -> Element {
         anyhow::Ok(duel)
     });
 
-    match &*core_resource.read() {
-        Some(Ok(duel)) => rsx!(App { duel: duel.clone() }),
-        Some(Err(e)) => rsx!("{e:#?}"),
-        None => {
-            rsx!("Loading...")
+    rsx!(
+        document::Link { rel: "stylesheet", href: asset!("/assets/tailwind.css") }
+        match &*core_resource.read() {
+            Some(Ok(duel)) => rsx!(App { duel: duel.clone() }),
+            Some(Err(e)) => rsx!("{e:#?}"),
+            None => {
+                rsx!("Loading...")
+            }
         }
-    }
+        document::Script {
+            src: "https://cdn.jsdelivr.net/npm/@tailwindplus/elements@1",
+            r#type: "module",
+        }
+    )
 }

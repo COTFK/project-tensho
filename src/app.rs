@@ -11,6 +11,8 @@ use crate::ocgcore::constants::CardLocation;
 use crate::ocgcore::constants::CoreMessage;
 use crate::ui::Field;
 use crate::ui::Hand;
+use crate::utility::CardLabel;
+use crate::utility::get_cached_label;
 
 #[component]
 pub fn App(duel: Duel) -> Element {
@@ -19,8 +21,11 @@ pub fn App(duel: Duel) -> Element {
     let mut hand_contents = use_signal(Vec::new);
     let mut monsters = use_signal(Vec::new);
     let mut selected_card = use_signal(|| -1);
-    let mut waiting_on_input = use_signal(|| false);
     let mut card_effect_prompt = use_signal(|| 0u32);
+
+    // global input toggle or something
+    let mut waiting_on_input = use_signal(|| false);
+    use_context_provider(move || waiting_on_input);
 
     // Actions
     let mut normal_summons = use_signal(|| HashMap::new());
@@ -78,7 +83,7 @@ pub fn App(duel: Duel) -> Element {
                                 waiting_on_input.set(false);
                             }
                             CoreMessage::SelectChain => {
-                                if messages.len() < 12 {
+                                if messages.len() < 20 {
                                     debug!(
                                         "SelectChain packet too short: {} bytes",
                                         messages.len()
@@ -87,17 +92,28 @@ pub fn App(duel: Duel) -> Element {
                                 }
 
                                 let player = messages[5];
+                                let count: usize;
+                                let mut offset: usize;
 
-                                // Read count as a single byte (u8) instead of a u32
-                                let count = messages[6] as usize;
+                                // Determine the packet layout based on length
+                                if messages.len() == 20 {
+                                    // This is an empty priority pass packet (20 bytes total)
+                                    // Count is 0, no card options are attached.
+                                    count = 0;
+                                    offset = 20;
+                                } else {
+                                    // This is a populated selection packet (Contains the 20-byte header + 12-byte option cards)
+                                    // Real count is a 32-bit little-endian integer sitting at bytes 16-19
+                                    count = u32::from_le_bytes([
+                                        messages[16],
+                                        messages[17],
+                                        messages[18],
+                                        messages[19],
+                                    ]) as usize;
+                                    offset = 20; // The actual card array entries start exactly at byte index 20
+                                }
 
-                                let special_count = messages[7];
-
-                                // The remaining bytes contain forced flags and hint timings depending on length
-                                debug!(
-                                    "SelectChain -> Player: {}, Count: {}, Special Count: {}",
-                                    player, count, special_count
-                                );
+                                debug!("SelectChain -> Player: {}, Count: {}", player, count);
 
                                 if count == 0 {
                                     debug!(
@@ -112,11 +128,6 @@ pub fn App(duel: Duel) -> Element {
                                         count
                                     );
 
-                                    // If count > 0, each option block is 12 bytes long, starting right after the header
-                                    // Header is: MsgType(1) + Player(1) + Count(1) + SpeCount(1) + Forced(1) + Timings...
-                                    // Let's protect the loop with a safe dynamic layout boundary check
-                                    let mut offset = 12;
-
                                     for i in 0..count {
                                         if offset + 4 <= messages.len() {
                                             let card_code = u32::from_le_bytes([
@@ -125,9 +136,18 @@ pub fn App(duel: Duel) -> Element {
                                                 messages[offset + 2],
                                                 messages[offset + 3],
                                             ]);
-                                            debug!("  Option #{}: Card ID {}", i, card_code);
+
+                                            // Get the location data right after the card code
+                                            let controller = messages[offset + 4];
+                                            let location = messages[offset + 5];
+                                            let sequence = messages[offset + 6];
+
+                                            debug!(
+                                                "  Option #{}: Card ID {}, Controller: {}, Location: {}, Slot: {}",
+                                                i, card_code, controller, location, sequence
+                                            );
                                         }
-                                        offset += 12; // Advance to next choice item block
+                                        offset += 12; // Advance to the next 12-byte choice structure
                                     }
 
                                     waiting_on_input.set(true); // Stop automated responses and prompt user UI
@@ -159,17 +179,11 @@ pub fn App(duel: Duel) -> Element {
                                     player, card_code, location, sequence
                                 );
 
-                                // // Automation Option: For testing, let's say "Yes" automatically
-                                // // to force the core to process and execute the effect.
-                                // debug!("Automatically accepting effect trigger [YES]");
-                                // let response: [u8; 4] = [1, 0, 0, 0];
-                                // duel.set_response(&response);
-
-                                // If you want your UI to click Yes/No manually later, use this instead:
                                 card_effect_prompt.set(card_code);
                                 eval("eff_dialog.show();");
                                 waiting_on_input.set(true);
                             }
+                            CoreMessage::SelectCard => {}
                         }
 
                         break;
@@ -189,8 +203,8 @@ pub fn App(duel: Duel) -> Element {
     });
 
     rsx!(
-        document::Link { rel: "stylesheet", href: asset!("/assets/tailwind.css") }
-        main { class: "h-dvh w-dvw bg-slate-800",
+        main {
+            class: "h-dvh w-dvw bg-gray-800",
             Field { monsters }
             Hand {
                 cards: hand_contents,
@@ -198,72 +212,81 @@ pub fn App(duel: Duel) -> Element {
                 normal_summons,
                 hand_actions,
             }
+            ActivateEffectModal {card_id: card_effect_prompt}
         }
+    )
+}
+
+#[component]
+pub fn ActivateEffectModal(card_id: ReadSignal<u32>) -> Element {
+    let card_labels = get_cached_label(card_id()).unwrap_or(CardLabel {
+        name: String::from("unknown"),
+    });
+
+    let activate_effect = move |_| {
+        let duel = use_context::<Duel>();
+        let mut waiting_on_input = use_context::<Signal<bool>>();
+
+        let response: [u8; 4] = [1, 0, 0, 0];
+        duel.set_response(&response);
+        waiting_on_input.set(false);
+    };
+    let refuse_to_activate = move |_| {
+        let duel = use_context::<Duel>();
+        let mut waiting_on_input = use_context::<Signal<bool>>();
+
+        let response: [u8; 4] = [0, 0, 0, 0];
+        duel.set_response(&response);
+        waiting_on_input.set(false);
+    };
+
+    rsx!(
         el-dialog {
             dialog {
                 aria_labelledby: "dialog-title",
                 class: "fixed inset-0 size-auto max-h-none max-w-none overflow-y-auto bg-transparent backdrop:bg-transparent",
                 id: "eff_dialog",
-                // el-dialog-backdrop { class: "fixed inset-0 bg-gray-900/50 transition-opacity data-closed:opacity-0 data-enter:duration-300 data-enter:ease-out data-leave:duration-200 data-leave:ease-in" }
                 div {
                     class: "flex min-h-full items-end justify-center p-4 text-center focus:outline-none sm:items-center sm:p-0",
                     tabindex: "0",
                     el-dialog-panel { class: "relative transform overflow-hidden rounded-lg bg-gray-800 text-left shadow-xl outline -outline-offset-1 outline-white/10 transition-all data-closed:translate-y-4 data-closed:opacity-0 data-enter:duration-300 data-enter:ease-out data-leave:duration-200 data-leave:ease-in sm:my-8 sm:w-full sm:max-w-lg data-closed:sm:translate-y-0 data-closed:sm:scale-95",
                         div { class: "bg-gray-800 px-4 pt-5 pb-4 sm:p-6 sm:pb-4",
                             div { class: "sm:flex sm:items-start",
-                                div { class: "mx-auto flex size-12 shrink-0 items-center justify-center rounded-full bg-red-500/10 sm:mx-0 sm:size-10",
-                                    svg {
-                                        // aria_hidden: "true",
-                                        class: "size-6 text-red-400",
-                                        "data-slot": "icon",
-                                        fill: "none",
-                                        stroke: "currentColor",
-                                        stroke_width: "1.5",
-                                        view_box: "0 0 24 24",
-                                        path {
-                                            d: "M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z",
-                                            stroke_linecap: "round",
-                                            stroke_linejoin: "round",
-                                        }
-                                    }
-                                }
                                 div { class: "mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left",
                                     h3 {
                                         class: "text-base font-semibold text-white",
                                         id: "dialog-title",
-                                        "Deactivate account"
+                                        "Activate effect?"
                                     }
                                     div { class: "mt-2",
                                         p { class: "text-sm text-gray-400",
-                                            "Are you sure you want to deactivate your account? All of your data will be permanently removed. This action cannot be undone."
+                                            "Activate the effect of {card_labels.name}?"
                                         }
                                     }
                                 }
                             }
                         }
-                        div { class: "bg-gray-700/25 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6",
+                        div { class: "bg-gray-700/25 px-4 py-3 flex flex-row w-full gap-2",
                             button {
-                                class: "inline-flex w-full justify-center rounded-md bg-red-500 px-3 py-2 text-sm font-semibold text-white hover:bg-red-400 sm:ml-3 sm:w-auto",
+                                class: "grow-1 inline-flex w-full justify-center rounded-md bg-green-500 px-3 py-2 text-sm font-semibold text-white hover:bg-green-800",
                                 "command": "close",
                                 "commandfor": "eff_dialog",
                                 r#type: "button",
-                                "Deactivate"
+                                onclick: activate_effect,
+                                "Yes"
                             }
                             button {
-                                class: "mt-3 inline-flex w-full justify-center rounded-md bg-white/10 px-3 py-2 text-sm font-semibold text-white inset-ring inset-ring-white/5 hover:bg-white/20 sm:mt-0 sm:w-auto",
+                                class: "grow-1 inline-flex w-full justify-center rounded-md bg-red-500 px-3 py-2 text-sm font-semibold text-white hover:bg-red-800",
                                 "command": "close",
                                 "commandfor": "eff_dialog",
                                 r#type: "button",
-                                "Cancel"
+                                onclick: refuse_to_activate,
+                                "No"
                             }
                         }
                     }
                 }
             }
-        }
-        document::Script {
-            src: "https://cdn.jsdelivr.net/npm/@tailwindplus/elements@1",
-            r#type: "module",
         }
     )
 }
