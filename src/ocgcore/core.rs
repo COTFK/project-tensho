@@ -109,16 +109,44 @@ impl OCGCore {
             if data_ptr == 0 {
                 return;
             }
-            let data = STATIC_CARD_DATA
+            let mut data = STATIC_CARD_DATA
                 .iter()
                 .find(|(id, _)| *id == code)
                 .map(|(_, card_data)| card_data)
                 .copied()
                 .unwrap_or_else(|| OCGCardData::with_code(code));
+
+            let buffer = inst.get_wasm_memory().buffer();
+
+            // Allocate memory for setcodes array (u16 values + terminator)
+            // Format: [setcode1: u16][setcode2: u16]...[0x0000: u16 terminator]
+            // For now we handle single setcode values - convert to array
+            let setcodes_array = if data.setcodes > 0 {
+                // Allocate 4 bytes: 2 bytes for the setcode value + 2 bytes for terminator (0x0000)
+                let setcodes_ptr = inst.malloc(4) as u32;
+                
+                // Write setcode as u16 at offset 0
+                let setcode_u16 = (data.setcodes & 0xFFFF) as u16;
+                let setcode_bytes = setcode_u16.to_le_bytes();
+                let sc_view = Uint8Array::new_with_byte_offset_and_length(&buffer, setcodes_ptr, 2);
+                sc_view.set(&Uint8Array::from(setcode_bytes.as_slice()), 0);
+                
+                // Write terminator (0x0000) at offset 2
+                let term_view = Uint8Array::new_with_byte_offset_and_length(&buffer, setcodes_ptr + 2, 2);
+                term_view.set(&Uint8Array::from(&[0u8, 0u8][..]), 0);
+                
+                setcodes_ptr
+            } else {
+                0
+            };
+
+            // Update the setcodes field to point to the allocated array
+            data.setcodes = setcodes_array;
+            
+            // Write OCGCardData to WASM memory
             let mut data_bytes = [0u8; std::mem::size_of::<OCGCardData>()];
             data.write_bytes(&mut data_bytes);
 
-            let buffer = inst.get_wasm_memory().buffer();
             Uint8Array::new_with_byte_offset_and_length(
                 &buffer,
                 data_ptr,

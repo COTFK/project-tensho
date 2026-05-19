@@ -10,6 +10,7 @@ pub fn Hand(
     cards: ReadSignal<Vec<u32>>,
     selected_card: WriteSignal<i32>,
     normal_summons: ReadSignal<HashMap<u8, u16>>,
+    hand_chainables: ReadSignal<HashMap<u8, usize>>,
     hand_actions: Callback<HandAction>,
 ) -> Element {
     let hand_size = cards().len() as i32;
@@ -21,12 +22,14 @@ pub fn Hand(
             for (index, card_id) in cards().iter().copied().enumerate() {
                 {
                     let summon_index = normal_summons().get(&(index as u8)).copied();
+                    let chainable = hand_chainables().get(&(index as u8)).copied().is_some();
                     let distance = (index as i32) * 2 - center;
                     let abs_distance = distance.abs();
                     let mut rotation = distance;
                     let mut translate_y = (abs_distance * abs_distance * 4) / 16;
                     let mut z_index = 0;
                     let is_selected = selected_card() == index as i32;
+                    let summonable = summon_index.is_some();
 
                     if is_selected {
                         translate_y = -25;
@@ -49,6 +52,11 @@ pub fn Hand(
                                     class: "absolute -inset-[5px] rounded-[4px] bg-cyan-400 blur-[2px] mix-blend-screen pointer-events-none -z-10"
                                 }
                             }
+                            if chainable {
+                                div {
+                                    class: "absolute -inset-[5px] rounded-[4px] bg-yellow-400 blur-[2px] mix-blend-screen pointer-events-none -z-10"
+                                }
+                            }
 
                             Card {
                                 id: card_id
@@ -59,14 +67,19 @@ pub fn Hand(
                                     class: "absolute inset-0 border-5 border-cyan-300/50 blur-[2px] mix-blend-screen pointer-events-none z-20 animate-pulse"
                                 }
                             }
+                            if chainable {
+                                div {
+                                    class: "absolute inset-0 border-5 border-yellow-300/50 blur-[2px] mix-blend-screen pointer-events-none z-20 animate-pulse"
+                                }
+                            }
 
                             // Normal Summon button above selected card
                             if is_selected {
-                                {
-                                    if let Some(summon_index) = summon_index {
-                                        rsx! {
+                                if summonable || chainable {
+                                    div {
+                                        class: "absolute -top-26 left-1/2 transform -translate-x-1/2 z-50 flex flex-col items-center justify-center",
+                                        if summonable {
                                             div {
-                                                class: "absolute -top-26 left-1/2 transform -translate-x-1/2 z-50 flex flex-col items-center justify-center",
                                                 p {
                                                     class: "text-white font-semibold shadow-md",
                                                     "Summon"
@@ -77,15 +90,32 @@ pub fn Hand(
                                                         evt.stop_propagation();
                                                         hand_actions.call(HandAction::NormalSummon {
                                                             card_code: card_id,
-                                                            summon_index,
+                                                            summon_index: summon_index.unwrap(),
                                                         });
                                                     },
                                                     SummonIcon {}
                                                 }
                                             }
                                         }
-                                    } else {
-                                        rsx! {}
+                                        if chainable {
+                                            div {
+                                                p {
+                                                    class: "text-white font-semibold shadow-md",
+                                                    "Activate"
+                                                }
+                                                button {
+                                                    class: "bg-black size-16 p-2 rounded-full border-3 border-yellow-500 text-yellow-300 cursor-pointer",
+                                                    onclick: move |evt| {
+                                                        evt.stop_propagation();
+                                                        hand_actions.call(HandAction::Chain {
+                                                            card_code: card_id,
+                                                            sequence: hand_chainables().get(&(index as u8)).copied().unwrap() as u8,
+                                                        });
+                                                    },
+                                                    SummonIcon {}
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }

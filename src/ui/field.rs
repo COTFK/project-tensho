@@ -6,7 +6,7 @@ use super::card::Card;
 pub fn Field(monsters: WriteSignal<Vec<u32>>) -> Element {
     rsx!(
         div { // Entire field
-            class: "mx-auto flex flex-col gap-3 w-min pt-8",
+            class: "mx-auto flex flex-col gap-3 w-min pt-24",
             div { // Extra Monster Zones
                 class: "flex flex-row gap-3 justify-evenly",
                 div {
@@ -42,10 +42,10 @@ pub fn Field(monsters: WriteSignal<Vec<u32>>) -> Element {
 fn Zone(id: Option<u32>) -> Element {
     rsx!(
         div {
-            class: "border-0.5 shadow-xl bg-slate-50/2 size-[14vw] aspect-square flex items-center justify-center",
+            class: "border-0.5 shadow-xl bg-slate-50/2 size-[12vw] aspect-square flex items-center justify-center",
             if id != Some(0) && id.is_some() {
                 div {
-                    class: "w-[9vw]",
+                    class: "w-[7vw]",
                     Card {
                         id: id.unwrap()
                     }

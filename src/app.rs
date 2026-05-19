@@ -22,6 +22,7 @@ pub fn App(duel: Duel) -> Element {
     let mut monsters = use_signal(Vec::new);
     let mut selected_card = use_signal(|| -1);
     let mut card_effect_prompt = use_signal(|| 0u32);
+    let mut hand_chainables = use_signal(HashMap::new);
 
     // global input toggle or something
     let mut waiting_on_input = use_signal(|| false);
@@ -44,10 +45,21 @@ pub fn App(duel: Duel) -> Element {
                 duel.set_response(&response);
                 waiting_on_input.set(false);
             }
+            HandAction::Chain {
+                card_code,
+                sequence,
+            } => {
+                debug!("Chain requested for card {card_code} at index {sequence}");
+
+                let response = [sequence, 0, 0, 0];
+                duel.set_response(&response);
+                waiting_on_input.set(false);
+            }
         }
 
         selected_card.set(-1);
         normal_summons.clear();
+        hand_chainables.clear();
     };
 
     use_effect(move || {
@@ -84,33 +96,21 @@ pub fn App(duel: Duel) -> Element {
                             }
                             CoreMessage::SelectChain => {
                                 if messages.len() < 20 {
-                                    debug!(
-                                        "SelectChain packet too short: {} bytes",
-                                        messages.len()
-                                    );
                                     return;
                                 }
 
                                 let player = messages[5];
                                 let count: usize;
-                                let mut offset: usize;
 
-                                // Determine the packet layout based on length
                                 if messages.len() == 20 {
-                                    // This is an empty priority pass packet (20 bytes total)
-                                    // Count is 0, no card options are attached.
                                     count = 0;
-                                    offset = 20;
                                 } else {
-                                    // This is a populated selection packet (Contains the 20-byte header + 12-byte option cards)
-                                    // Real count is a 32-bit little-endian integer sitting at bytes 16-19
                                     count = u32::from_le_bytes([
                                         messages[16],
                                         messages[17],
                                         messages[18],
                                         messages[19],
                                     ]) as usize;
-                                    offset = 20; // The actual card array entries start exactly at byte index 20
                                 }
 
                                 debug!("SelectChain -> Player: {}, Count: {}", player, count);
@@ -119,7 +119,7 @@ pub fn App(duel: Duel) -> Element {
                                     debug!(
                                         "No selectable chain choices present. Declining/Passing priority."
                                     );
-                                    let response: [u8; 4] = [255, 255, 255, 255]; // -1 to pass
+                                    let response: [u8; 4] = [255, 255, 255, 255];
                                     duel.set_response(&response);
                                     waiting_on_input.set(false);
                                 } else {
@@ -128,8 +128,10 @@ pub fn App(duel: Duel) -> Element {
                                         count
                                     );
 
-                                    for i in 0..count {
-                                        if offset + 4 <= messages.len() {
+                                    let mut offset = 20;
+
+                                    for chain_option in 0..count {
+                                        if offset + 7 <= messages.len() {
                                             let card_code = u32::from_le_bytes([
                                                 messages[offset],
                                                 messages[offset + 1],
@@ -137,20 +139,31 @@ pub fn App(duel: Duel) -> Element {
                                                 messages[offset + 3],
                                             ]);
 
-                                            // Get the location data right after the card code
                                             let controller = messages[offset + 4];
-                                            let location = messages[offset + 5];
+                                            let location_bit = messages[offset + 5];
                                             let sequence = messages[offset + 6];
 
+                                            // Safe decoding pattern to prevent unwrap crashes on unexpected bytes
+                                            let location = CardLocation::try_from(location_bit).unwrap();
+
                                             debug!(
-                                                "  Option #{}: Card ID {}, Controller: {}, Location: {}, Slot: {}",
-                                                i, card_code, controller, location, sequence
+                                                "  Option #{}: Card ID {}, Controller: {}, Location: {:?}, Slot: {}",
+                                                chain_option, card_code, controller, location, sequence
                                             );
+
+                                            match location {
+                                                CardLocation::Hand => {
+                                                    hand_chainables.with_mut(|v| v.insert(sequence, chain_option));
+                                                }
+                                                _ => {}
+                                            }
                                         }
-                                        offset += 12; // Advance to the next 12-byte choice structure
+
+                                        // Advance by 23 bytes to cleanly clear the trailing descriptive payload fields
+                                        offset += 23;
                                     }
 
-                                    waiting_on_input.set(true); // Stop automated responses and prompt user UI
+                                    waiting_on_input.set(true);
                                 }
                             }
                             CoreMessage::SelectEffectYN => {
@@ -210,6 +223,7 @@ pub fn App(duel: Duel) -> Element {
                 cards: hand_contents,
                 selected_card,
                 normal_summons,
+                hand_chainables: hand_chainables,
                 hand_actions,
             }
             ActivateEffectModal {card_id: card_effect_prompt}

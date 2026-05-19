@@ -10,6 +10,9 @@
     --color-red-400: oklch(70.4% 0.191 22.216);
     --color-red-500: oklch(63.7% 0.237 25.331);
     --color-red-800: oklch(44.4% 0.177 26.899);
+    --color-yellow-300: oklch(90.5% 0.182 98.111);
+    --color-yellow-400: oklch(85.2% 0.199 91.936);
+    --color-yellow-500: oklch(79.5% 0.184 86.047);
     --color-green-500: oklch(72.3% 0.219 149.579);
     --color-green-800: oklch(44.8% 0.119 151.328);
     --color-cyan-300: oklch(86.5% 0.127 207.078);
@@ -375,6 +378,14 @@
     width: calc(var(--spacing) * 16);
     height: calc(var(--spacing) * 16);
   }
+  .size-\[12vw\] {
+    width: 12vw;
+    height: 12vw;
+  }
+  .size-\[13vw\] {
+    width: 13vw;
+    height: 13vw;
+  }
   .size-\[14vw\] {
     width: 14vw;
     height: 14vw;
@@ -391,6 +402,12 @@
   }
   .min-h-full {
     min-height: 100%;
+  }
+  .w-\[7vw\] {
+    width: 7vw;
+  }
+  .w-\[8vw\] {
+    width: 8vw;
   }
   .w-\[9vw\] {
     width: 9vw;
@@ -563,6 +580,18 @@
   .border-cyan-500 {
     border-color: var(--color-cyan-500);
   }
+  .border-yellow-300 {
+    border-color: var(--color-yellow-300);
+  }
+  .border-yellow-300\/50 {
+    border-color: color-mix(in srgb, oklch(90.5% 0.182 98.111) 50%, transparent);
+    @supports (color: color-mix(in lab, red, red)) {
+      border-color: color-mix(in oklab, var(--color-yellow-300) 50%, transparent);
+    }
+  }
+  .border-yellow-500 {
+    border-color: var(--color-yellow-500);
+  }
   .bg-black {
     background-color: var(--color-black);
   }
@@ -617,6 +646,9 @@
       background-color: color-mix(in oklab, var(--color-white) 10%, transparent);
     }
   }
+  .bg-yellow-400 {
+    background-color: var(--color-yellow-400);
+  }
   .p-0 {
     padding: calc(var(--spacing) * 0);
   }
@@ -662,6 +694,9 @@
   .pt-8 {
     padding-top: calc(var(--spacing) * 8);
   }
+  .pt-24 {
+    padding-top: calc(var(--spacing) * 24);
+  }
   .pr-0 {
     padding-right: calc(var(--spacing) * 0);
   }
@@ -703,6 +738,9 @@
   }
   .text-white {
     color: var(--color-white);
+  }
+  .text-yellow-300 {
+    color: var(--color-yellow-300);
   }
   .lowercase {
     text-transform: lowercase;

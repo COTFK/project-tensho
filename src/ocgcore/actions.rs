@@ -10,6 +10,10 @@ pub enum HandAction {
         card_code: u32,
         summon_index: u16,
     },
+    Chain {
+        card_code: u32,
+        sequence: u8
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
