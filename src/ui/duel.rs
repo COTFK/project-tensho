@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use super::field::Field;
 use super::hand::Hand;
 use super::modal::SlidingModal;
+use super::picker::CardPicker;
 use crate::ocgcore::Duel;
 use crate::ocgcore::DuelStatus;
 use crate::ocgcore::UserResponse;
@@ -22,6 +23,7 @@ pub fn DuelScreen(duel: Duel) -> Element {
         waiting_on_input: use_signal(|| false),
         monsters: use_signal(Vec::new),
         card_prompting_to_activate: use_signal(Vec::new),
+        selectables: use_signal(|| Vec::new()),
     };
     use_context_provider(|| state);
 
@@ -82,6 +84,7 @@ pub fn DuelScreen(duel: Duel) -> Element {
             Field {}
             Hand {}
             SlidingModal {}
+            CardPicker {}
         }
     )
 }

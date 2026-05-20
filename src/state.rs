@@ -23,6 +23,7 @@ pub struct DuelState {
     pub waiting_on_input: Signal<bool>,
     pub monsters: Signal<Vec<u32>>,
     pub card_prompting_to_activate: Signal<Vec<ActiveCard>>,
+    pub selectables: Signal<Vec<ActiveCard>>
 }
 
 pub fn send_user_response(response: UserResponse) {
@@ -46,6 +47,7 @@ pub fn handle_core_message() {
     let mut card_prompting_to_activate = state.card_prompting_to_activate;
     let mut monsters = state.monsters;
     let mut hand_contents = state.hand_contents;
+    let mut selectables = state.selectables;
 
     match duel.parse_messages() {
         CoreMessage::Retry => {
@@ -71,7 +73,11 @@ pub fn handle_core_message() {
             card_prompting_to_activate.with_mut(|v| v.push(effect));
             waiting_on_input.set(true);
         }
-        CoreMessage::SelectCard => {}
+        CoreMessage::SelectCard(received_selectables) => {
+            debug!("selecting from {:?}", received_selectables);
+            selectables.set(received_selectables);
+            waiting_on_input.set(true);
+        }
     }
 
     monsters.set(duel.get_cards(CardLocation::MonsterZone));

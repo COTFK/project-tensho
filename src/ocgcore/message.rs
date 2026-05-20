@@ -10,7 +10,7 @@ pub enum CoreMessage {
     Retry,
     Idle(AvailableActions),
     SelectEffectYN(ActiveCard),
-    SelectCard,
+    SelectCard(Vec<ActiveCard>),
     SelectChain(Vec<ActiveCard>),
     SelectPlace,
 }
@@ -55,7 +55,26 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                     chain_option: None,
                 }))
             }
-            15 => Ok(CoreMessage::SelectCard),
+            15 => {
+                let mut selectables = Vec::new();
+                let count = messages[15] as usize;
+
+                for index in 0..count {
+                    let offset = 19 + (index * 14);
+
+                    let id = u32::from_le_bytes([
+                        messages[offset],
+                        messages[offset + 1],
+                        messages[offset + 2],
+                        messages[offset + 3],
+                    ]);
+                    let location = CardLocation::try_from(messages[offset + 5]).unwrap();
+
+                    selectables.push(ActiveCard { card_code: id, controller: CardController::Player, location: location, sequence: index as u8, chain_option: None });
+                }
+
+                Ok(CoreMessage::SelectCard(selectables))
+            }
             16 => {
                 let count =
                     u32::from_le_bytes([messages[16], messages[17], messages[18], messages[19]])

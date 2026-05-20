@@ -14,6 +14,9 @@ pub enum UserResponse {
     NormalSummon {
         sequence: u8,
     },
+    SelectCard {
+        sequence: u8,
+    },
 }
 
 impl UserResponse {
@@ -29,6 +32,7 @@ impl UserResponse {
             } => vec![*controller, *location, *index],
             Self::Chain { sequence } => vec![*sequence, 0, 0, 0],
             Self::NormalSummon { sequence } => vec![0, 0, *sequence, 0],
+            Self::SelectCard { sequence } => vec![2, 0, 0, 0, 1, 0, 0, 0, *sequence],
         }
     }
 }

@@ -4,5 +4,6 @@ mod field;
 mod hand;
 mod modal;
 mod svg;
+mod picker;
 
 pub use duel::DuelScreen;
