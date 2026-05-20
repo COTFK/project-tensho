@@ -83,7 +83,7 @@ fn Zone(index: u8, id: Option<u32>, zone_type: CardLocation) -> Element {
             },
             if id != Some(0) && id.is_some() {
                 div {
-                    class: "w-[7vw] relative",
+                    class: "relative",
                     onclick: move |evt| {
                         evt.stop_propagation();
 
