@@ -8,6 +8,7 @@ use super::actions::AvailableActions;
 use super::constants::CardLocation;
 use super::duel_status::DuelStatus;
 use super::memory::CorePointer;
+use crate::ocgcore::CoreMessage;
 use crate::ocgcore::UserResponse;
 use crate::ocgcore::constants::{CardController, CardOwner};
 
@@ -119,8 +120,11 @@ impl Duel {
         Uint8Array::new_with_byte_offset_and_length(&buffer, msg_ptr, len).to_vec()
     }
 
-    pub fn get_available_actions(&self, messages: Vec<u8>) -> anyhow::Result<AvailableActions> {
-        AvailableActions::try_from(&messages[..])
+    pub fn parse_messages(&self) -> CoreMessage {
+        let messages = self.get_messages();
+        let msg_type = CoreMessage::try_from(messages).unwrap();
+
+        return msg_type
     }
 
     pub fn process(&self) -> DuelStatus {
