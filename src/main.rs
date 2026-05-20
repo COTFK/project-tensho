@@ -40,7 +40,7 @@ pub fn AppContainer() -> Element {
         let mut all_cards = Vec::from(MAIN_DECK_IDS);
         all_cards.append(&mut Vec::from(EXTRA_DECK_IDS));
         cache_scripts(&all_cards).await;
-        // cache_labels(&all_cards).await;
+        cache_labels(&all_cards).await;
 
         let core = OCGCore::load().await?;
         let duel = core.create_duel().unwrap();

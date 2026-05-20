@@ -7,6 +7,7 @@ use crate::ocgcore::Duel;
 use crate::ocgcore::UserResponse;
 use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
+use crate::utility::get_cached_label;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SelectedCard {
@@ -23,7 +24,8 @@ pub struct DuelState {
     pub waiting_on_input: Signal<bool>,
     pub monsters: Signal<Vec<u32>>,
     pub card_prompting_to_activate: Signal<Vec<ActiveCard>>,
-    pub selectables: Signal<Vec<ActiveCard>>
+    pub selectables: Signal<Vec<ActiveCard>>,
+    pub yes_no_question: Signal<Option<String>>,
 }
 
 pub fn send_user_response(response: UserResponse) {
@@ -48,6 +50,7 @@ pub fn handle_core_message() {
     let mut monsters = state.monsters;
     let mut hand_contents = state.hand_contents;
     let mut selectables = state.selectables;
+    let mut yes_no_question = state.yes_no_question;
 
     match duel.parse_messages() {
         CoreMessage::Retry => {
@@ -77,6 +80,22 @@ pub fn handle_core_message() {
             debug!("selecting from {:?}", received_selectables);
             selectables.set(received_selectables);
             waiting_on_input.set(true);
+        }
+        CoreMessage::SelectYesNo {
+            player: _,
+            card_code,
+            string_index,
+        } => {
+            debug!("got {card_code}, {string_index}");
+
+            let label = get_cached_label(card_code).unwrap();
+            yes_no_question.set(Some(
+                label
+                    .optional_strings
+                    .get(&string_index)
+                    .unwrap()
+                    .to_owned(),
+            ));
         }
     }
 

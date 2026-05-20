@@ -10,6 +10,11 @@ pub enum CoreMessage {
     Retry,
     Idle(AvailableActions),
     SelectEffectYN(ActiveCard),
+    SelectYesNo {
+        player: u8,
+        card_code: u32,
+        string_index: usize,
+    },
     SelectCard(Vec<ActiveCard>),
     SelectChain(Vec<ActiveCard>),
     SelectPlace,
@@ -54,7 +59,25 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                     sequence,
                     chain_option: None,
                 }))
-            }
+            },
+            13 => {
+                let player = messages[5];
+
+                let description_id = u64::from_le_bytes([
+                    messages[6],  messages[7],  messages[8],  messages[9],
+                    messages[10], messages[11], messages[12], messages[13],
+                ]);
+
+                let card_code = ((description_id >> 20) & 0xffff_ffff) as u32;
+                let string_index = (description_id & 0xfffff) as usize;
+                tracing::debug!("card {}, string index {}", card_code, string_index);
+
+                Ok(CoreMessage::SelectYesNo { 
+                    player, 
+                    card_code, 
+                    string_index 
+                })
+            },
             15 => {
                 let mut selectables = Vec::new();
                 let count = messages[15] as usize;
@@ -70,7 +93,13 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                     ]);
                     let location = CardLocation::try_from(messages[offset + 5]).unwrap();
 
-                    selectables.push(ActiveCard { card_code: id, controller: CardController::Player, location: location, sequence: index as u8, chain_option: None });
+                    selectables.push(ActiveCard {
+                        card_code: id,
+                        controller: CardController::Player,
+                        location: location,
+                        sequence: index as u8,
+                        chain_option: None,
+                    });
                 }
 
                 Ok(CoreMessage::SelectCard(selectables))

@@ -3,7 +3,9 @@ use std::collections::HashMap;
 
 use super::field::Field;
 use super::hand::Hand;
-use super::modal::SlidingModal;
+use super::modal::ChainQuestionModal;
+use super::modal::TriggerModal;
+use super::modal::YesNoModal;
 use super::picker::CardPicker;
 use crate::ocgcore::Duel;
 use crate::ocgcore::DuelStatus;
@@ -24,6 +26,7 @@ pub fn DuelScreen(duel: Duel) -> Element {
         monsters: use_signal(Vec::new),
         card_prompting_to_activate: use_signal(Vec::new),
         selectables: use_signal(|| Vec::new()),
+        yes_no_question: use_signal(|| None),
     };
     use_context_provider(|| state);
 
@@ -48,9 +51,11 @@ pub fn DuelScreen(duel: Duel) -> Element {
         }
     });
 
-    // Make right clicks exit chain states
+    // Add various behaviors to right clicks
     let right_click_handler = move |evt: MouseEvent| {
         let state = use_context::<DuelState>();
+
+        // Allow to decline chains & activations
         let mut card_prompting_to_activate = state.card_prompting_to_activate;
         let is_chainable = card_prompting_to_activate
             .iter()
@@ -60,10 +65,17 @@ pub fn DuelScreen(duel: Duel) -> Element {
             if is_chainable {
                 send_user_response(UserResponse::PassPriority)
             } else {
-                send_user_response(UserResponse::RefusePromptedEffect);
+                send_user_response(UserResponse::No);
             }
 
             card_prompting_to_activate.with_mut(|v| v.clear());
+        }
+
+        // Decline Yes/No questions
+        let mut yes_no_question = state.yes_no_question;
+        if yes_no_question().is_some() {
+            send_user_response(UserResponse::No);
+            yes_no_question.set(None);
         }
 
         evt.prevent_default();
@@ -83,8 +95,10 @@ pub fn DuelScreen(duel: Duel) -> Element {
             onclick: left_click_handler,
             Field {}
             Hand {}
-            SlidingModal {}
+            ChainQuestionModal {}
+            TriggerModal {}
             CardPicker {}
+            YesNoModal {}
         }
     )
 }

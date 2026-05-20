@@ -110,7 +110,7 @@ fn Zone(index: u8, id: Option<u32>, zone_type: CardLocation) -> Element {
                                                 if let Some(chain_option) = chain_option {
                                                     send_user_response(UserResponse::Chain { sequence: chain_option });
                                                 } else {
-                                                    send_user_response(UserResponse::ActivatePromptedEffect);
+                                                    send_user_response(UserResponse::Yes);
                                                 }
                                             },
                                             SummonIcon {}

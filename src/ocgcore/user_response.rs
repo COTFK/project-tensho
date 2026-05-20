@@ -1,7 +1,7 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum UserResponse {
-    ActivatePromptedEffect,
-    RefusePromptedEffect,
+    Yes,
+    No,
     PassPriority,
     Place {
         controller: u8,
@@ -22,8 +22,8 @@ pub enum UserResponse {
 impl UserResponse {
     pub fn get_response_bytes(&self) -> Vec<u8> {
         match self {
-            Self::ActivatePromptedEffect => vec![1, 0, 0, 0],
-            Self::RefusePromptedEffect => vec![0, 0, 0, 0],
+            Self::Yes => vec![1, 0, 0, 0],
+            Self::No => vec![0, 0, 0, 0],
             Self::PassPriority => vec![255, 255, 255, 255],
             Self::Place {
                 controller,

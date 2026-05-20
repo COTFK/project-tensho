@@ -5,9 +5,10 @@ use std::collections::HashSet;
 
 static CARD_DATA_FOLDER: Asset = asset!("/assets/card_data");
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CardLabel {
     pub name: String,
+    pub optional_strings: HashMap<usize, String>
 }
 
 thread_local! {
@@ -37,7 +38,13 @@ async fn get_label_data(id: &str) -> anyhow::Result<CardLabel> {
         .ok_or_else(|| anyhow::anyhow!("Missing name.en in response"))?
         .to_string();
 
-    Ok(CardLabel { name })
+    let mut optional_strings = HashMap::new();
+
+    if id == "44455560" { // Ulcanix
+        optional_strings.insert(2, String::from("Make this card's Level become that added monster's?"));
+    }
+
+    Ok(CardLabel { name, optional_strings })
 }
 
 pub async fn cache_labels(deck_card_ids: &[u32]) {

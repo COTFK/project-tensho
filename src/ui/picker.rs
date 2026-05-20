@@ -14,7 +14,7 @@ pub fn CardPicker() -> Element {
     rsx!(
         div {
             class: "z-100 absolute max-w-1/2 max-h-3/4 h-fit bg-gray-700 rounded-xl transition-all flex flex-col duration-300 ease-in-out justify-between mx-auto",
-            class: if !selectables.is_empty() { "shadow-xl inset-0" } else { "shadow-none -top-[100%] inset-x-0" },
+            class: if !selectables.is_empty() { "shadow-xl inset-0 top-4" } else { "shadow-none -top-[100%] inset-x-0" },
             p {
                 class: "text-white font-semibold p-4 bg-gray-800/70",
                 "Select a card"
