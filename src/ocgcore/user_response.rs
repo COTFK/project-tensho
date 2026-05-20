@@ -3,9 +3,17 @@ pub enum UserResponse {
     ActivatePromptedEffect,
     RefusePromptedEffect,
     PassPriority,
-    Place { controller: u8, location: u8, index: u8 },
-    Chain { sequence: u8 },
-    NormalSummon { sequence: u8 }
+    Place {
+        controller: u8,
+        location: u8,
+        index: u8,
+    },
+    Chain {
+        sequence: u8,
+    },
+    NormalSummon {
+        sequence: u8,
+    },
 }
 
 impl UserResponse {
@@ -17,10 +25,10 @@ impl UserResponse {
             Self::Place {
                 controller,
                 location,
-                index
+                index,
             } => vec![*controller, *location, *index],
             Self::Chain { sequence } => vec![*sequence, 0, 0, 0],
-            Self::NormalSummon { sequence } => vec![0, 0, *sequence, 0]
+            Self::NormalSummon { sequence } => vec![0, 0, *sequence, 0],
         };
 
         return response;

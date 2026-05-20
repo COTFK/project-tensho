@@ -1,15 +1,15 @@
 use dioxus::prelude::*;
 use std::collections::HashMap;
 
+use super::field::Field;
+use super::hand::Hand;
+use super::modal::SlidingModal;
 use crate::ocgcore::Duel;
 use crate::ocgcore::DuelStatus;
+use crate::ocgcore::UserResponse;
 use crate::state::DuelState;
 use crate::state::handle_core_message;
 use crate::state::send_user_response;
-use crate::ocgcore::UserResponse;
-use super::modal::SlidingModal;
-use super::field::Field;
-use super::hand::Hand;
 
 #[component]
 pub fn DuelScreen(duel: Duel) -> Element {
@@ -50,8 +50,10 @@ pub fn DuelScreen(duel: Duel) -> Element {
     let right_click_handler = move |evt: MouseEvent| {
         let state = use_context::<DuelState>();
         let mut card_prompting_to_activate = state.card_prompting_to_activate;
-        let is_chainable = card_prompting_to_activate.iter().any(|card| card.chain_option.is_some());
-        
+        let is_chainable = card_prompting_to_activate
+            .iter()
+            .any(|card| card.chain_option.is_some());
+
         if !card_prompting_to_activate().is_empty() {
             if is_chainable {
                 send_user_response(UserResponse::PassPriority)
@@ -64,7 +66,7 @@ pub fn DuelScreen(duel: Duel) -> Element {
 
         evt.prevent_default();
     };
-    
+
     let left_click_handler = move |_evt: MouseEvent| {
         let mut state = use_context::<DuelState>();
         if (state.selected_card)().is_some() {

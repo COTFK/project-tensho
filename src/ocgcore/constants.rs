@@ -3,7 +3,7 @@ pub enum CardLocation {
     Deck = 1,
     Hand = 2,
     MonsterZone = 4,
-    SpellTrapZone = 8
+    SpellTrapZone = 8,
 }
 
 impl TryFrom<u8> for CardLocation {
@@ -14,7 +14,7 @@ impl TryFrom<u8> for CardLocation {
             1 => Ok(CardLocation::Deck),
             2 => Ok(CardLocation::Hand),
             4 => Ok(CardLocation::MonsterZone),
-            _ => anyhow::bail!("Received wrong location value: {value}")
+            _ => anyhow::bail!("Received wrong location value: {value}"),
         }
     }
 }
@@ -32,11 +32,10 @@ impl TryFrom<u8> for CardOwner {
         match value {
             0 => Ok(CardOwner::Player),
             1 => Ok(CardOwner::_Opponent),
-            _ => anyhow::bail!("Received wrong owner value")
+            _ => anyhow::bail!("Received wrong owner value"),
         }
     }
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum CardController {
@@ -51,7 +50,7 @@ impl TryFrom<u8> for CardController {
         match value {
             0 => Ok(CardController::Player),
             1 => Ok(CardController::_Opponent),
-            _ => anyhow::bail!("Received wrong controller value")
+            _ => anyhow::bail!("Received wrong controller value"),
         }
     }
 }

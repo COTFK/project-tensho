@@ -11,7 +11,7 @@ pub struct OCGPlayer {
 pub struct OCGCardData {
     pub code: u32,
     pub alias: u32,
-    pub setcodes: u32,  // This will be a pointer written separately
+    pub setcodes: u32, // This will be a pointer written separately
     pub type_: u32,
     pub level: u32,
     pub attribute: u32,

@@ -10,7 +10,7 @@ pub struct ActiveCard {
     pub controller: CardController,
     pub location: CardLocation,
     pub sequence: u8,
-    pub chain_option: Option<u8>
+    pub chain_option: Option<u8>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -136,7 +136,7 @@ impl TryFrom<&[u8]> for AvailableActions {
                     )?)?,
                     location: CardLocation::try_from(read_u8(raw, c, "normal_summons.location")?)?,
                     sequence: read_u32(raw, c, "normal_summons.sequence")? as u8,
-                    chain_option: None
+                    chain_option: None,
                 })
             })?;
 
@@ -151,7 +151,7 @@ impl TryFrom<&[u8]> for AvailableActions {
                     )?)?,
                     location: CardLocation::try_from(read_u8(raw, c, "special_summons.location")?)?,
                     sequence: read_u32(raw, c, "special_summons.sequence")? as u8,
-                    chain_option: None
+                    chain_option: None,
                 })
             })?;
 
@@ -170,7 +170,7 @@ impl TryFrom<&[u8]> for AvailableActions {
                         "battle_positions.location",
                     )?)?,
                     sequence: read_u8(raw, c, "battle_positions.sequence")?,
-                    chain_option: None
+                    chain_option: None,
                 })
             })?;
 
@@ -180,7 +180,7 @@ impl TryFrom<&[u8]> for AvailableActions {
                 controller: CardController::try_from(read_u8(raw, c, "monster_sets.controller")?)?,
                 location: CardLocation::try_from(read_u8(raw, c, "monster_sets.location")?)?,
                 sequence: read_u32(raw, c, "monster_sets.sequence")? as u8,
-                    chain_option: None
+                chain_option: None,
             })
         })?;
 
@@ -195,7 +195,7 @@ impl TryFrom<&[u8]> for AvailableActions {
                     )?)?,
                     location: CardLocation::try_from(read_u8(raw, c, "spell_trap_sets.location")?)?,
                     sequence: read_u32(raw, c, "spell_trap_sets.sequence")? as u8,
-                    chain_option: None
+                    chain_option: None,
                 })
             })?;
 
@@ -213,7 +213,7 @@ impl TryFrom<&[u8]> for AvailableActions {
                     controller: CardController::try_from(controller)?,
                     location: CardLocation::try_from(location)?,
                     sequence,
-                    chain_option: None
+                    chain_option: None,
                 })
             })?;
 

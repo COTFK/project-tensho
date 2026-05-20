@@ -1,8 +1,8 @@
 use dioxus::prelude::*;
 
-use crate::state::send_user_response;
-use crate::state::DuelState;
 use crate::ocgcore::UserResponse;
+use crate::state::DuelState;
+use crate::state::send_user_response;
 
 #[component]
 pub fn SlidingModal() -> Element {

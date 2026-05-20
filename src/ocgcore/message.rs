@@ -41,13 +41,20 @@ impl TryFrom<Vec<u8>> for CoreMessage {
 
                 tracing::debug!(
                     "SelectEffectYN -> Player: {}, Card: {}, Location: {:?}, Zone Index: {}",
-                    player, card_code, location, sequence
+                    player,
+                    card_code,
+                    location,
+                    sequence
                 );
 
-                Ok(CoreMessage::SelectEffectYN(
-                    ActiveCard { card_code, controller: CardController::Player, location, sequence, chain_option: None }
-                ))
-            },
+                Ok(CoreMessage::SelectEffectYN(ActiveCard {
+                    card_code,
+                    controller: CardController::Player,
+                    location,
+                    sequence,
+                    chain_option: None,
+                }))
+            }
             15 => Ok(CoreMessage::SelectCard),
             16 => {
                 let count =

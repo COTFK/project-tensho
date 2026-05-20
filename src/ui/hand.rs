@@ -5,8 +5,8 @@ use super::svg::SummonIcon;
 use crate::ocgcore::UserResponse;
 use crate::ocgcore::constants::CardLocation;
 use crate::state::DuelState;
-use crate::state::send_user_response;
 use crate::state::SelectedCard;
+use crate::state::send_user_response;
 
 #[component]
 pub fn Hand() -> Element {

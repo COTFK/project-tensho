@@ -1,19 +1,19 @@
 mod ocgcore;
+mod state;
 mod ui;
 mod utility;
-mod state;
 
 use dioxus::prelude::*;
 use rand::seq::SliceRandom;
 
-use crate::ui::DuelScreen;
 use crate::ocgcore::OCGCore;
 use crate::ocgcore::constants::*;
+use crate::ui::DuelScreen;
 use crate::utility::EXTRA_DECK_IDS;
 use crate::utility::MAIN_DECK_IDS;
+use crate::utility::cache_labels;
 use crate::utility::cache_scripts;
 use crate::utility::get_cached_script;
-use crate::utility::cache_labels;
 
 static _OCGCORE_WASM: Asset = asset!(
     "/assets/ocgcore.wasm",
@@ -40,7 +40,7 @@ pub fn AppContainer() -> Element {
         let mut all_cards = Vec::from(MAIN_DECK_IDS);
         all_cards.append(&mut Vec::from(EXTRA_DECK_IDS));
         cache_scripts(&all_cards).await;
-        cache_labels(&all_cards).await;
+        // cache_labels(&all_cards).await;
 
         let core = OCGCore::load().await?;
         let duel = core.create_duel().unwrap();

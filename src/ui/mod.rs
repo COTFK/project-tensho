@@ -1,8 +1,8 @@
 mod card;
+mod duel;
 mod field;
 mod hand;
-mod svg;
 mod modal;
-mod duel;
+mod svg;
 
 pub use duel::DuelScreen;

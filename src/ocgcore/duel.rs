@@ -4,7 +4,6 @@ use js_sys::Uint32Array;
 use wasm_bindgen::JsCast;
 
 use super::OCGCore;
-use super::actions::AvailableActions;
 use super::constants::CardLocation;
 use super::duel_status::DuelStatus;
 use super::memory::CorePointer;
@@ -124,7 +123,7 @@ impl Duel {
         let messages = self.get_messages();
         let msg_type = CoreMessage::try_from(messages).unwrap();
 
-        return msg_type
+        return msg_type;
     }
 
     pub fn process(&self) -> DuelStatus {
@@ -284,4 +283,3 @@ impl Duel {
         )
     }
 }
-

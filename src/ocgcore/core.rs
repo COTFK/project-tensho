@@ -124,17 +124,18 @@ impl OCGCore {
             let setcodes_array = if data.setcodes > 0 {
                 // Allocate 4 bytes: 2 bytes for the setcode value + 2 bytes for terminator (0x0000)
                 let setcodes_ptr = inst.malloc(4) as u32;
-                
+
                 // Write setcode as u16 at offset 0
                 let setcode_u16 = (data.setcodes & 0xFFFF) as u16;
                 let setcode_bytes = setcode_u16.to_le_bytes();
                 let sc_view = Uint8Array::new_with_byte_offset_and_length(&buffer, setcodes_ptr, 2);
                 sc_view.set(&Uint8Array::from(setcode_bytes.as_slice()), 0);
-                
+
                 // Write terminator (0x0000) at offset 2
-                let term_view = Uint8Array::new_with_byte_offset_and_length(&buffer, setcodes_ptr + 2, 2);
+                let term_view =
+                    Uint8Array::new_with_byte_offset_and_length(&buffer, setcodes_ptr + 2, 2);
                 term_view.set(&Uint8Array::from(&[0u8, 0u8][..]), 0);
-                
+
                 setcodes_ptr
             } else {
                 0
@@ -142,7 +143,7 @@ impl OCGCore {
 
             // Update the setcodes field to point to the allocated array
             data.setcodes = setcodes_array;
-            
+
             // Write OCGCardData to WASM memory
             let mut data_bytes = [0u8; std::mem::size_of::<OCGCardData>()];
             data.write_bytes(&mut data_bytes);

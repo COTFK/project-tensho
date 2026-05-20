@@ -41,7 +41,6 @@ pub fn handle_core_message() {
     let state = use_context::<DuelState>();
 
     let duel = state.duel;
-
     let mut normal_summons = state.normal_summons;
     let mut waiting_on_input = state.waiting_on_input;
     let mut card_prompting_to_activate = state.card_prompting_to_activate;
