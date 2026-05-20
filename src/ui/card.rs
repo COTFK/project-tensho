@@ -7,6 +7,7 @@ pub fn Card(id: String) -> Element {
     rsx!(div {
         image_rendering: "smooth",
         min_width: "50px",
+        min_height: "20dvh",
         width: "100%",
         aspect_ratio: "59/86",
         background_image: "url({image_url})",

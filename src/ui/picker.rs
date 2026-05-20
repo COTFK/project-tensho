@@ -23,7 +23,7 @@ pub fn CardPicker() -> Element {
                 class: "flex flex-row gap-2 m-4 overflow-x-auto",
                 for card in selectables() {
                     div {
-                        class: "flex-grow border-2",
+                        class: "border-2",
                         class: if selected_card() == Some(card.sequence) { "border-yellow-300" } else { "border-transparent" },
                         onclick: move |_| {
                             selected_card.set(Some(card.sequence));

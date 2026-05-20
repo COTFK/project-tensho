@@ -5,7 +5,6 @@ use crate::ocgcore::ActiveCard;
 use crate::ocgcore::CoreMessage;
 use crate::ocgcore::Duel;
 use crate::ocgcore::UserResponse;
-use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
 use crate::utility::get_cached_label;
 
@@ -26,6 +25,7 @@ pub struct DuelState {
     pub card_prompting_to_activate: Signal<Vec<ActiveCard>>,
     pub selectables: Signal<Vec<ActiveCard>>,
     pub yes_no_question: Signal<Option<String>>,
+    pub available_zones: Signal<Vec<(CardLocation, u8)>>
 }
 
 pub fn send_user_response(response: UserResponse) {
@@ -34,6 +34,7 @@ pub fn send_user_response(response: UserResponse) {
     state.duel.set_response(response);
 
     // Clean up state and wait for new data
+    state.yes_no_question.set(None);
     state.waiting_on_input.set(false);
     state.selected_card.set(None);
     state.normal_summons.clear();
@@ -51,6 +52,7 @@ pub fn handle_core_message() {
     let mut hand_contents = state.hand_contents;
     let mut selectables = state.selectables;
     let mut yes_no_question = state.yes_no_question;
+    let mut available_zones = state.available_zones;
 
     match duel.parse_messages() {
         CoreMessage::Retry => {
@@ -58,12 +60,13 @@ pub fn handle_core_message() {
         }
         CoreMessage::Idle(actions) => {
             normal_summons.set(actions.get_normal_summons());
+            waiting_on_input.set(true);
         }
-        CoreMessage::SelectPlace => send_user_response(UserResponse::Place {
-            controller: CardController::Player as u8,
-            location: CardLocation::MonsterZone as u8,
-            index: 0,
-        }),
+        CoreMessage::SelectPlace(zones) => {
+            tracing::debug!("{zones:?}");
+            available_zones.set(zones);
+            waiting_on_input.set(true);
+        }
         CoreMessage::SelectChain(effects) => {
             if effects.is_empty() {
                 send_user_response(UserResponse::PassPriority);

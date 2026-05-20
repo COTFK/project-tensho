@@ -4,6 +4,7 @@ use super::card::Card;
 use super::svg::SummonIcon;
 use crate::ocgcore::UserResponse;
 use crate::ocgcore::constants::CardLocation;
+use crate::ocgcore::constants::CardController;
 use crate::state::DuelState;
 use crate::state::SelectedCard;
 use crate::state::send_user_response;
@@ -62,18 +63,36 @@ fn Zone(index: u8, id: Option<u32>, zone_type: CardLocation) -> Element {
     let is_selected =
         selected_card().is_some_and(|card| card.location == zone_type && card.index == index);
 
+    let mut available_zones = state.available_zones;
+    let clickable = available_zones().iter().any(|zone| zone.0 == zone_type && zone.1 == index);
+
     rsx!(
         div {
-            class: "border-0.5 shadow-xl bg-slate-50/2 size-[12vw] aspect-square flex items-center justify-center",
+            class: "shadow-xl bg-slate-50/2 size-[12vw] aspect-square flex items-center justify-center",
+            class: if clickable {"border-2 border-yellow-300"} else {"border-0.5"},
+            onclick: move |_| {
+                if clickable {
+                    send_user_response(UserResponse::Place {
+                        controller: CardController::Player as u8,
+                        location: zone_type as u8,
+                        index: index as u8,
+                    });
+
+                    available_zones.clear();
+                }
+            },
             if id != Some(0) && id.is_some() {
                 div {
                     class: "w-[7vw] relative",
                     onclick: move |evt| {
                         evt.stop_propagation();
-                        selected_card.set(Some(SelectedCard{
-                            location: zone_type,
-                            index: index as u8
-                        }));
+
+                        if id.is_some() {
+                            selected_card.set(Some(SelectedCard{
+                                location: zone_type,
+                                index: index as u8
+                            }));
+                        }
                     },
                     if activatable {
                         div {

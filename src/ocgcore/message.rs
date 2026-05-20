@@ -17,7 +17,7 @@ pub enum CoreMessage {
     },
     SelectCard(Vec<ActiveCard>),
     SelectChain(Vec<ActiveCard>),
-    SelectPlace,
+    SelectPlace(Vec<(CardLocation, u8)>),
 }
 
 impl TryFrom<Vec<u8>> for CoreMessage {
@@ -59,25 +59,31 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                     sequence,
                     chain_option: None,
                 }))
-            },
+            }
             13 => {
                 let player = messages[5];
 
                 let description_id = u64::from_le_bytes([
-                    messages[6],  messages[7],  messages[8],  messages[9],
-                    messages[10], messages[11], messages[12], messages[13],
+                    messages[6],
+                    messages[7],
+                    messages[8],
+                    messages[9],
+                    messages[10],
+                    messages[11],
+                    messages[12],
+                    messages[13],
                 ]);
 
                 let card_code = ((description_id >> 20) & 0xffff_ffff) as u32;
                 let string_index = (description_id & 0xfffff) as usize;
                 tracing::debug!("card {}, string index {}", card_code, string_index);
 
-                Ok(CoreMessage::SelectYesNo { 
-                    player, 
-                    card_code, 
-                    string_index 
+                Ok(CoreMessage::SelectYesNo {
+                    player,
+                    card_code,
+                    string_index,
                 })
-            },
+            }
             15 => {
                 let mut selectables = Vec::new();
                 let count = messages[15] as usize;
@@ -155,7 +161,48 @@ impl TryFrom<Vec<u8>> for CoreMessage {
 
                 Ok(CoreMessage::SelectChain(chainables))
             }
-            18 => Ok(CoreMessage::SelectPlace),
+            18 => {
+                let mut zones = Vec::new();
+
+                let player = messages[5];
+                let count = messages[6]; // Number of places to pick
+
+                // Extract the 32-bit zone layout mask
+                let zone_mask =
+                    u32::from_le_bytes([messages[7], messages[8], messages[9], messages[10]]);
+
+                // 1. Check Main Monster Zones (Bits 0 to 4)
+                // In ocgcore, a bit value of 0 means the zone is AVAILABLE
+                for seq in 0..5 {
+                    if (zone_mask & (1 << seq)) == 0 {
+                        zones.push((CardLocation::MonsterZone, seq));
+                    }
+                }
+
+                // 2. Check Extra Monster Zones (Bits 5 and 6)
+                // Note: In the response layout, EMZONE is submitted as LOCATION_MZONE
+                // with sequence 5 (Left EMZ) or sequence 6 (Right EMZ).
+                for seq in 5..7 {
+                    if (zone_mask & (1 << seq)) == 0 {
+                        zones.push((CardLocation::MonsterZone, seq));
+                    }
+                }
+
+                // 3. Check Spell & Trap Zones (Bits 8 to 12)
+                // Bit 8 is Column 1 (shift 8), Bit 12 is Column 5 (shift 12)
+                for seq in 0..5 {
+                    if (zone_mask & (1 << (8 + seq))) == 0 {
+                        zones.push((CardLocation::SpellTrapZone, seq));
+                    }
+                }
+
+                // 4. Check Field Spell Zone (Bit 13)
+                if (zone_mask & (1 << 13)) == 0 {
+                    zones.push((CardLocation::SpellTrapZone, 5)); // Field zone sequence index
+                }
+
+                Ok(CoreMessage::SelectPlace(zones))
+            }
             _ => anyhow::bail!("Received wrong message: {msg_value}"),
         }
     }

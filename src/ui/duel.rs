@@ -3,10 +3,7 @@ use std::collections::HashMap;
 
 use super::field::Field;
 use super::hand::Hand;
-use super::modal::ChainQuestionModal;
-use super::modal::TriggerModal;
-use super::modal::YesNoModal;
-use super::picker::CardPicker;
+use super::modal::ModalContainer;
 use crate::ocgcore::Duel;
 use crate::ocgcore::DuelStatus;
 use crate::ocgcore::UserResponse;
@@ -27,6 +24,7 @@ pub fn DuelScreen(duel: Duel) -> Element {
         card_prompting_to_activate: use_signal(Vec::new),
         selectables: use_signal(|| Vec::new()),
         yes_no_question: use_signal(|| None),
+        available_zones: use_signal(Vec::new)
     };
     use_context_provider(|| state);
 
@@ -93,12 +91,9 @@ pub fn DuelScreen(duel: Duel) -> Element {
             class: "h-dvh w-dvw bg-gray-800",
             oncontextmenu: right_click_handler,
             onclick: left_click_handler,
+            ModalContainer {}
             Field {}
             Hand {}
-            ChainQuestionModal {}
-            TriggerModal {}
-            CardPicker {}
-            YesNoModal {}
         }
     )
 }
