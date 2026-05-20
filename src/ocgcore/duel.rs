@@ -120,10 +120,7 @@ impl Duel {
     }
 
     pub fn parse_messages(&self) -> CoreMessage {
-        let messages = self.get_messages();
-        let msg_type = CoreMessage::try_from(messages).unwrap();
-
-        return msg_type;
+        CoreMessage::try_from(self.get_messages()).unwrap()
     }
 
     pub fn process(&self) -> DuelStatus {

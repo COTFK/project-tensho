@@ -123,7 +123,7 @@ impl OCGCore {
             // For now we handle single setcode values - convert to array
             let setcodes_array = if data.setcodes > 0 {
                 // Allocate 4 bytes: 2 bytes for the setcode value + 2 bytes for terminator (0x0000)
-                let setcodes_ptr = inst.malloc(4) as u32;
+                let setcodes_ptr = inst.malloc(4);
 
                 // Write setcode as u16 at offset 0
                 let setcode_u16 = (data.setcodes & 0xFFFF) as u16;

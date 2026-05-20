@@ -18,7 +18,7 @@ pub enum UserResponse {
 
 impl UserResponse {
     pub fn get_response_bytes(&self) -> Vec<u8> {
-        let response = match self {
+        match self {
             Self::ActivatePromptedEffect => vec![1, 0, 0, 0],
             Self::RefusePromptedEffect => vec![0, 0, 0, 0],
             Self::PassPriority => vec![255, 255, 255, 255],
@@ -29,8 +29,6 @@ impl UserResponse {
             } => vec![*controller, *location, *index],
             Self::Chain { sequence } => vec![*sequence, 0, 0, 0],
             Self::NormalSummon { sequence } => vec![0, 0, *sequence, 0],
-        };
-
-        return response;
+        }
     }
 }

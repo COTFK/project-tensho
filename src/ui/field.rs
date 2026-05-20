@@ -29,7 +29,7 @@ pub fn Field() -> Element {
             }
             div { // Main Monster Zones
                 class: "flex flex-row gap-3 justify-center",
-                Zone {index: 0, id: monsters().get(0).copied(), zone_type: CardLocation::MonsterZone}
+                Zone {index: 0, id: monsters().first().copied(), zone_type: CardLocation::MonsterZone}
                 Zone {index: 1, id: monsters().get(1).copied(), zone_type: CardLocation::MonsterZone}
                 Zone {index: 2, id: monsters().get(2).copied(), zone_type: CardLocation::MonsterZone}
                 Zone {index: 3, id: monsters().get(3).copied(), zone_type: CardLocation::MonsterZone}

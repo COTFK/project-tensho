@@ -15,10 +15,10 @@ use crate::state::send_user_response;
 pub fn DuelScreen(duel: Duel) -> Element {
     // Load everything into the struct and pass it on
     let state = DuelState {
-        duel: duel,
+        duel,
         hand_contents: use_signal(Vec::new),
         selected_card: use_signal(|| None),
-        normal_summons: use_signal(|| HashMap::new()),
+        normal_summons: use_signal(HashMap::new),
         waiting_on_input: use_signal(|| false),
         monsters: use_signal(Vec::new),
         card_prompting_to_activate: use_signal(Vec::new),
