@@ -20,8 +20,10 @@ pub struct DuelState {
     pub hand_contents: Signal<Vec<u32>>,
     pub selected_card: Signal<Option<SelectedCard>>,
     pub normal_summons: Signal<HashMap<u8, u16>>,
+    pub activatable_effects: Signal<HashMap<u16, ActiveCard>>,
     pub waiting_on_input: Signal<bool>,
     pub monsters: Signal<Vec<u32>>,
+    pub spell_traps: Signal<Vec<u32>>,
     pub card_prompting_to_activate: Signal<Vec<ActiveCard>>,
     pub selectables: Signal<Vec<ActiveCard>>,
     pub yes_no_question: Signal<Option<String>>,
@@ -34,11 +36,17 @@ pub fn send_user_response(response: UserResponse) {
     state.duel.set_response(response);
 
     // Clean up state and wait for new data
-    state.yes_no_question.set(None);
-    state.waiting_on_input.set(false);
+    state.hand_contents.clear();
     state.selected_card.set(None);
     state.normal_summons.clear();
+    state.activatable_effects.clear();
+    state.waiting_on_input.set(false);
+    state.monsters.clear();
+    state.spell_traps.clear();
     state.card_prompting_to_activate.clear();
+    state.selectables.clear();
+    state.yes_no_question.set(None);
+    state.available_zones.clear();
 }
 
 pub fn handle_core_message() {
@@ -46,9 +54,11 @@ pub fn handle_core_message() {
 
     let duel = state.duel;
     let mut normal_summons = state.normal_summons;
+    let mut activatable_effects = state.activatable_effects;
     let mut waiting_on_input = state.waiting_on_input;
     let mut card_prompting_to_activate = state.card_prompting_to_activate;
     let mut monsters = state.monsters;
+    let mut spell_traps = state.spell_traps;
     let mut hand_contents = state.hand_contents;
     let mut selectables = state.selectables;
     let mut yes_no_question = state.yes_no_question;
@@ -60,6 +70,7 @@ pub fn handle_core_message() {
         }
         CoreMessage::Idle(actions) => {
             normal_summons.set(actions.get_normal_summons());
+            activatable_effects.set(actions.get_activatable_effects());
             waiting_on_input.set(true);
         }
         CoreMessage::SelectPlace(zones) => {
@@ -96,12 +107,13 @@ pub fn handle_core_message() {
                 label
                     .optional_strings
                     .get(&string_index)
-                    .unwrap()
+                    .unwrap_or(&String::from("undefined label"))
                     .to_owned(),
             ));
         }
     }
 
     monsters.set(duel.get_cards(CardLocation::MonsterZone));
+    spell_traps.set(duel.get_cards(CardLocation::SpellTrapZone));
     hand_contents.set(duel.get_cards(CardLocation::Hand));
 }

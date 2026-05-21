@@ -13,6 +13,7 @@ pub fn Hand() -> Element {
     let state = use_context::<DuelState>();
     let cards = state.hand_contents;
     let normal_summons = state.normal_summons;
+    let activatable_effects = (state.activatable_effects)();
     let chainables = state.card_prompting_to_activate;
     let mut selected_card = state.selected_card;
 
@@ -25,6 +26,14 @@ pub fn Hand() -> Element {
             for (index, card_id) in cards().iter().copied().enumerate() {
                 {
                     let summon_index = normal_summons().get(&(index as u8)).copied();
+                    let activatable_card = activatable_effects.iter().find(|(_activate_index, card)| card.location == CardLocation::Hand && card.sequence == index as u8);
+                    let activatable_index = if activatable_card.is_some() {
+                        let inner = activatable_card.unwrap();
+                        *inner.0
+                    } else {
+                        0
+                    };
+
                     let prompted_card = chainables
                         .iter()
                         .find(|card| card.location == CardLocation::Hand && card.sequence == index as u8);
@@ -42,6 +51,7 @@ pub fn Hand() -> Element {
                     };
 
                     let summonable = summon_index.is_some();
+                    let activatable = activatable_card.is_some();
 
                     let chainable_id = chainable_id_opt.unwrap_or(0);
 
@@ -72,7 +82,7 @@ pub fn Hand() -> Element {
                                     class: "absolute -inset-[5px] rounded-[4px] bg-cyan-400 blur-[2px] mix-blend-screen pointer-events-none -z-10"
                                 }
                             }
-                            if chainable {
+                            if chainable || activatable {
                                 div {
                                     class: "absolute -inset-[5px] rounded-[4px] bg-yellow-400 blur-[2px] mix-blend-screen pointer-events-none -z-10"
                                 }
@@ -87,7 +97,7 @@ pub fn Hand() -> Element {
                                     class: "absolute inset-0 border-5 border-cyan-300/50 blur-[2px] mix-blend-screen pointer-events-none z-20 animate-pulse"
                                 }
                             }
-                            if chainable {
+                            if chainable || activatable {
                                 div {
                                     class: "absolute inset-0 border-5 border-yellow-300/50 blur-[2px] mix-blend-screen pointer-events-none z-20 animate-pulse"
                                 }
@@ -95,7 +105,7 @@ pub fn Hand() -> Element {
 
                             // Normal Summon button above selected card
                             if is_selected {
-                                if summonable || chainable {
+                                if summonable || chainable || activatable {
                                     div {
                                         class: "absolute -top-26 left-1/2 transform -translate-x-1/2 z-50 flex flex-col items-center justify-center",
                                         if summonable {
@@ -114,7 +124,7 @@ pub fn Hand() -> Element {
                                                 }
                                             }
                                         }
-                                        if chainable {
+                                        if chainable || activatable {
                                             div {
                                                 p {
                                                     class: "text-white font-semibold shadow-md",
@@ -124,7 +134,13 @@ pub fn Hand() -> Element {
                                                     class: "bg-black size-16 p-2 rounded-full border-3 border-yellow-500 text-yellow-300 cursor-pointer",
                                                     onclick: move |evt| {
                                                         evt.stop_propagation();
-                                                        send_user_response(UserResponse::Chain { sequence: chainable_id });
+                                                        if chainable {
+                                                            send_user_response(UserResponse::Chain { sequence: chainable_id });
+                                                        }
+                                                        if activatable {
+                                                            send_user_response(UserResponse::Activate { sequence: activatable_index as u8 });
+                                                        }
+                                                        
                                                     },
                                                     SummonIcon {}
                                                 }

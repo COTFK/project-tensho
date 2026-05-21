@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use super::constants::CardController;
 use super::constants::CardLocation;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ActiveCard {
     pub card_code: u32,
     pub controller: CardController,
@@ -32,7 +32,15 @@ impl AvailableActions {
         self.normal_summons
             .iter()
             .enumerate()
-            .map(|(summon_index, card)| (card.sequence, summon_index as u16))
+            .map(|(index, card)| (card.sequence, index as u16))
+            .collect()
+    }
+
+    pub fn get_activatable_effects(&self) -> HashMap<u16, ActiveCard> {
+        self.activatable_effects
+            .iter()
+            .enumerate()
+            .map(|(index, card)| (index as u16, card.clone()))
             .collect()
     }
 }
