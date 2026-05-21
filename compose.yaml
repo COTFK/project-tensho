@@ -1,0 +1,11 @@
+name: burning-draw
+
+services:
+  app:
+    build: .
+    develop:
+      watch:
+        - action: rebuild
+          path: ./src
+    ports:
+      - "8080:80"

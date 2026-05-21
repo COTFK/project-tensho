@@ -16,14 +16,19 @@ use crate::utility::cache_scripts;
 use crate::utility::get_cached_script;
 
 static _OCGCORE_WASM: Asset = asset!(
-    "/assets/ocgcore.wasm",
+    "assets/ocgcore.wasm",
     AssetOptions::builder()
         .with_hash_suffix(false)
         .into_asset_options()
 );
 static _OCGCORE_JS: Asset = asset!(
-    "/assets/ocgcore.js",
-    AssetOptions::js().with_hash_suffix(false)
+    "assets/ocgcore.js",
+    AssetOptions::js()
+        .with_hash_suffix(false)
+        .with_minify(false)
+        .with_module(false)
+        .with_preload(true)
+        .into_asset_options()
 );
 
 fn main() {
