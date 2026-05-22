@@ -10,6 +10,7 @@ RUN cargo install cargo-chef
 RUN curl -sSL https://dioxus.dev/install.sh | bash
 
 # Install Emscripten EMSDK
+COPY scripts/install-emsdk.sh scripts/install-emsdk.sh
 RUN bash scripts/install-emsdk.sh
 
 # Planner stage to analyze dependencies
@@ -31,7 +32,7 @@ RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
 
 # Build ocgcore
-RUN bash scripts/build_ocgcore.sh
+RUN scripts/build_ocgcore.sh
 
 # Build the web app
 RUN dx bundle --platform web --debug-symbols=false --out-dir bundle
