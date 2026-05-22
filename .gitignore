@@ -2,6 +2,8 @@
 /tools/
 assets/ocgcore.js
 assets/ocgcore.wasm
+public/ocgcore.js
+public/ocgcore.wasm
 edopro/
 *.ydk
 CardScripts/

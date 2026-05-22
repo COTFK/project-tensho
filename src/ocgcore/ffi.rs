@@ -1,6 +1,6 @@
 use wasm_bindgen::prelude::*;
 
-#[wasm_bindgen(raw_module = "/assets/ocgcore.js")]
+#[wasm_bindgen(raw_module = "../ocgcore.js")]
 extern "C" {
     #[derive(Debug, Clone, PartialEq)]
     pub type OCGCoreInstance;
