@@ -5,6 +5,7 @@ use crate::ocgcore::ActiveCard;
 use crate::ocgcore::CoreMessage;
 use crate::ocgcore::Duel;
 use crate::ocgcore::UserResponse;
+use crate::ocgcore::constants::BattlePosition;
 use crate::ocgcore::constants::CardLocation;
 use crate::utility::get_cached_label;
 
@@ -27,7 +28,8 @@ pub struct DuelState {
     pub card_prompting_to_activate: Signal<Vec<ActiveCard>>,
     pub selectables: Signal<Vec<ActiveCard>>,
     pub yes_no_question: Signal<Option<String>>,
-    pub available_zones: Signal<Vec<(CardLocation, u8)>>
+    pub available_zones: Signal<Vec<(CardLocation, u8)>>,
+    pub positions_to_select: Signal<Vec<BattlePosition>>
 }
 
 pub fn send_user_response(response: UserResponse) {
@@ -47,6 +49,7 @@ pub fn send_user_response(response: UserResponse) {
     state.selectables.clear();
     state.yes_no_question.set(None);
     state.available_zones.clear();
+    state.positions_to_select.clear();
 }
 
 pub fn handle_core_message() {
@@ -63,6 +66,7 @@ pub fn handle_core_message() {
     let mut selectables = state.selectables;
     let mut yes_no_question = state.yes_no_question;
     let mut available_zones = state.available_zones;
+    let mut positions_to_select = state.positions_to_select;
 
     match duel.parse_messages() {
         CoreMessage::Retry => {
@@ -110,7 +114,11 @@ pub fn handle_core_message() {
                     .unwrap_or(&String::from("undefined label"))
                     .to_owned(),
             ));
-        }
+        },
+        CoreMessage::SelectPosition(positions) => {
+            positions_to_select.set(positions);
+            waiting_on_input.set(true);
+        },
     }
 
     monsters.set(duel.get_cards(CardLocation::MonsterZone));

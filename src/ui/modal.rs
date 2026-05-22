@@ -10,6 +10,7 @@ pub fn ModalContainer() -> Element {
     let card_ids = state.card_prompting_to_activate;
     let selectables = state.selectables;
     let yes_no_question = state.yes_no_question;
+    let positions_to_select = state.positions_to_select;
 
     let mut selected_card = use_signal(|| None);
 
@@ -49,7 +50,7 @@ pub fn ModalContainer() -> Element {
                 }
             }
         }
-        Modal {
+        Modal { // Card picker
             enabled: !selectables.is_empty(),
             message: "Select a card",
             vertical: true,
@@ -80,6 +81,22 @@ pub fn ModalContainer() -> Element {
                     onclick: move |_| send_user_response(UserResponse::SelectCard { sequence: selected_card.unwrap() }),
                     "Done"
                 }
+            }
+        }
+        Modal {
+            enabled: !positions_to_select.is_empty(),
+            message: "Select battle position",
+            vertical: true,
+            {
+                rsx!(
+                    for position in positions_to_select() {
+                        button {
+                            class: "h-12 w-full rounded-lg font-semibold text-white mx-auto bg-gray-600 cursor-pointer",
+                            onclick: move |_| send_user_response(UserResponse::SelectPosition { position }),
+                            {position.to_string()}
+                        }
+                    }
+                )
             }
         }
     )

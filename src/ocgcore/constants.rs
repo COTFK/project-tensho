@@ -55,3 +55,22 @@ impl TryFrom<u8> for CardController {
         }
     }
 }
+
+#[derive(Debug, PartialEq, Eq, Copy, Clone, PartialOrd, Ord)]
+pub enum BattlePosition {
+    FaceUpAttack = 1,
+    FaceDownAttack = 2,
+    FaceUpDefense = 4,
+    FaceDownDefense = 8,
+}
+
+impl ToString for BattlePosition {
+    fn to_string(&self) -> String {
+        match self {
+            Self::FaceUpAttack => String::from("Face-up Attack Position"),
+            Self::FaceDownAttack => String::from("Face-down Attack Position"),
+            Self::FaceUpDefense => String::from("Face-up Defense Position"),
+            Self::FaceDownDefense => String::from("Face-down Defense Position")
+        }
+    }
+}

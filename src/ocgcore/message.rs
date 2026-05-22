@@ -4,6 +4,7 @@ use super::actions::ActiveCard;
 use super::actions::AvailableActions;
 use super::constants::CardController;
 use super::constants::CardLocation;
+use super::constants::BattlePosition;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CoreMessage {
@@ -18,6 +19,7 @@ pub enum CoreMessage {
     SelectCard(Vec<ActiveCard>),
     SelectChain(Vec<ActiveCard>),
     SelectPlace(Vec<(CardLocation, u8)>),
+    SelectPosition(Vec<BattlePosition>),
 }
 
 impl TryFrom<Vec<u8>> for CoreMessage {
@@ -203,6 +205,25 @@ impl TryFrom<Vec<u8>> for CoreMessage {
 
                 Ok(CoreMessage::SelectPlace(zones))
             }
+            19 => {
+                let mut allowed_positions = Vec::new();
+                let position_mask = messages[10];
+
+                if (position_mask & 0x1) != 0 {
+                    allowed_positions.push(BattlePosition::FaceUpAttack);
+                }
+                if (position_mask & 0x2) != 0 {
+                    allowed_positions.push(BattlePosition::FaceDownAttack);
+                }
+                if (position_mask & 0x4) != 0 {
+                    allowed_positions.push(BattlePosition::FaceUpDefense);
+                }
+                if (position_mask & 0x8) != 0 {
+                    allowed_positions.push(BattlePosition::FaceDownDefense);
+                }
+
+                Ok(CoreMessage::SelectPosition(allowed_positions))
+            },
             _ => anyhow::bail!("Received wrong message: {msg_value}"),
         }
     }

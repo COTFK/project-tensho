@@ -26,7 +26,8 @@ pub fn DuelScreen(duel: Duel) -> Element {
         card_prompting_to_activate: use_signal(Vec::new),
         selectables: use_signal(|| Vec::new()),
         yes_no_question: use_signal(|| None),
-        available_zones: use_signal(Vec::new)
+        available_zones: use_signal(Vec::new),
+        positions_to_select: use_signal(Vec::new)
     };
     use_context_provider(|| state);
 
