@@ -6,3 +6,6 @@ target/
 .DS_Store
 node_modules
 .cargo
+docs/
+public/
+tools/
