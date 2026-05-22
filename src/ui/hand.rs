@@ -1,6 +1,5 @@
 use dioxus::prelude::*;
 
-use super::card::Card;
 use super::svg::SummonIcon;
 use crate::ocgcore::UserResponse;
 use crate::ocgcore::constants::CardLocation;
@@ -88,8 +87,10 @@ pub fn Hand() -> Element {
                                 }
                             }
 
-                            Card {
-                                id: card_id
+                            img {
+                                image_rendering: "smooth",
+                                aspect_ratio: "59/86",
+                                src: format!("https://images.ygoprodeck.com/images/cards/{}.jpg", card_id),
                             }
 
                             if summon_index.is_some() {

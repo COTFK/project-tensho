@@ -1,6 +1,5 @@
 use dioxus::prelude::*;
 
-use super::card::Card;
 use super::svg::SummonIcon;
 use crate::ocgcore::UserResponse;
 use crate::ocgcore::constants::CardLocation;
@@ -17,31 +16,31 @@ pub fn Field() -> Element {
 
     rsx!(
         div { // Entire field
-            class: "mx-auto flex flex-col gap-3 w-min pt-24",
+            class: "mx-auto flex flex-col gap-3 w-min pt-[10vh]",
             div { // Extra Monster Zones
                 class: "flex flex-row gap-3 justify-center",
                 div {
-                    class: "size-[12vw] invisible",
+                    class: "size-[10vw] invisible",
                 },
                 div {
-                    class: "size-[12vw] invisible",
+                    class: "size-[10vw] invisible",
                 },
                 div {
                     class: "",
                     Zone {index: 5, zone_type: CardLocation::MonsterZone}
                 }
                 div {
-                    class: "size-[12vw] invisible",
+                    class: "size-[10vw] invisible",
                 },
                 div {
                     class: "",
                     Zone {index: 6, zone_type: CardLocation::MonsterZone}
                 },
                 div {
-                    class: "size-[12vw] invisible",
+                    class: "size-[10vw] invisible",
                 },
                 div {
-                    class: "size-[12vw] invisible",
+                    class: "size-[10vw] invisible",
                 },
             }
             div { // Main Monster Zones + Field Zone + GY
@@ -53,13 +52,13 @@ pub fn Field() -> Element {
                 Zone {index: 3, id: monsters().get(3).copied(), zone_type: CardLocation::MonsterZone}
                 Zone {index: 4, id: monsters().get(4).copied(), zone_type: CardLocation::MonsterZone},
                 div {
-                    class: "size-[12vw] invisible",
+                    class: "size-[10vw] invisible",
                 },
             }
             div { // Spell/Trap Zones
                 class: "flex flex-row gap-3 justify-center",
                 div {
-                    class: "size-[12vw] invisible",
+                    class: "size-[10vw] invisible",
                 },
                 Zone {index: 0, id: spell_traps().first().copied(), zone_type: CardLocation::SpellTrapZone}
                 Zone {index: 1, id: spell_traps().get(1).copied(), zone_type: CardLocation::SpellTrapZone}
@@ -67,7 +66,7 @@ pub fn Field() -> Element {
                 Zone {index: 3, id: spell_traps().get(3).copied(), zone_type: CardLocation::SpellTrapZone}
                 Zone {index: 4, id: spell_traps().get(4).copied(), zone_type: CardLocation::SpellTrapZone},
                 div {
-                    class: "size-[12vw] invisible",
+                    class: "size-[10vw] invisible",
                 }
             }
         }
@@ -81,7 +80,7 @@ fn Zone(index: u8, id: Option<u32>, zone_type: CardLocation) -> Element {
     let mut selected_card = state.selected_card;
 
     let activatable_effects = (state.activatable_effects)();
-    let activatable_card = activatable_effects.iter().find(|(eff_index, card)| card.location == zone_type && card.sequence == index);
+    let activatable_card = activatable_effects.iter().find(|(_eff_index, card)| card.location == zone_type && card.sequence == index);
     let activatable_eff_index = if activatable_card.is_some() {
         *activatable_card.unwrap().0
     } else {
@@ -103,7 +102,7 @@ fn Zone(index: u8, id: Option<u32>, zone_type: CardLocation) -> Element {
 
     rsx!(
         div {
-            class: "shadow-xl bg-slate-50/2 size-[12vw] aspect-square flex items-center justify-center",
+            class: "shadow-xl bg-slate-50/2 size-[10vw] aspect-square flex items-center justify-center",
             class: if clickable {"border-2 border-yellow-300"} else {"border-0.5"},
             onclick: move |_| {
                 if clickable {
@@ -134,11 +133,11 @@ fn Zone(index: u8, id: Option<u32>, zone_type: CardLocation) -> Element {
                             class: "absolute -inset-[5px] rounded-[4px] bg-yellow-400 blur-[2px] mix-blend-screen pointer-events-none z-10"
                         }
                     }
-                    div {
-                        class: "relative z-30",
-                        Card {
-                            id: id.unwrap()
-                        }
+                    img {
+                        class: "h-[10vw] z-20",
+                        image_rendering: "smooth",
+                        aspect_ratio: "59/86",
+                        src: format!("https://images.ygoprodeck.com/images/cards/{}.jpg", id.unwrap()),
                     }
                     if activatable || prompted{
                         div {
@@ -149,7 +148,7 @@ fn Zone(index: u8, id: Option<u32>, zone_type: CardLocation) -> Element {
                     if is_selected {
                         if activatable || prompted {
                             div {
-                                class: "absolute -top-26 left-1/2 transform -translate-x-1/2 z-50 flex flex-col items-center justify-center",
+                                class: "absolute -top-26 left-1/2 transform -translate-x-1/2 z-150 flex flex-col items-center justify-center",
                                 if activatable || prompted {
                                     div {
                                         p {
