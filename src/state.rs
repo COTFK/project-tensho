@@ -29,7 +29,7 @@ pub struct DuelState {
     pub selectables: Signal<Vec<ActiveCard>>,
     pub yes_no_question: Signal<Option<String>>,
     pub available_zones: Signal<Vec<(CardLocation, u8)>>,
-    pub positions_to_select: Signal<Vec<BattlePosition>>
+    pub positions_to_select: Signal<Vec<BattlePosition>>,
 }
 
 pub fn send_user_response(response: UserResponse) {
@@ -53,51 +53,42 @@ pub fn send_user_response(response: UserResponse) {
 }
 
 pub fn handle_core_message() {
-    let state = use_context::<DuelState>();
+    let mut state = use_context::<DuelState>();
 
-    let duel = state.duel;
-    let mut normal_summons = state.normal_summons;
-    let mut activatable_effects = state.activatable_effects;
-    let mut waiting_on_input = state.waiting_on_input;
-    let mut card_prompting_to_activate = state.card_prompting_to_activate;
-    let mut monsters = state.monsters;
-    let mut spell_traps = state.spell_traps;
-    let mut hand_contents = state.hand_contents;
-    let mut selectables = state.selectables;
-    let mut yes_no_question = state.yes_no_question;
-    let mut available_zones = state.available_zones;
-    let mut positions_to_select = state.positions_to_select;
-
-    match duel.parse_messages() {
+    match state.duel.parse_messages() {
         CoreMessage::Retry => {
             warn!("Received Retry - this shouldn't happen.");
         }
         CoreMessage::Idle(actions) => {
-            normal_summons.set(actions.get_normal_summons());
-            activatable_effects.set(actions.get_activatable_effects());
-            waiting_on_input.set(true);
+            state.normal_summons.set(actions.get_normal_summons());
+            state
+                .activatable_effects
+                .set(actions.get_activatable_effects());
+            state.waiting_on_input.set(true);
         }
         CoreMessage::SelectPlace(zones) => {
             tracing::debug!("{zones:?}");
-            available_zones.set(zones);
-            waiting_on_input.set(true);
+            state.available_zones.set(zones);
+            state.waiting_on_input.set(true);
         }
         CoreMessage::SelectChain(effects) => {
             if effects.is_empty() {
                 send_user_response(UserResponse::PassPriority);
             } else {
-                card_prompting_to_activate.set(effects);
-                waiting_on_input.set(true);
+                state.card_prompting_to_activate.set(effects);
+                state.waiting_on_input.set(true);
             }
         }
         CoreMessage::SelectEffectYN(effect) => {
-            card_prompting_to_activate.with_mut(|v| v.push(effect));
-            waiting_on_input.set(true);
+            state
+                .card_prompting_to_activate
+                .with_mut(|v| v.push(effect));
+            state.waiting_on_input.set(true);
         }
         CoreMessage::SelectCard(received_selectables) => {
             debug!("selecting from {:?}", received_selectables);
-            selectables.set(received_selectables);
-            waiting_on_input.set(true);
+            state.selectables.set(received_selectables);
+            state.waiting_on_input.set(true);
         }
         CoreMessage::SelectYesNo {
             player: _,
@@ -107,21 +98,27 @@ pub fn handle_core_message() {
             debug!("got {card_code}, {string_index}");
 
             let label = get_cached_label(card_code).unwrap();
-            yes_no_question.set(Some(
+            state.yes_no_question.set(Some(
                 label
                     .optional_strings
                     .get(&string_index)
                     .unwrap_or(&String::from("undefined label"))
                     .to_owned(),
             ));
-        },
+        }
         CoreMessage::SelectPosition(positions) => {
-            positions_to_select.set(positions);
-            waiting_on_input.set(true);
-        },
+            state.positions_to_select.set(positions);
+            state.waiting_on_input.set(true);
+        }
     }
 
-    monsters.set(duel.get_cards(CardLocation::MonsterZone));
-    spell_traps.set(duel.get_cards(CardLocation::SpellTrapZone));
-    hand_contents.set(duel.get_cards(CardLocation::Hand));
+    state
+        .monsters
+        .set(state.duel.get_cards(CardLocation::MonsterZone));
+    state
+        .spell_traps
+        .set(state.duel.get_cards(CardLocation::SpellTrapZone));
+    state
+        .hand_contents
+        .set(state.duel.get_cards(CardLocation::Hand));
 }
