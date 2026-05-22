@@ -4,6 +4,7 @@ pub enum CardLocation {
     Hand = 2,
     MonsterZone = 4,
     SpellTrapZone = 8,
+    Graveyard = 16,
 }
 
 impl TryFrom<u8> for CardLocation {
@@ -15,6 +16,7 @@ impl TryFrom<u8> for CardLocation {
             2 => Ok(CardLocation::Hand),
             4 => Ok(CardLocation::MonsterZone),
             8 => Ok(CardLocation::SpellTrapZone),
+            16 => Ok(CardLocation::Graveyard),
             _ => anyhow::bail!("Received wrong location value: {value}"),
         }
     }
