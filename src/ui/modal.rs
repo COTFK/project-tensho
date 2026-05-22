@@ -19,18 +19,18 @@ pub fn ModalContainer() -> Element {
             enabled: card_ids.iter().any(|card| card.chain_option.is_some()),
             message: "A card or effect can be activated. Activate?",
             button {
-                class: "w-32 h-8 bg-red-600 rounded-lg font-semibold",
+                class: "w-32 h-8 bg-red-600/70 rounded-lg font-semibold text-white",
                 onclick: |_| send_user_response(UserResponse::No),
-                "Cancel"
+                "No"
             }
         }
         Modal { 
             enabled: !card_ids.iter().any(|card| card.chain_option.is_some()) && !card_ids.is_empty(),
             message: "Activate trigger effect?",
             button {
-                class: "w-32 h-8 bg-red-600 rounded-lg font-semibold",
+                class: "w-32 h-8 bg-red-600/70 rounded-lg font-semibold text-gray-300",
                 onclick: |_| send_user_response(UserResponse::No),
-                "Cancel"
+                "No"
             }
         }
         Modal { 
@@ -75,7 +75,7 @@ pub fn ModalContainer() -> Element {
             div {
                 class: "flex flex-row",
                 button {
-                    class: "h-12 w-32 rounded-lg font-semibold text-white mx-auto",
+                    class: "h-10 w-24 rounded-lg font-semibold text-white mx-auto",
                     class: if !selected_card().is_some() { "bg-gray-600 cursor-not-allowed" } else { "bg-green-700 cursor-pointer" },
                     disabled: !selected_card().is_some(),
                     onclick: move |_| send_user_response(UserResponse::SelectCard { sequence: selected_card.unwrap() }),
@@ -112,7 +112,7 @@ pub fn Modal(enabled: bool, message: String, children: Element, vertical: Option
             class: "bg-gray-700/80 transition-all duration-300 ease-in-out",
             class: if enabled { "top-[2vh] shadow-xl " } else { "-top-[100%] shadow-none" },
             p {
-                class: "text-white font-semibold",
+                class: "text-white font-semibold text-gray-300",
                 "{message}"
             }
             {children}
