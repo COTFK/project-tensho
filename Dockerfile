@@ -32,6 +32,7 @@ RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
 
 # Build ocgcore
+RUN git submodule update --init --recursive
 RUN scripts/build_ocgcore.sh
 
 # Build the web app
