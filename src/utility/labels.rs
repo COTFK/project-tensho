@@ -43,6 +43,9 @@ async fn get_label_data(id: &str) -> anyhow::Result<CardLabel> {
     if id == "44455560" { // Ulcanix
         optional_strings.insert(2, String::from("Make this card's Level become that added monster's?"));
     }
+    if id == "65305978" {
+        optional_strings.insert(0, String::from("Place 1 \"Fire King Island\" from your Deck face-up in your Field Zone?"));
+    }
 
     Ok(CardLabel { name, optional_strings })
 }
