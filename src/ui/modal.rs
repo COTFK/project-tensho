@@ -106,9 +106,9 @@ pub fn ModalContainer() -> Element {
 pub fn Modal(enabled: bool, message: String, children: Element, vertical: Option<bool>) -> Element {
     rsx!(
         div {
-            class: "absolute left-1/2 -translate-x-[50%] z-100",
-            class: "max-h-[70vh] max-w-[60%] w-full p-4 rounded-lg",
-            class: if Some(true) == vertical { "flex flex-col items-stretch justify-start gap-4 h-full" } else { "flex items-center justify-between" },
+            class: "absolute left-1/2 -translate-x-[50%] z-40",
+            class: "max-h-[70vh] w-full p-4 rounded-lg",
+            class: if Some(true) == vertical { "flex flex-col items-stretch justify-start gap-4 h-full max-w-[70%]" } else { "flex items-center justify-between max-w-[90%]" },
             class: "bg-gray-700/80 transition-all duration-300 ease-in-out",
             class: if enabled { "top-[2vh] shadow-xl " } else { "-top-[100%] shadow-none" },
             p {

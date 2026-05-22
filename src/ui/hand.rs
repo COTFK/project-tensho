@@ -78,16 +78,17 @@ pub fn Hand() -> Element {
 
                             if summon_index.is_some() {
                                 div {
-                                    class: "absolute -inset-[5px] rounded-[4px] bg-cyan-400 blur-[2px] mix-blend-screen pointer-events-none -z-10"
+                                    class: "absolute -inset-[5px] rounded-[4px] bg-cyan-400 blur-[2px] mix-blend-screen pointer-events-none"
                                 }
                             }
                             if chainable || activatable {
                                 div {
-                                    class: "absolute -inset-[5px] rounded-[4px] bg-yellow-400 blur-[2px] mix-blend-screen pointer-events-none -z-10"
+                                    class: "absolute -inset-[5px] rounded-[4px] bg-yellow-400 blur-[2px] mix-blend-screen pointer-events-none"
                                 }
                             }
 
                             img {
+                                class: "relative",
                                 image_rendering: "smooth",
                                 aspect_ratio: "59/86",
                                 src: format!("https://images.ygoprodeck.com/images/cards/{}.jpg", card_id),
@@ -95,12 +96,12 @@ pub fn Hand() -> Element {
 
                             if summon_index.is_some() {
                                 div {
-                                    class: "absolute inset-0 border-5 border-cyan-300/50 blur-[2px] mix-blend-screen pointer-events-none z-20 animate-pulse"
+                                    class: "absolute inset-0 border-5 border-cyan-300/50 blur-[2px] mix-blend-screen pointer-events-none animate-pulse"
                                 }
                             }
                             if chainable || activatable {
                                 div {
-                                    class: "absolute inset-0 border-5 border-yellow-300/50 blur-[2px] mix-blend-screen pointer-events-none z-20 animate-pulse"
+                                    class: "absolute inset-0 border-5 border-yellow-300/50 blur-[2px] mix-blend-screen pointer-events-none animate-pulse"
                                 }
                             }
 
@@ -108,7 +109,7 @@ pub fn Hand() -> Element {
                             if is_selected {
                                 if summonable || chainable || activatable {
                                     div {
-                                        class: "absolute -top-26 left-1/2 transform -translate-x-1/2 z-50 flex flex-col items-center justify-center",
+                                        class: "absolute -top-26 left-1/2 transform -translate-x-1/2 flex flex-col items-center justify-center",
                                         if summonable {
                                             div {
                                                 p {

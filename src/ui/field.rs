@@ -2,8 +2,8 @@ use dioxus::prelude::*;
 
 use super::svg::SummonIcon;
 use crate::ocgcore::UserResponse;
-use crate::ocgcore::constants::CardLocation;
 use crate::ocgcore::constants::CardController;
+use crate::ocgcore::constants::CardLocation;
 use crate::state::DuelState;
 use crate::state::SelectedCard;
 use crate::state::send_user_response;
@@ -80,7 +80,9 @@ fn Zone(index: u8, id: Option<u32>, zone_type: CardLocation) -> Element {
     let mut selected_card = state.selected_card;
 
     let activatable_effects = (state.activatable_effects)();
-    let activatable_card = activatable_effects.iter().find(|(_eff_index, card)| card.location == zone_type && card.sequence == index);
+    let activatable_card = activatable_effects
+        .iter()
+        .find(|(_eff_index, card)| card.location == zone_type && card.sequence == index);
     let activatable_eff_index = if activatable_card.is_some() {
         *activatable_card.unwrap().0
     } else {
@@ -98,7 +100,9 @@ fn Zone(index: u8, id: Option<u32>, zone_type: CardLocation) -> Element {
         selected_card().is_some_and(|card| card.location == zone_type && card.index == index);
 
     let mut available_zones = state.available_zones;
-    let clickable = available_zones().iter().any(|zone| zone.0 == zone_type && zone.1 == index);
+    let clickable = available_zones()
+        .iter()
+        .any(|zone| zone.0 == zone_type && zone.1 == index);
 
     rsx!(
         div {
@@ -130,25 +134,25 @@ fn Zone(index: u8, id: Option<u32>, zone_type: CardLocation) -> Element {
                     },
                     if activatable || prompted {
                         div {
-                            class: "absolute -inset-[5px] rounded-[4px] bg-yellow-400 blur-[2px] mix-blend-screen pointer-events-none z-10"
+                            class: "absolute -inset-[1px] rounded-[4px] bg-yellow-400 blur-[2px] mix-blend-screen pointer-events-none"
                         }
                     }
                     img {
-                        class: "h-[10vw] z-20",
+                        class: "relative h-[10vw]",
                         image_rendering: "smooth",
                         aspect_ratio: "59/86",
                         src: format!("https://images.ygoprodeck.com/images/cards/{}.jpg", id.unwrap()),
                     }
-                    if activatable || prompted{
+                    if activatable || prompted {
                         div {
-                            class: "absolute inset-0 border-5 border-yellow-300/50 blur-[2px] mix-blend-screen pointer-events-none z-30 animate-pulse"
+                            class: "absolute inset-0 border-5 border-yellow-300/50 blur-[2px] mix-blend-screen pointer-events-none animate-pulse"
                         }
                     }
 
                     if is_selected {
                         if activatable || prompted {
                             div {
-                                class: "absolute -top-26 left-1/2 transform -translate-x-1/2 z-150 flex flex-col items-center justify-center",
+                                class: "absolute -top-26 left-1/2 transform -translate-x-1/2 flex flex-col items-center justify-center z-50",
                                 if activatable || prompted {
                                     div {
                                         p {
