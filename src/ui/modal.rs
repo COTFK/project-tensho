@@ -17,7 +17,7 @@ pub fn ModalContainer() -> Element {
             message: "A card or effect can be activated. Activate?",
             button {
                 class: "w-32 h-8 bg-red-600/70 rounded-lg font-semibold text-white",
-                onclick: |_| send_user_response(UserResponse::No),
+                onclick: |_| send_user_response(UserResponse::PassPriority),
                 "No"
             }
         }
