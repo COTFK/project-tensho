@@ -194,9 +194,15 @@ fn Zone(index: u8, card: Option<ActiveCard>, zone_type: CardLocation) -> Element
 fn Graveyard() -> Element {
     let mut state = use_context::<DuelState>();
 
+    let any_trigger_effects_in_gy = state
+        .card_prompting_to_activate
+        .iter()
+        .any(|card| card.location == CardLocation::Graveyard);
+
     rsx!(
         div {
-            class: "relative shadow-xl bg-slate-50/2 size-[10vw] aspect-square flex items-center justify-center border-0.5 hover:border-2 hover:border-yellow-300",
+            class: "relative shadow-xl bg-slate-50/2 size-[10vw] aspect-square flex items-center justify-center border-0.5 hover:border-4 hover:border-yellow-300",
+            class: if any_trigger_effects_in_gy {"border-4 border-yellow-300/50"},
             onclick: move |_| state.show_graveyard.set(true),
             for (index, card) in (state.graveyard)().iter().enumerate() {
                 img {
@@ -214,11 +220,14 @@ fn Graveyard() -> Element {
 #[component]
 fn MainDeck() -> Element {
     let state = use_context::<DuelState>();
-    let count = state.duel.count_location(crate::ocgcore::constants::CardOwner::Player, CardLocation::Deck);
+    let count = state.duel.count_location(
+        crate::ocgcore::constants::CardOwner::Player,
+        CardLocation::Deck,
+    );
 
     rsx!(
         div {
-            class: "relative shadow-xl bg-slate-50/2 size-[10vw] aspect-square flex items-center justify-center border-0.5 hover:border-2 hover:border-yellow-300",
+            class: "relative shadow-xl bg-slate-50/2 size-[10vw] aspect-square flex items-center justify-center border-0.5",
             for index in 0..count {
                 img {
                     class: "absolute h-[10vw] p-2",
@@ -235,11 +244,14 @@ fn MainDeck() -> Element {
 #[component]
 fn ExtraDeck() -> Element {
     let state = use_context::<DuelState>();
-    let count = state.duel.count_location(crate::ocgcore::constants::CardOwner::Player, CardLocation::ExtraDeck);
+    let count = state.duel.count_location(
+        crate::ocgcore::constants::CardOwner::Player,
+        CardLocation::ExtraDeck,
+    );
 
     rsx!(
         div {
-            class: "relative shadow-xl bg-slate-50/2 size-[10vw] aspect-square flex items-center justify-center border-0.5 hover:border-2 hover:border-yellow-300",
+            class: "relative shadow-xl bg-slate-50/2 size-[10vw] aspect-square flex items-center justify-center border-0.5",
             for index in 0..count {
                 img {
                     class: "absolute h-[10vw] p-2",
