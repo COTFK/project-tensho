@@ -7,8 +7,10 @@ use super::OCGCore;
 use super::constants::CardLocation;
 use super::duel_status::DuelStatus;
 use super::memory::CorePointer;
+use crate::ocgcore::ActiveCard;
 use crate::ocgcore::CoreMessage;
 use crate::ocgcore::UserResponse;
+use crate::ocgcore::constants::BattlePosition;
 use crate::ocgcore::constants::{CardController, CardOwner};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -30,9 +32,10 @@ fn read_u32_le(bytes: &[u8]) -> u32 {
 }
 
 /// Parse card code from OCG query data field
-fn extract_card_code(data: &[u8], offset: &mut usize, field_len: usize) -> u32 {
+fn extract_card_code(data: &[u8], offset: &mut usize, field_len: usize) -> (u32, Option<BattlePosition>) {
     let mut remaining = field_len;
     let mut code = 0;
+    let mut position = None;
 
     while remaining > 0 && *offset + 4 <= data.len() {
         let flag = read_u32_le(&data[*offset..*offset + 4]);
@@ -47,6 +50,19 @@ fn extract_card_code(data: &[u8], offset: &mut usize, field_len: usize) -> u32 {
         // Flag 0x1 = card code
         if flag == 0x1 && value_size >= 4 {
             code = read_u32_le(&data[*offset..*offset + 4]);
+        }
+
+        // Flag 0x2 = card position
+        if flag == 0x2 && value_size >= 4 {
+            let position_code = read_u32_le(&data[*offset..*offset + 4]);
+
+            position = match position_code {
+                1 => Some(BattlePosition::FaceUpAttack),
+                2 => Some(BattlePosition::FaceDownAttack),
+                4 => Some(BattlePosition::FaceUpDefense),
+                8 => Some(BattlePosition::FaceDownDefense),
+                _ => None,
+            };
         }
 
         *offset += value_size;
@@ -65,7 +81,7 @@ fn extract_card_code(data: &[u8], offset: &mut usize, field_len: usize) -> u32 {
         }
     }
 
-    code
+    (code, position)
 }
 
 impl Duel {
@@ -178,7 +194,7 @@ impl Duel {
         Some(data_view.slice(0, actual_data_len))
     }
 
-    pub fn get_cards(&self, location: CardLocation) -> Vec<u32> {
+    pub fn get_cards(&self, location: CardLocation) -> Vec<Option<ActiveCard>> {
         let buf = self
             .query_location(0xFFFFFFFF, CardOwner::Player, location)
             .map(|b| b.to_vec())
@@ -191,11 +207,21 @@ impl Duel {
             let field_len = i16::from_le_bytes([buf[offset], buf[offset + 1]]) as usize;
             offset += 2;
 
-            codes.push(if field_len == 0 {
-                0
-            } else {
-                extract_card_code(&buf, &mut offset, field_len)
-            });
+            if field_len == 0 {
+                codes.push(None);
+                continue;
+            }
+
+            let (code, position) = extract_card_code(&buf, &mut offset, field_len);
+
+            codes.push(Some(ActiveCard {
+                card_code: code,
+                controller: CardController::Player,
+                position: position,
+                location,
+                sequence: 0,
+                chain_option: None,
+            }));
         }
 
         codes

@@ -22,7 +22,7 @@ pub fn Hand() -> Element {
     rsx!(
         div {
             class: "fixed flex flex-row justify-center self-end place-self-center inset-0 translate-y-[25%]",
-            for (index, card_id) in cards().iter().copied().enumerate() {
+            for (index, card) in cards().iter().copied().enumerate() {
                 {
                     let summon_index = normal_summons().get(&(index as u8)).copied();
                     let activatable_card = activatable_effects.iter().find(|(_activate_index, card)| card.location == CardLocation::Hand && card.sequence == index as u8);
@@ -62,7 +62,7 @@ pub fn Hand() -> Element {
 
                     rsx! {
                         div {
-                            key: "{card_id}-{index}",
+                            key: "{card.unwrap().card_code}-{index}",
                             id: index,
                             width: "12.5vw",
                             class: "transform-gpu transition duration-150 ease-in-out -mx-[1.1vw] relative group",
@@ -91,7 +91,7 @@ pub fn Hand() -> Element {
                                 class: "relative",
                                 image_rendering: "smooth",
                                 aspect_ratio: "59/86",
-                                src: format!("https://images.ygoprodeck.com/images/cards/{}.jpg", card_id),
+                                src: format!("https://images.ygoprodeck.com/images/cards/{}.jpg", card.unwrap().card_code),
                             }
 
                             if summon_index.is_some() {

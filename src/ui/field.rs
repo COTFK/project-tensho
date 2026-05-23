@@ -1,7 +1,9 @@
 use dioxus::prelude::*;
 
 use super::svg::SummonIcon;
+use crate::ocgcore::ActiveCard;
 use crate::ocgcore::UserResponse;
+use crate::ocgcore::constants::BattlePosition;
 use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
 use crate::state::DuelState;
@@ -45,12 +47,12 @@ pub fn Field() -> Element {
             }
             div { // Main Monster Zones + Field Zone + GY
                 class: "flex flex-row gap-3 justify-center",
-                Zone {index: 5, id: spell_traps().get(5).copied(), zone_type: CardLocation::SpellTrapZone}
-                Zone {index: 0, id: monsters().first().copied(), zone_type: CardLocation::MonsterZone}
-                Zone {index: 1, id: monsters().get(1).copied(), zone_type: CardLocation::MonsterZone}
-                Zone {index: 2, id: monsters().get(2).copied(), zone_type: CardLocation::MonsterZone}
-                Zone {index: 3, id: monsters().get(3).copied(), zone_type: CardLocation::MonsterZone}
-                Zone {index: 4, id: monsters().get(4).copied(), zone_type: CardLocation::MonsterZone},
+                Zone {index: 5, card: spell_traps().get(5).copied().flatten(), zone_type: CardLocation::SpellTrapZone}
+                Zone {index: 0, card: monsters().first().copied().flatten(), zone_type: CardLocation::MonsterZone}
+                Zone {index: 1, card: monsters().get(1).copied().flatten(), zone_type: CardLocation::MonsterZone}
+                Zone {index: 2, card: monsters().get(2).copied().flatten(), zone_type: CardLocation::MonsterZone}
+                Zone {index: 3, card: monsters().get(3).copied().flatten(), zone_type: CardLocation::MonsterZone}
+                Zone {index: 4, card: monsters().get(4).copied().flatten(), zone_type: CardLocation::MonsterZone},
                 Graveyard {}
             }
             div { // Spell/Trap Zones
@@ -58,11 +60,11 @@ pub fn Field() -> Element {
                 div {
                     class: "size-[10vw] invisible",
                 },
-                Zone {index: 0, id: spell_traps().first().copied(), zone_type: CardLocation::SpellTrapZone}
-                Zone {index: 1, id: spell_traps().get(1).copied(), zone_type: CardLocation::SpellTrapZone}
-                Zone {index: 2, id: spell_traps().get(2).copied(), zone_type: CardLocation::SpellTrapZone}
-                Zone {index: 3, id: spell_traps().get(3).copied(), zone_type: CardLocation::SpellTrapZone}
-                Zone {index: 4, id: spell_traps().get(4).copied(), zone_type: CardLocation::SpellTrapZone},
+                Zone {index: 0, card: spell_traps().first().copied().flatten(), zone_type: CardLocation::SpellTrapZone}
+                Zone {index: 1, card: spell_traps().get(1).copied().flatten(), zone_type: CardLocation::SpellTrapZone}
+                Zone {index: 2, card: spell_traps().get(2).copied().flatten(), zone_type: CardLocation::SpellTrapZone}
+                Zone {index: 3, card: spell_traps().get(3).copied().flatten(), zone_type: CardLocation::SpellTrapZone}
+                Zone {index: 4, card: spell_traps().get(4).copied().flatten(), zone_type: CardLocation::SpellTrapZone},
                 div {
                     class: "size-[10vw] invisible",
                 }
@@ -72,7 +74,7 @@ pub fn Field() -> Element {
 }
 
 #[component]
-fn Zone(index: u8, id: Option<u32>, zone_type: CardLocation) -> Element {
+fn Zone(index: u8, card: Option<ActiveCard>, zone_type: CardLocation) -> Element {
     let state = use_context::<DuelState>();
     let trigger_or_chain_effects = state.card_prompting_to_activate;
     let mut selected_card = state.selected_card;
@@ -117,13 +119,13 @@ fn Zone(index: u8, id: Option<u32>, zone_type: CardLocation) -> Element {
                     available_zones.clear();
                 }
             },
-            if id != Some(0) && id.is_some() {
+            if card.is_some() {
                 div {
                     class: "relative",
                     onclick: move |evt| {
                         evt.stop_propagation();
 
-                        if id.is_some() {
+                        if card.is_some() {
                             selected_card.set(Some(SelectedCard{
                                 location: zone_type,
                                 index: index as u8
@@ -137,9 +139,10 @@ fn Zone(index: u8, id: Option<u32>, zone_type: CardLocation) -> Element {
                     }
                     img {
                         class: "relative h-[10vw]",
+                        class: if card.unwrap().position == Some(BattlePosition::FaceDownDefense) || card.unwrap().position == Some(BattlePosition::FaceUpDefense) {"-rotate-90"} else {""},
                         image_rendering: "smooth",
                         aspect_ratio: "59/86",
-                        src: format!("https://images.ygoprodeck.com/images/cards/{}.jpg", id.unwrap()),
+                        src: format!("https://images.ygoprodeck.com/images/cards/{}.jpg", card.unwrap().card_code),
                     }
                     if activatable || prompted {
                         div {
@@ -201,7 +204,7 @@ fn Graveyard() -> Element {
                     style: "z-index: {index + 10}; transform: translate({index}px, -{index}px);",
                     image_rendering: "smooth",
                     aspect_ratio: "59/86",
-                    src: format!("https://images.ygoprodeck.com/images/cards/{}.jpg", card),
+                    src: format!("https://images.ygoprodeck.com/images/cards/{}.jpg", card.unwrap().card_code),
                 }
             }
         }

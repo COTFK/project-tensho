@@ -58,6 +58,7 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                     card_code,
                     controller: CardController::Player,
                     location,
+                    position: None,
                     sequence,
                     chain_option: None,
                 }))
@@ -105,6 +106,7 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                         card_code: id,
                         controller: CardController::Player,
                         location: location,
+                        position: None,
                         sequence: index as u8,
                         chain_option: None,
                     });
@@ -152,6 +154,7 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                             card_code,
                             controller,
                             location,
+                            position: None,
                             sequence: *sequence,
                             chain_option: Some(chain_option as u8),
                         })

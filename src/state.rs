@@ -18,14 +18,14 @@ pub struct SelectedCard {
 #[derive(Debug, Clone, PartialEq)]
 pub struct DuelState {
     pub duel: Duel,
-    pub hand_contents: Signal<Vec<u32>>,
+    pub hand_contents: Signal<Vec<Option<ActiveCard>>>,
     pub selected_card: Signal<Option<SelectedCard>>,
     pub normal_summons: Signal<HashMap<u8, u16>>,
     pub activatable_effects: Signal<HashMap<u16, ActiveCard>>,
     pub waiting_on_input: Signal<bool>,
-    pub monsters: Signal<Vec<u32>>,
-    pub spell_traps: Signal<Vec<u32>>,
-    pub graveyard: Signal<Vec<u32>>,
+    pub monsters: Signal<Vec<Option<ActiveCard>>>,
+    pub spell_traps: Signal<Vec<Option<ActiveCard>>>,
+    pub graveyard: Signal<Vec<Option<ActiveCard>>>,
     pub card_prompting_to_activate: Signal<Vec<ActiveCard>>,
     pub selectables: Signal<Vec<ActiveCard>>,
     pub yes_no_question: Signal<Option<String>>,
@@ -70,7 +70,6 @@ pub fn handle_core_message() {
             state.waiting_on_input.set(true);
         }
         CoreMessage::SelectPlace(zones) => {
-            tracing::debug!("{zones:?}");
             state.available_zones.set(zones);
             state.waiting_on_input.set(true);
         }

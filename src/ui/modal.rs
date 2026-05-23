@@ -155,7 +155,7 @@ fn GraveyardModal() -> Element {
                                     class: "h-full w-auto max-h-none relative",
                                     image_rendering: "smooth",
                                     aspect_ratio: "59/86",
-                                    src: format!("https://images.ygoprodeck.com/images/cards/{}.jpg", card),
+                                    src: format!("https://images.ygoprodeck.com/images/cards/{}.jpg", card.unwrap().card_code),
                                 }
                                 if prompted && gy_selected_card() == Some(index) {
                                     div {
