@@ -217,6 +217,18 @@
   .inset-0 {
     inset: calc(var(--spacing) * 0);
   }
+  .inset-1 {
+    inset: calc(var(--spacing) * 1);
+  }
+  .inset-2 {
+    inset: calc(var(--spacing) * 2);
+  }
+  .inset-\[1px\] {
+    inset: 1px;
+  }
+  .inset-\[4px\] {
+    inset: 4px;
+  }
   .-top-26 {
     top: calc(var(--spacing) * -26);
   }
@@ -225,12 +237,6 @@
   }
   .top-\[2vh\] {
     top: 2vh;
-  }
-  .bottom-\[33\%\] {
-    bottom: 33%;
-  }
-  .bottom-\[45\%\] {
-    bottom: 45%;
   }
   .bottom-\[50\%\] {
     bottom: 50%;
@@ -265,17 +271,11 @@
       max-width: 96rem;
     }
   }
-  .m-8 {
-    margin: calc(var(--spacing) * 8);
-  }
   .-mx-\[1\.1vw\] {
     margin-inline: calc(1.1vw * -1);
   }
   .mx-auto {
     margin-inline: auto;
-  }
-  .my-2 {
-    margin-block: calc(var(--spacing) * 2);
   }
   .block {
     display: block;
@@ -442,9 +442,6 @@
   .gap-2 {
     gap: calc(var(--spacing) * 2);
   }
-  .gap-3 {
-    gap: calc(var(--spacing) * 3);
-  }
   .gap-4 {
     gap: calc(var(--spacing) * 4);
   }
@@ -478,10 +475,6 @@
     border-style: var(--tw-border-style);
     border-width: 1px;
   }
-  .border-1 {
-    border-style: var(--tw-border-style);
-    border-width: 1px;
-  }
   .border-2 {
     border-style: var(--tw-border-style);
     border-width: 2px;
@@ -494,27 +487,6 @@
     border-style: var(--tw-border-style);
     border-width: 5px;
   }
-  .border-black {
-    border-color: var(--color-black);
-  }
-  .border-black\/10 {
-    border-color: color-mix(in srgb, #000 10%, transparent);
-    @supports (color: color-mix(in lab, red, red)) {
-      border-color: color-mix(in oklab, var(--color-black) 10%, transparent);
-    }
-  }
-  .border-black\/25 {
-    border-color: color-mix(in srgb, #000 25%, transparent);
-    @supports (color: color-mix(in lab, red, red)) {
-      border-color: color-mix(in oklab, var(--color-black) 25%, transparent);
-    }
-  }
-  .border-black\/90 {
-    border-color: color-mix(in srgb, #000 90%, transparent);
-    @supports (color: color-mix(in lab, red, red)) {
-      border-color: color-mix(in oklab, var(--color-black) 90%, transparent);
-    }
-  }
   .border-cyan-300 {
     border-color: var(--color-cyan-300);
   }
@@ -526,9 +498,6 @@
   }
   .border-cyan-500 {
     border-color: var(--color-cyan-500);
-  }
-  .border-red-900 {
-    border-color: var(--color-red-900);
   }
   .border-transparent {
     border-color: transparent;
@@ -599,17 +568,8 @@
   .p-4 {
     padding: calc(var(--spacing) * 4);
   }
-  .p-8 {
-    padding: calc(var(--spacing) * 8);
-  }
   .p-4000 {
     padding: calc(var(--spacing) * 4000);
-  }
-  .py-2 {
-    padding-block: calc(var(--spacing) * 2);
-  }
-  .py-4 {
-    padding-block: calc(var(--spacing) * 4);
   }
   .pt-\[10vh\] {
     padding-top: 10vh;
@@ -657,19 +617,6 @@
   .outline {
     outline-style: var(--tw-outline-style);
     outline-width: 1px;
-  }
-  .outline-1 {
-    outline-style: var(--tw-outline-style);
-    outline-width: 1px;
-  }
-  .outline-black {
-    outline-color: var(--color-black);
-  }
-  .outline-black\/25 {
-    outline-color: color-mix(in srgb, #000 25%, transparent);
-    @supports (color: color-mix(in lab, red, red)) {
-      outline-color: color-mix(in oklab, var(--color-black) 25%, transparent);
-    }
   }
   .blur-\[2px\] {
     --tw-blur: blur(2px);

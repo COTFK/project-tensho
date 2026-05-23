@@ -60,7 +60,7 @@ pub fn Field() -> Element {
             div { // Spell/Trap Zones
                 class: "flex flex-row gap-2 justify-center",
                 ExtraDeck {}
-                
+
                 Zone {index: 0, card: spell_traps().first().copied().flatten(), zone_type: CardLocation::SpellTrapZone}
                 Zone {index: 1, card: spell_traps().get(1).copied().flatten(), zone_type: CardLocation::SpellTrapZone}
                 Zone {index: 2, card: spell_traps().get(2).copied().flatten(), zone_type: CardLocation::SpellTrapZone}
@@ -134,7 +134,7 @@ fn Zone(index: u8, card: Option<ActiveCard>, zone_type: CardLocation) -> Element
                     },
                     if activatable || prompted {
                         div {
-                            class: "absolute -inset-[1px] rounded-[4px] bg-yellow-400 blur-[2px] mix-blend-screen pointer-events-none"
+                            class: "absolute inset-1 rounded-[4px] bg-yellow-400 blur-[2px] mix-blend-screen pointer-events-none"
                         }
                     }
                     img {
@@ -146,7 +146,7 @@ fn Zone(index: u8, card: Option<ActiveCard>, zone_type: CardLocation) -> Element
                     }
                     if activatable || prompted {
                         div {
-                            class: "absolute inset-0 border-5 border-yellow-300/50 blur-[2px] mix-blend-screen pointer-events-none animate-pulse"
+                            class: "absolute inset-2 border-5 border-yellow-300/50 blur-[2px] mix-blend-screen pointer-events-none animate-pulse"
                         }
                     }
 
