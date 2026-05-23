@@ -121,7 +121,7 @@ fn Zone(index: u8, card: Option<ActiveCard>, zone_type: CardLocation) -> Element
             },
             if card.is_some() {
                 div {
-                    class: "relative size-full p-[clamp(2px,0.6vw,8px)]",
+                    class: "relative h-full aspect-[59/86] mx-auto p-[clamp(1px,0.3vw,5px)]",
                     onclick: move |evt| {
                         evt.stop_propagation();
 
@@ -134,11 +134,11 @@ fn Zone(index: u8, card: Option<ActiveCard>, zone_type: CardLocation) -> Element
                     },
                     if activatable || prompted {
                         div {
-                            class: "absolute inset-[clamp(2px,0.6vw,8px)] rounded-[4px] bg-yellow-400 blur-[2px] mix-blend-screen pointer-events-none"
+                            class: "absolute inset-[clamp(1px,0.3vw,5px)] z-0 rounded-[4px] bg-yellow-400 blur-[2px] mix-blend-screen pointer-events-none"
                         }
                     }
                     img {
-                        class: "w-full h-full object-contain",
+                        class: "relative z-10 w-full h-full object-contain",
                         class: if card.unwrap().position == Some(BattlePosition::FaceDownDefense) || card.unwrap().position == Some(BattlePosition::FaceUpDefense) {"-rotate-90"} else {""},
                         image_rendering: "smooth",
                         aspect_ratio: "59/86",
@@ -146,7 +146,7 @@ fn Zone(index: u8, card: Option<ActiveCard>, zone_type: CardLocation) -> Element
                     }
                     if activatable || prompted {
                         div {
-                            class: "absolute inset-[clamp(2px,0.6vw,8px)] border-5 border-yellow-300/50 blur-[2px] mix-blend-screen pointer-events-none animate-pulse"
+                            class: "absolute inset-[clamp(1px,0.3vw,5px)] z-20 border-5 border-yellow-300/50 blur-[2px] mix-blend-screen pointer-events-none animate-pulse"
                         }
                     }
 

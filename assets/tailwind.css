@@ -219,6 +219,9 @@
   .inset-2 {
     inset: calc(var(--spacing) * 2);
   }
+  .inset-\[clamp\(1px\,0\.3vw\,5px\)\] {
+    inset: clamp(1px, 0.3vw, 5px);
+  }
   .inset-\[clamp\(2px\,0\.6vw\,8px\)\] {
     inset: clamp(2px, 0.6vw, 8px);
   }
@@ -239,6 +242,15 @@
   }
   .left-1\/2 {
     left: calc(1/2 * 100%);
+  }
+  .z-0 {
+    z-index: 0;
+  }
+  .z-10 {
+    z-index: 10;
+  }
+  .z-20 {
+    z-index: 20;
   }
   .z-40 {
     z-index: 40;
@@ -290,6 +302,9 @@
   }
   .table {
     display: table;
+  }
+  .aspect-\[59\/86\] {
+    aspect-ratio: 59/86;
   }
   .aspect-square {
     aspect-ratio: 1 / 1;
@@ -586,6 +601,9 @@
   }
   .p-4000 {
     padding: calc(var(--spacing) * 4000);
+  }
+  .p-\[clamp\(1px\,0\.3vw\,5px\)\] {
+    padding: clamp(1px, 0.3vw, 5px);
   }
   .p-\[clamp\(2px\,0\.6vw\,8px\)\] {
     padding: clamp(2px, 0.6vw, 8px);
