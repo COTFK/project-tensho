@@ -21,7 +21,7 @@ pub fn Hand() -> Element {
 
     rsx!(
         div {
-            class: "fixed flex flex-row justify-center self-end place-self-center inset-0 translate-y-[25%]",
+            class: "fixed flex flex-row justify-center self-end place-self-center inset-0 translate-y-[27.5%]",
             for (index, card) in cards().iter().copied().enumerate() {
                 {
                     let summon_index = normal_summons().get(&(index as u8)).copied();
@@ -64,7 +64,7 @@ pub fn Hand() -> Element {
                         div {
                             key: "{card.unwrap().card_code}-{index}",
                             id: index,
-                            width: "12.5vw",
+                            width: "8vw",
                             class: "transform-gpu transition duration-150 ease-in-out -mx-[1.1vw] relative group",
                             transform: "rotateZ({rotation}deg) translateY({translate_y}%)",
                             z_index: z_index,

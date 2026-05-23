@@ -20,31 +20,31 @@ pub fn Field() -> Element {
 
     rsx!(
         div { // Entire field
-            class: "mx-auto flex flex-col gap-2 w-min pt-[10vh]",
+            class: "mx-auto flex flex-col gap-2 w-min pt-[15vh]",
             div { // Extra Monster Zones
                 class: "flex flex-row gap-2 justify-center",
                 div {
-                    class: "size-[10vw] invisible",
+                    class: "size-[9vw] invisible",
                 },
                 div {
-                    class: "size-[10vw] invisible",
+                    class: "size-[9vw] invisible",
                 },
                 div {
                     class: "",
                     Zone {index: 5, zone_type: CardLocation::MonsterZone}
                 }
                 div {
-                    class: "size-[10vw] invisible",
+                    class: "size-[9vw] invisible",
                 },
                 div {
                     class: "",
                     Zone {index: 6, zone_type: CardLocation::MonsterZone}
                 },
                 div {
-                    class: "size-[10vw] invisible",
+                    class: "size-[9vw] invisible",
                 },
                 div {
-                    class: "size-[10vw] invisible",
+                    class: "size-[9vw] invisible",
                 },
             }
             div { // Main Monster Zones + Field Zone + GY
@@ -106,7 +106,7 @@ fn Zone(index: u8, card: Option<ActiveCard>, zone_type: CardLocation) -> Element
 
     rsx!(
         div {
-            class: "shadow-xl bg-slate-50/2 size-[10vw] aspect-square flex items-center justify-center",
+            class: "shadow-xl bg-slate-50/2 size-[9vw] aspect-square flex items-center justify-center",
             class: if clickable {"border-2 border-yellow-300"} else {"border-0.5"},
             onclick: move |_| {
                 if clickable {
@@ -153,15 +153,16 @@ fn Zone(index: u8, card: Option<ActiveCard>, zone_type: CardLocation) -> Element
                     if is_selected {
                         if activatable || prompted {
                             div {
-                                class: "absolute -top-26 left-1/2 transform -translate-x-1/2 flex flex-col items-center justify-center z-50",
+                                class: "absolute left-1/2 transform -translate-x-1/2 z-50 -top-18",
                                 if activatable || prompted {
                                     div {
+                                        class: "flex flex-col items-center justify-center gap-1 drop-shadow-xl/50",
                                         p {
-                                            class: "text-white font-semibold shadow-md",
+                                            class: "text-white text-sm font-semibold shadow-md text-center ",
                                             "Activate"
                                         }
                                         button {
-                                            class: "bg-black size-16 p-2 rounded-full border-3 border-yellow-500 text-yellow-300 cursor-pointer",
+                                            class: "bg-black size-10 p-1 rounded-full border-3 border-yellow-500 text-yellow-300 cursor-pointer text-center",
                                             onclick: move |evt| {
                                                 evt.stop_propagation();
 
@@ -201,7 +202,7 @@ fn Graveyard() -> Element {
 
     rsx!(
         div {
-            class: "relative shadow-xl bg-slate-50/2 size-[10vw] aspect-square flex items-center justify-center border-0.5 hover:border-4 hover:border-yellow-300",
+            class: "relative shadow-xl bg-slate-50/2 size-[9vw] aspect-square flex items-center justify-center border-0.5 hover:border-4 hover:border-yellow-300",
             class: if any_trigger_effects_in_gy {"border-4 border-yellow-300/50"},
             onclick: move |_| state.show_graveyard.set(true),
             for (index, card) in (state.graveyard)().iter().enumerate() {
@@ -226,7 +227,7 @@ fn MainDeck() -> Element {
 
     rsx!(
         div {
-            class: "relative shadow-xl bg-slate-50/2 size-[10vw] aspect-square flex items-center justify-center border-0.5",
+            class: "relative shadow-xl bg-slate-50/2 size-[9vw] aspect-square flex items-center justify-center border-0.5",
             for index in 1..(state.main_deck_length)() + 1 {
                 div {
                     class: "absolute inset-[clamp(2px,0.6vw,8px)]",
@@ -249,7 +250,7 @@ fn ExtraDeck() -> Element {
 
     rsx!(
         div {
-            class: "relative shadow-xl bg-slate-50/2 size-[10vw] aspect-square flex items-center justify-center border-0.5",
+            class: "relative shadow-xl bg-slate-50/2 size-[9vw] aspect-square flex items-center justify-center border-0.5",
             for index in 1..(state.extra_deck_length)() + 1 {
                 div {
                     class: "absolute inset-[clamp(2px,0.6vw,8px)]",
