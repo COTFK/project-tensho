@@ -47,15 +47,14 @@ pub fn ModalContainer() -> Element {
             }
         }
         CardPicker { message: "Select a card" }
-        Modal {
+        MessageModal {
             enabled: !state.positions_to_select.is_empty(),
             message: "Select battle position",
-            vertical: true,
             {
                 rsx!(
                     for position in (state.positions_to_select)() {
                         button {
-                            class: "h-12 w-full rounded-lg font-semibold text-white mx-auto bg-gray-600 cursor-pointer",
+                            class: "h-12 w-max rounded-lg font-semibold text-white bg-gray-600 cursor-pointer text-center px-4",
                             onclick: move |_| send_user_response(UserResponse::SelectPosition { position }),
                             {position.to_string()}
                         }
@@ -76,7 +75,7 @@ pub fn MessageModal(enabled: bool, message: String, children: Element) -> Elemen
             class: "bg-gray-700/80 shadow-xl transition-all duration-300 ease-in-out text-sm",
             class: if enabled { "top-[2vh]" } else { "-top-[25%]" },
             p {
-                class: "text-white font-semibold text-gray-300",
+                class: "text-white font-semibold text-gray-300 w-max",
                 "{message}"
             }
             {children}
