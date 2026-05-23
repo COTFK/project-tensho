@@ -10,6 +10,7 @@ use crate::state::DuelState;
 use crate::state::SelectedCard;
 use crate::state::send_user_response;
 use crate::utility::CARD_BACK;
+use crate::utility::EXTRA_BACK;
 
 #[component]
 pub fn Field() -> Element {
@@ -58,9 +59,8 @@ pub fn Field() -> Element {
             }
             div { // Spell/Trap Zones
                 class: "flex flex-row gap-2 justify-center",
-                div {
-                    class: "size-[10vw] invisible",
-                },
+                ExtraDeck {}
+                
                 Zone {index: 0, card: spell_traps().first().copied().flatten(), zone_type: CardLocation::SpellTrapZone}
                 Zone {index: 1, card: spell_traps().get(1).copied().flatten(), zone_type: CardLocation::SpellTrapZone}
                 Zone {index: 2, card: spell_traps().get(2).copied().flatten(), zone_type: CardLocation::SpellTrapZone}
@@ -226,6 +226,27 @@ fn MainDeck() -> Element {
                     image_rendering: "smooth",
                     aspect_ratio: "59/86",
                     src: CARD_BACK,
+                }
+            }
+        }
+    )
+}
+
+#[component]
+fn ExtraDeck() -> Element {
+    let state = use_context::<DuelState>();
+    let count = state.duel.count_location(crate::ocgcore::constants::CardOwner::Player, CardLocation::ExtraDeck);
+
+    rsx!(
+        div {
+            class: "relative shadow-xl bg-slate-50/2 size-[10vw] aspect-square flex items-center justify-center border-0.5 hover:border-2 hover:border-yellow-300",
+            for index in 0..count {
+                img {
+                    class: "absolute h-[10vw] p-2",
+                    style: "z-index: 10; transform: translate({index as f32 * 0.5}px, -{index as f32 * 0.5}px);",
+                    image_rendering: "smooth",
+                    aspect_ratio: "59/86",
+                    src: EXTRA_BACK,
                 }
             }
         }

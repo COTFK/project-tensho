@@ -48,6 +48,17 @@ pub fn AppContainer() -> Element {
             );
         }
 
+        for card_id in EXTRA_DECK_IDS {
+            duel.add_card(
+                CardOwner::Player,
+                card_id,
+                CardController::Player,
+                CardLocation::ExtraDeck,
+                0,
+                0,
+            );
+        }
+
         duel.start();
         debug!("Duel started successfully.");
 

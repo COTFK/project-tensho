@@ -15,3 +15,4 @@ pub use deck::STATIC_CARD_DATA;
 use dioxus::prelude::*;
 
 pub static CARD_BACK: Asset = asset!("/assets/images/cover.png");
+pub static EXTRA_BACK: Asset = asset!("/assets/images/cover_extra.png");
