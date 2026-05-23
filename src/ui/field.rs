@@ -51,9 +51,7 @@ pub fn Field() -> Element {
                 Zone {index: 2, id: monsters().get(2).copied(), zone_type: CardLocation::MonsterZone}
                 Zone {index: 3, id: monsters().get(3).copied(), zone_type: CardLocation::MonsterZone}
                 Zone {index: 4, id: monsters().get(4).copied(), zone_type: CardLocation::MonsterZone},
-                div {
-                    class: "size-[10vw] invisible",
-                },
+                Graveyard {}
             }
             div { // Spell/Trap Zones
                 class: "flex flex-row gap-3 justify-center",
@@ -183,6 +181,27 @@ fn Zone(index: u8, id: Option<u32>, zone_type: CardLocation) -> Element {
                             }
                         }
                     }
+                }
+            }
+        }
+    )
+}
+
+#[component]
+fn Graveyard() -> Element {
+    let mut state = use_context::<DuelState>();
+
+    rsx!(
+        div {
+            class: "relative shadow-xl bg-slate-50/2 size-[10vw] aspect-square flex items-center justify-center border-0.5 hover:border-2 hover:border-yellow-300",
+            onclick: move |_| state.show_graveyard.set(true),
+            for (index, card) in (state.graveyard)().iter().enumerate() {
+                img {
+                    class: "absolute h-[10vw]",
+                    style: "z-index: {index + 10}; transform: translate({index}px, -{index}px);",
+                    image_rendering: "smooth",
+                    aspect_ratio: "59/86",
+                    src: format!("https://images.ygoprodeck.com/images/cards/{}.jpg", card),
                 }
             }
         }

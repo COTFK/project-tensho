@@ -23,11 +23,13 @@ pub fn DuelScreen(duel: Duel) -> Element {
         waiting_on_input: use_signal(|| false),
         monsters: use_signal(Vec::new),
         spell_traps: use_signal(Vec::new),
+        graveyard: use_signal(Vec::new),
         card_prompting_to_activate: use_signal(Vec::new),
         selectables: use_signal(|| Vec::new()),
         yes_no_question: use_signal(|| None),
         available_zones: use_signal(Vec::new),
-        positions_to_select: use_signal(Vec::new)
+        positions_to_select: use_signal(Vec::new),
+        show_graveyard: use_signal(|| false),
     };
     use_context_provider(|| state);
 
@@ -54,29 +56,30 @@ pub fn DuelScreen(duel: Duel) -> Element {
 
     // Add various behaviors to right clicks
     let right_click_handler = move |evt: MouseEvent| {
-        let state = use_context::<DuelState>();
+        let mut state = use_context::<DuelState>();
 
         // Allow to decline chains & activations
-        let mut card_prompting_to_activate = state.card_prompting_to_activate;
-        let is_chainable = card_prompting_to_activate
-            .iter()
-            .any(|card| card.chain_option.is_some());
-
-        if !card_prompting_to_activate().is_empty() {
-            if is_chainable {
+        if !(state.card_prompting_to_activate)().is_empty() {
+            if (state.card_prompting_to_activate)()
+                .iter()
+                .any(|card| card.chain_option.is_some())
+            {
                 send_user_response(UserResponse::PassPriority)
             } else {
                 send_user_response(UserResponse::No);
             }
 
-            card_prompting_to_activate.with_mut(|v| v.clear());
+            state.card_prompting_to_activate.with_mut(|v| v.clear());
         }
 
         // Decline Yes/No questions
-        let mut yes_no_question = state.yes_no_question;
-        if yes_no_question().is_some() {
+        if (state.yes_no_question)().is_some() {
             send_user_response(UserResponse::No);
-            yes_no_question.set(None);
+            state.yes_no_question.set(None);
+        }
+
+        if (state.show_graveyard)() == true {
+            state.show_graveyard.set(false);
         }
 
         evt.prevent_default();

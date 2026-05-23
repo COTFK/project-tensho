@@ -25,11 +25,13 @@ pub struct DuelState {
     pub waiting_on_input: Signal<bool>,
     pub monsters: Signal<Vec<u32>>,
     pub spell_traps: Signal<Vec<u32>>,
+    pub graveyard: Signal<Vec<u32>>,
     pub card_prompting_to_activate: Signal<Vec<ActiveCard>>,
     pub selectables: Signal<Vec<ActiveCard>>,
     pub yes_no_question: Signal<Option<String>>,
     pub available_zones: Signal<Vec<(CardLocation, u8)>>,
     pub positions_to_select: Signal<Vec<BattlePosition>>,
+    pub show_graveyard: Signal<bool>,
 }
 
 pub fn send_user_response(response: UserResponse) {
@@ -50,6 +52,7 @@ pub fn send_user_response(response: UserResponse) {
     state.yes_no_question.set(None);
     state.available_zones.clear();
     state.positions_to_select.clear();
+    state.show_graveyard.set(false);
 }
 
 pub fn handle_core_message() {
@@ -121,4 +124,7 @@ pub fn handle_core_message() {
     state
         .hand_contents
         .set(state.duel.get_cards(CardLocation::Hand));
+    state
+        .graveyard
+        .set(state.duel.get_cards(CardLocation::Graveyard));
 }

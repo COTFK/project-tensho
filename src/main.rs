@@ -63,9 +63,5 @@ pub fn AppContainer() -> Element {
                 rsx!("Loading...")
             }
         }
-        document::Script {
-            src: "https://cdn.jsdelivr.net/npm/@tailwindplus/elements@1",
-            r#type: "module",
-        }
     )
 }
