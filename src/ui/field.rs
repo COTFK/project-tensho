@@ -9,6 +9,7 @@ use crate::ocgcore::constants::CardLocation;
 use crate::state::DuelState;
 use crate::state::SelectedCard;
 use crate::state::send_user_response;
+use crate::utility::CARD_BACK;
 
 #[component]
 pub fn Field() -> Element {
@@ -18,9 +19,9 @@ pub fn Field() -> Element {
 
     rsx!(
         div { // Entire field
-            class: "mx-auto flex flex-col gap-3 w-min pt-[10vh]",
+            class: "mx-auto flex flex-col gap-2 w-min pt-[10vh]",
             div { // Extra Monster Zones
-                class: "flex flex-row gap-3 justify-center",
+                class: "flex flex-row gap-2 justify-center",
                 div {
                     class: "size-[10vw] invisible",
                 },
@@ -46,7 +47,7 @@ pub fn Field() -> Element {
                 },
             }
             div { // Main Monster Zones + Field Zone + GY
-                class: "flex flex-row gap-3 justify-center",
+                class: "flex flex-row gap-2 justify-center",
                 Zone {index: 5, card: spell_traps().get(5).copied().flatten(), zone_type: CardLocation::SpellTrapZone}
                 Zone {index: 0, card: monsters().first().copied().flatten(), zone_type: CardLocation::MonsterZone}
                 Zone {index: 1, card: monsters().get(1).copied().flatten(), zone_type: CardLocation::MonsterZone}
@@ -56,7 +57,7 @@ pub fn Field() -> Element {
                 Graveyard {}
             }
             div { // Spell/Trap Zones
-                class: "flex flex-row gap-3 justify-center",
+                class: "flex flex-row gap-2 justify-center",
                 div {
                     class: "size-[10vw] invisible",
                 },
@@ -65,9 +66,8 @@ pub fn Field() -> Element {
                 Zone {index: 2, card: spell_traps().get(2).copied().flatten(), zone_type: CardLocation::SpellTrapZone}
                 Zone {index: 3, card: spell_traps().get(3).copied().flatten(), zone_type: CardLocation::SpellTrapZone}
                 Zone {index: 4, card: spell_traps().get(4).copied().flatten(), zone_type: CardLocation::SpellTrapZone},
-                div {
-                    class: "size-[10vw] invisible",
-                }
+
+                MainDeck {}
             }
         }
     )
@@ -138,7 +138,7 @@ fn Zone(index: u8, card: Option<ActiveCard>, zone_type: CardLocation) -> Element
                         }
                     }
                     img {
-                        class: "relative h-[10vw]",
+                        class: "relative h-[10vw] p-2",
                         class: if card.unwrap().position == Some(BattlePosition::FaceDownDefense) || card.unwrap().position == Some(BattlePosition::FaceUpDefense) {"-rotate-90"} else {""},
                         image_rendering: "smooth",
                         aspect_ratio: "59/86",
@@ -200,11 +200,32 @@ fn Graveyard() -> Element {
             onclick: move |_| state.show_graveyard.set(true),
             for (index, card) in (state.graveyard)().iter().enumerate() {
                 img {
-                    class: "absolute h-[10vw]",
-                    style: "z-index: {index + 10}; transform: translate({index}px, -{index}px);",
+                    class: "absolute h-[10vw] p-2",
+                    style: "transform: translate({index}px, -{index}px);",
                     image_rendering: "smooth",
                     aspect_ratio: "59/86",
                     src: format!("https://images.ygoprodeck.com/images/cards/{}.jpg", card.unwrap().card_code),
+                }
+            }
+        }
+    )
+}
+
+#[component]
+fn MainDeck() -> Element {
+    let state = use_context::<DuelState>();
+    let count = state.duel.count_location(crate::ocgcore::constants::CardOwner::Player, CardLocation::Deck);
+
+    rsx!(
+        div {
+            class: "relative shadow-xl bg-slate-50/2 size-[10vw] aspect-square flex items-center justify-center border-0.5 hover:border-2 hover:border-yellow-300",
+            for index in 0..count {
+                img {
+                    class: "absolute h-[10vw] p-2",
+                    style: "z-index: 10; transform: translate({index as f32 * 0.5}px, -{index as f32 * 0.5}px);",
+                    image_rendering: "smooth",
+                    aspect_ratio: "59/86",
+                    src: CARD_BACK,
                 }
             }
         }

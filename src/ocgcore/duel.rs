@@ -148,10 +148,10 @@ impl Duel {
         Ok(())
     }
 
-    pub fn count_location(&self, team: CardOwner, location: u32) -> u32 {
+    pub fn count_location(&self, team: CardOwner, location: CardLocation) -> u32 {
         self.core
             .instance
-            .query_count(self.handle.0, team as u8, location)
+            .query_count(self.handle.0, team as u8, location as u32)
     }
 
     fn query_location(
