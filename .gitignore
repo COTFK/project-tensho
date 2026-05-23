@@ -1,5 +1,6 @@
 /target
 /tools/
+assets/tailwind.css
 assets/ocgcore.js
 assets/ocgcore.wasm
 public/ocgcore.js
