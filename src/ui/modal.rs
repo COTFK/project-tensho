@@ -9,77 +9,44 @@ use super::svg::SummonIcon;
 #[component]
 pub fn ModalContainer() -> Element {
     let state = use_context::<DuelState>();
-    let mut picker_selected_card = use_signal(|| None);
 
     rsx!(
-        Modal {
+        MessageModal {
             enabled: state.card_prompting_to_activate.iter().any(|card| card.chain_option.is_some()),
             message: "A card or effect can be activated. Activate?",
             button {
-                class: "w-32 h-8 bg-red-600/70 rounded-lg font-semibold text-white",
+                class: "w-fit px-8 py-1 h-min bg-red-600/70 rounded-lg font-semibold text-gray-300 cursor-pointer",
                 onclick: |_| send_user_response(UserResponse::PassPriority),
                 "No"
             }
         }
-        Modal {
+        MessageModal {
             enabled: !state.card_prompting_to_activate.iter().any(|card| card.chain_option.is_some()) && !state.card_prompting_to_activate.is_empty(),
             message: "Activate trigger effect?",
             button {
-                class: "w-32 h-8 bg-red-600/70 rounded-lg font-semibold text-gray-300",
+                class: "w-fit px-8 py-1 h-min bg-red-600/70 rounded-lg font-semibold text-gray-300 cursor-pointer",
                 onclick: |_| send_user_response(UserResponse::No),
                 "No"
             }
         }
-        Modal {
+        MessageModal {
             enabled: (state.yes_no_question)().is_some(),
             message: (state.yes_no_question)().unwrap_or(String::new()),
             div {
                 class: "flex flex-row gap-4",
                 button {
-                    class: "w-32 h-10 rounded-lg font-semibold text-white mx-auto bg-green-700 cursor-pointer",
+                class: "w-fit px-8 py-1 h-min bg-green-600/70 rounded-lg font-semibold text-gray-300 cursor-pointer",
                     onclick: move |_| send_user_response(UserResponse::Yes),
                     "Yes"
                 }
                 button {
-                    class: "w-32 h-10 rounded-lg font-semibold text-white mx-auto bg-red-700 cursor-pointer",
+                class: "w-fit px-8 py-1 h-min bg-red-600/70 rounded-lg font-semibold text-gray-300 cursor-pointer",
                     onclick: move |_| send_user_response(UserResponse::No),
                     "No"
                 }
             }
         }
-        Modal { // Card picker
-            enabled: !state.selectables.is_empty(),
-            message: "Select a card",
-            vertical: true,
-            div {
-                class: "flex flex-row gap-2 overflow-x-auto overflow-y-hidden w-full flex-1 min-h-0 items-stretch",
-                for card in (state.selectables)() {
-                    div {
-                        class: "border-2 h-full flex-none",
-                        class: if picker_selected_card() == Some(card.sequence) { "border-yellow-300" } else { "border-transparent" },
-                        onclick: move |_| {
-                            picker_selected_card.set(Some(card.sequence));
-                        },
-                        img {
-                            class: "h-full w-auto max-h-none",
-                            image_rendering: "smooth",
-                            aspect_ratio: "59/86",
-                            src: format!("https://images.ygoprodeck.com/images/cards/{}.jpg", card.card_code),
-                        }
-                    }
-                }
-            }
-            div {
-                class: "flex flex-row",
-                button {
-                    class: "h-10 w-24 rounded-lg font-semibold text-white mx-auto",
-                    class: if !picker_selected_card().is_some() { "bg-gray-600 cursor-not-allowed" } else { "bg-green-700 cursor-pointer" },
-                    disabled: !picker_selected_card().is_some(),
-                    onclick: move |_| send_user_response(UserResponse::SelectCard { sequence: picker_selected_card.unwrap() }),
-                    "Done"
-                }
-            }
-        }
+        CardPicker { message: "Select a card" }
         Modal {
             enabled: !state.positions_to_select.is_empty(),
             message: "Select battle position",
@@ -99,6 +66,70 @@ pub fn ModalContainer() -> Element {
         GraveyardModal { }
     )
 }
+
+#[component]
+pub fn MessageModal(enabled: bool, message: String, children: Element) -> Element {
+    rsx!(
+        div {
+            class: "absolute left-1/2 -translate-x-[50%] z-40",
+            class: "flex items-center justify-between w-max gap-4 py-2 px-4 rounded-lg",
+            class: "bg-gray-700/80 shadow-xl transition-all duration-300 ease-in-out text-sm",
+            class: if enabled { "top-[2vh]" } else { "-top-[25%]" },
+            p {
+                class: "text-white font-semibold text-gray-300",
+                "{message}"
+            }
+            {children}
+        }
+    )
+}
+
+#[component]
+pub fn CardPicker(message: String) -> Element {
+    let state = use_context::<DuelState>();
+    let mut picker_selected_card = use_signal(|| None);
+
+    rsx!(
+        div {
+            class: "absolute left-1/2 -translate-x-[50%] z-40 max-w-[60vw] min-w-[50vw] p-4",
+            class: "flex flex-col gap-4",
+            class: "bg-gray-700/80 shadow-xl transition-all duration-300 ease-in-out text-sm rounded-lg",
+            class: if !state.selectables.is_empty() { "top-[2vh]" } else { "-top-[50%]" },
+            p {
+                class: "text-white font-semibold text-gray-300",
+                "{message}"
+            }
+            div {
+                class: "flex flex-row gap-2",
+                class: "overflow-x-auto scroll-smooth scrollbar-thin",
+                for card in (state.selectables)() {
+                    img {
+                        class: "w-[12vw] border-2",
+                        class: if picker_selected_card() == Some(card.sequence) { "border-yellow-300" } else { "border-transparent" },
+                        src: format!("https://images.ygoprodeck.com/images/cards/{}.jpg", card.card_code),
+                        onclick: move |_| {
+                            picker_selected_card.set(Some(card.sequence));
+                        }
+                    }
+                }
+            }
+            div {
+                class: "flex flex-row",
+                button {
+                    class: "h-10 w-24 rounded-lg font-semibold text-white mx-auto",
+                    class: if !picker_selected_card().is_some() { "bg-gray-600 cursor-not-allowed" } else { "bg-green-700 cursor-pointer" },
+                    disabled: !picker_selected_card().is_some(),
+                    onclick: move |_| {
+                        send_user_response(UserResponse::SelectCard { sequence: picker_selected_card.unwrap() });
+                        picker_selected_card.set(None);
+                    },
+                    "Done"
+                }
+            }
+        }
+    )
+}
+
 
 #[component]
 pub fn Modal(enabled: bool, message: String, children: Element, vertical: Option<bool>) -> Element {
