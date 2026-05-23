@@ -1,5 +1,6 @@
 use dioxus::prelude::*;
 use std::collections::HashMap;
+use web_sys::window;
 
 use super::field::Field;
 use super::hand::Hand;
@@ -96,12 +97,45 @@ pub fn DuelScreen(duel: Duel) -> Element {
 
     rsx!(
         main {
-            class: "h-dvh w-dvw bg-gray-800",
+            class: "relative h-dvh w-dvw bg-gray-800",
             oncontextmenu: right_click_handler,
             onclick: left_click_handler,
+            FullscreenButton {}
             ModalContainer {}
             Field {}
             Hand {}
+        }
+    )
+}
+
+#[component]
+pub fn FullscreenButton() -> Element {
+    let toggle_fullscreen = move |_| {
+        if let Some(document) = window().and_then(|window| window.document()) {
+            if document.fullscreen_element().is_some() {
+                let _ = document.exit_fullscreen();
+            } else if let Some(element) = document.document_element() {
+                let _ = element.request_fullscreen();
+            }
+        }
+    };
+
+    rsx!(
+        button {
+            class: "fixed top-3 right-3 z-50 w-8 h-8 rounded-md border border-white/20 bg-black/70 text-[10px] font-semibold text-white shadow-lg backdrop-blur-sm flex items-center justify-center cursor-pointer hover:bg-black/85",
+            aria_label: "Toggle fullscreen",
+            onclick: toggle_fullscreen,
+            svg {
+                view_box: "0 0 24 24",
+                xmlns: "http://www.w3.org/2000/svg",
+                class: "w-5 h-5",
+                fill: "currentColor",
+                stroke: "currentColor",
+                stroke_width: "0.5",
+                stroke_linecap: "round",
+                stroke_linejoin: "round",
+                path { d: "M3 3h6v2H5v4H3V3zm18 0v6h-2V5h-4V3h6zM3 21v-6h2v4h4v2H3zm18-6v6h-6v-2h4v-4h2z" }
+            }
         }
     )
 }
