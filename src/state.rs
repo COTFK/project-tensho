@@ -6,6 +6,7 @@ use crate::ocgcore::CoreMessage;
 use crate::ocgcore::Duel;
 use crate::ocgcore::UserResponse;
 use crate::ocgcore::constants::BattlePosition;
+use crate::ocgcore::constants::CardOwner;
 use crate::ocgcore::constants::CardLocation;
 use crate::utility::get_cached_label;
 
@@ -18,6 +19,8 @@ pub struct SelectedCard {
 #[derive(Debug, Clone, PartialEq)]
 pub struct DuelState {
     pub duel: Duel,
+    pub main_deck_length: Signal<u32>,
+    pub extra_deck_length: Signal<u32>,
     pub hand_contents: Signal<Vec<Option<ActiveCard>>>,
     pub selected_card: Signal<Option<SelectedCard>>,
     pub normal_summons: Signal<HashMap<u8, u16>>,
@@ -113,6 +116,9 @@ pub fn handle_core_message() {
             state.waiting_on_input.set(true);
         }
     }
+
+    state.main_deck_length.set(state.duel.count_location(CardOwner::Player, CardLocation::Deck));
+    state.extra_deck_length.set(state.duel.count_location(CardOwner::Player, CardLocation::ExtraDeck));
 
     state
         .monsters

@@ -121,7 +121,7 @@ fn Zone(index: u8, card: Option<ActiveCard>, zone_type: CardLocation) -> Element
             },
             if card.is_some() {
                 div {
-                    class: "relative",
+                    class: "relative size-full p-[clamp(2px,0.6vw,8px)]",
                     onclick: move |evt| {
                         evt.stop_propagation();
 
@@ -134,11 +134,11 @@ fn Zone(index: u8, card: Option<ActiveCard>, zone_type: CardLocation) -> Element
                     },
                     if activatable || prompted {
                         div {
-                            class: "absolute inset-1 rounded-[4px] bg-yellow-400 blur-[2px] mix-blend-screen pointer-events-none"
+                            class: "absolute inset-[clamp(2px,0.6vw,8px)] rounded-[4px] bg-yellow-400 blur-[2px] mix-blend-screen pointer-events-none"
                         }
                     }
                     img {
-                        class: "relative h-[10vw] p-2",
+                        class: "w-full h-full object-contain",
                         class: if card.unwrap().position == Some(BattlePosition::FaceDownDefense) || card.unwrap().position == Some(BattlePosition::FaceUpDefense) {"-rotate-90"} else {""},
                         image_rendering: "smooth",
                         aspect_ratio: "59/86",
@@ -146,7 +146,7 @@ fn Zone(index: u8, card: Option<ActiveCard>, zone_type: CardLocation) -> Element
                     }
                     if activatable || prompted {
                         div {
-                            class: "absolute inset-2 border-5 border-yellow-300/50 blur-[2px] mix-blend-screen pointer-events-none animate-pulse"
+                            class: "absolute inset-[clamp(2px,0.6vw,8px)] border-5 border-yellow-300/50 blur-[2px] mix-blend-screen pointer-events-none animate-pulse"
                         }
                     }
 
@@ -205,12 +205,15 @@ fn Graveyard() -> Element {
             class: if any_trigger_effects_in_gy {"border-4 border-yellow-300/50"},
             onclick: move |_| state.show_graveyard.set(true),
             for (index, card) in (state.graveyard)().iter().enumerate() {
-                img {
-                    class: "absolute h-[10vw] p-2",
-                    style: "transform: translate({index}px, -{index}px);",
-                    image_rendering: "smooth",
-                    aspect_ratio: "59/86",
-                    src: format!("https://images.ygoprodeck.com/images/cards/{}.jpg", card.unwrap().card_code),
+                div {
+                    class: "absolute inset-[clamp(2px,0.6vw,8px)]",
+                    img {
+                        class: "w-full h-full object-contain",
+                        style: "transform: translate({index as f32 * 0.01}vw, -{index as f32 * 0.01}vh);",
+                        image_rendering: "smooth",
+                        aspect_ratio: "59/86",
+                        src: format!("https://images.ygoprodeck.com/images/cards/{}.jpg", card.unwrap().card_code),
+                    }
                 }
             }
         }
@@ -220,21 +223,20 @@ fn Graveyard() -> Element {
 #[component]
 fn MainDeck() -> Element {
     let state = use_context::<DuelState>();
-    let count = state.duel.count_location(
-        crate::ocgcore::constants::CardOwner::Player,
-        CardLocation::Deck,
-    );
 
     rsx!(
         div {
             class: "relative shadow-xl bg-slate-50/2 size-[10vw] aspect-square flex items-center justify-center border-0.5",
-            for index in 0..count {
-                img {
-                    class: "absolute h-[10vw] p-2",
-                    style: "z-index: 10; transform: translate({index as f32 * 0.5}px, -{index as f32 * 0.5}px);",
-                    image_rendering: "smooth",
-                    aspect_ratio: "59/86",
-                    src: CARD_BACK,
+            for index in 1..(state.main_deck_length)() + 1 {
+                div {
+                    class: "absolute inset-[clamp(2px,0.6vw,8px)]",
+                    img {
+                        class: "w-full h-full object-contain",
+                        style: "z-index: 10; transform: translate({index as f32 * 0.01}vw, -{index as f32 * 0.01}vh);",
+                        image_rendering: "smooth",
+                        aspect_ratio: "59/86",
+                        src: CARD_BACK,
+                    }
                 }
             }
         }
@@ -244,21 +246,20 @@ fn MainDeck() -> Element {
 #[component]
 fn ExtraDeck() -> Element {
     let state = use_context::<DuelState>();
-    let count = state.duel.count_location(
-        crate::ocgcore::constants::CardOwner::Player,
-        CardLocation::ExtraDeck,
-    );
 
     rsx!(
         div {
             class: "relative shadow-xl bg-slate-50/2 size-[10vw] aspect-square flex items-center justify-center border-0.5",
-            for index in 0..count {
-                img {
-                    class: "absolute h-[10vw] p-2",
-                    style: "z-index: 10; transform: translate({index as f32 * 0.5}px, -{index as f32 * 0.5}px);",
-                    image_rendering: "smooth",
-                    aspect_ratio: "59/86",
-                    src: EXTRA_BACK,
+            for index in 1..(state.extra_deck_length)() + 1 {
+                div {
+                    class: "absolute inset-[clamp(2px,0.6vw,8px)]",
+                    img {
+                        class: "w-full h-full object-contain",
+                        style: "z-index: 10; transform: translate({index as f32 * 0.01}vw, -{index as f32 * 0.01}vh);",
+                        image_rendering: "smooth",
+                        aspect_ratio: "59/86",
+                        src: EXTRA_BACK,
+                    }
                 }
             }
         }

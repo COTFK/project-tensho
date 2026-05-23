@@ -16,6 +16,8 @@ pub fn DuelScreen(duel: Duel) -> Element {
     // Load everything into the struct and pass it on
     let state = DuelState {
         duel,
+        main_deck_length: use_signal(|| 0),
+        extra_deck_length: use_signal(|| 0),
         hand_contents: use_signal(Vec::new),
         selected_card: use_signal(|| None),
         normal_summons: use_signal(HashMap::new),
