@@ -1,0 +1,58 @@
+name: Deploy to Vercel
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+concurrency:
+  group: vercel-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_BUILD_JOBS: 8
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Dioxus CLI
+        run: curl -sSL https://dioxus.dev/install.sh | bash
+
+      - name: Add Cargo bin to PATH
+        run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Install EMSDK
+        run: bash scripts/install-emsdk.sh
+
+      - name: Build ocgcore
+        run: scripts/build_ocgcore.sh
+
+      - name: Bundle web app
+        run: dx bundle --platform web --debug-symbols=false --out-dir bundle
+
+      - name: Deploy bundle to Vercel
+        if: github.event_name == 'push'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: npx --yes vercel@latest deploy --prod --token "$VERCEL_TOKEN" --name burning-draw bundle/public

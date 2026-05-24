@@ -8,3 +8,4 @@ public/ocgcore.wasm
 edopro/
 *.ydk
 CardScripts/
+bundle/
