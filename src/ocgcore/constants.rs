@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum CardLocation {
     Deck = 1,
@@ -68,13 +70,14 @@ pub enum BattlePosition {
     FaceDownDefense = 8,
 }
 
-impl ToString for BattlePosition {
-    fn to_string(&self) -> String {
-        match self {
+impl Display for BattlePosition {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let text = match self {
             Self::FaceUpAttack => String::from("Face-up Attack Position"),
             Self::FaceDownAttack => String::from("Face-down Attack Position"),
             Self::FaceUpDefense => String::from("Face-up Defense Position"),
             Self::FaceDownDefense => String::from("Face-down Defense Position")
-        }
+        };
+        write!(f, "{}", text)
     }
 }
