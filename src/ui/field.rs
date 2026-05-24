@@ -202,8 +202,8 @@ fn Graveyard() -> Element {
 
     rsx!(
         div {
-            class: "relative shadow-xl bg-slate-50/2 size-[9vw] aspect-square flex items-center justify-center border-0.5 hover:border-4 hover:border-yellow-300",
-            class: if any_trigger_effects_in_gy {"border-4 border-yellow-300/50"},
+            class: "relative shadow-xl bg-slate-50/2 size-[9vw] aspect-square flex items-center justify-center border-0.5 hover:outline-4 hover:outline-yellow-300",
+            class: if any_trigger_effects_in_gy {"outline-4 outline-yellow-300/50"},
             onclick: move |_| state.show_graveyard.set(true),
             for (index, card) in (state.graveyard)().iter().enumerate() {
                 div {
