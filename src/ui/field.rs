@@ -84,11 +84,7 @@ fn Zone(index: u8, card: Option<ActiveCard>, zone_type: CardLocation) -> Element
     let activatable_card = activatable_effects
         .iter()
         .find(|(_eff_index, card)| card.location == zone_type && card.sequence == index);
-    let activatable_eff_index = if activatable_card.is_some() {
-        *activatable_card.unwrap().0
-    } else {
-        0
-    };
+    let activatable_eff_index = activatable_card.map(|(i, _)| *i).unwrap_or(0);
 
     let prompted_card = trigger_or_chain_effects
         .iter()
@@ -97,8 +93,8 @@ fn Zone(index: u8, card: Option<ActiveCard>, zone_type: CardLocation) -> Element
     let activatable = activatable_card.is_some();
     let chain_option = prompted_card.and_then(|card| card.chain_option);
 
-    let is_selected =
-        selected_card().is_some_and(|card| card.location == zone_type && card.index == index);
+    let is_selected = selected_card()
+        .is_some_and(|card| card.location == zone_type && card.index == index);
 
     let mut available_zones = state.available_zones;
     let clickable = available_zones()
@@ -126,18 +122,16 @@ fn Zone(index: u8, card: Option<ActiveCard>, zone_type: CardLocation) -> Element
                     available_zones.clear();
                 }
             },
-            if card.is_some() {
+            if let Some(card) = card {
                 div {
                     class: "relative h-full aspect-[59/86] mx-auto p-[clamp(1px,0.3vw,5px)]",
                     onclick: move |evt| {
                         evt.stop_propagation();
 
-                        if card.is_some() {
-                            selected_card.set(Some(SelectedCard{
-                                location: zone_type,
-                                index: index as u8
-                            }));
-                        }
+                        selected_card.set(Some(SelectedCard{
+                            location: zone_type,
+                            index: index as u8
+                        }));
                     },
                     if activatable || prompted {
                         div {
@@ -146,10 +140,10 @@ fn Zone(index: u8, card: Option<ActiveCard>, zone_type: CardLocation) -> Element
                     }
                     img {
                         class: "relative z-10 w-full h-full object-contain",
-                        class: if card.unwrap().position == Some(BattlePosition::FaceDownDefense) || card.unwrap().position == Some(BattlePosition::FaceUpDefense) {"-rotate-90"} else {""},
+                        class: if card.position == Some(BattlePosition::FaceDownDefense) || card.position == Some(BattlePosition::FaceUpDefense) {"-rotate-90"} else {""},
                         image_rendering: "smooth",
                         aspect_ratio: "59/86",
-                        src: format!("https://images.ygoprodeck.com/images/cards/{}.jpg", card.unwrap().card_code),
+                        src: format!("https://images.ygoprodeck.com/images/cards/{}.jpg", card.card_code),
                     }
                     if activatable || prompted {
                         div {
