@@ -178,6 +178,7 @@ fn Zone(index: u8, card: Option<ActiveCard>, zone_type: CardLocation) -> Element
                                                 if activatable {
                                                     if effects_of_this_card.len() > 1 {
                                                         state.effects_to_select_from.set(effects_of_this_card.clone());
+                                                        state.selected_card.set(None);
                                                     } else {
                                                         send_user_response(UserResponse::Activate { sequence: activatable_eff_index as u8 });
                                                     }
