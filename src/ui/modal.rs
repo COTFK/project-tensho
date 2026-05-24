@@ -1,10 +1,16 @@
+use anyhow::anyhow;
 use dioxus::prelude::*;
 
+use super::components::ActivateButton;
+use super::components::BlockButton;
+use super::components::CardPickerModal;
+use super::components::MessageModal;
+use super::components::SelectableCard;
+use crate::ocgcore::ActiveCard;
 use crate::ocgcore::UserResponse;
 use crate::ocgcore::constants::CardLocation;
 use crate::state::DuelState;
 use crate::state::send_user_response;
-use super::svg::SummonIcon;
 
 #[component]
 pub fn ModalContainer() -> Element {
@@ -12,228 +18,188 @@ pub fn ModalContainer() -> Element {
 
     rsx!(
         MessageModal {
-            enabled: state.card_prompting_to_activate.iter().any(|card| card.chain_option.is_some()),
-            message: "A card or effect can be activated. Activate?",
-            button {
-                class: "w-fit px-8 py-1 h-min bg-red-600/70 rounded-lg font-semibold text-gray-300 cursor-pointer",
+            trigger: state.card_prompting_to_activate.iter().any(|card| card.chain_option.is_some()),
+            title: "A card or effect can be activated. Activate?",
+            BlockButton {
+                label: "No",
                 onclick: |_| send_user_response(UserResponse::PassPriority),
-                "No"
+                additional_classes: "bg-red-600/70",
             }
         }
         MessageModal {
-            enabled: !state.card_prompting_to_activate.iter().any(|card| card.chain_option.is_some()) && !state.card_prompting_to_activate.is_empty(),
-            message: "Activate trigger effect?",
-            button {
-                class: "w-fit px-8 py-1 h-min bg-red-600/70 rounded-lg font-semibold text-gray-300 cursor-pointer",
+            trigger: !state.card_prompting_to_activate.iter().any(|card| card.chain_option.is_some()) && !state.card_prompting_to_activate.is_empty(),
+            title: "Activate trigger effect?",
+            BlockButton {
+                label: "No",
                 onclick: |_| send_user_response(UserResponse::No),
-                "No"
+                additional_classes: "bg-red-600/70",
             }
         }
         MessageModal {
-            enabled: (state.yes_no_question)().is_some(),
-            message: (state.yes_no_question)().unwrap_or(String::new()),
+            trigger: (state.yes_no_question)().is_some(),
+            title: (state.yes_no_question)().unwrap_or(String::new()),
             div {
                 class: "flex flex-row gap-4",
-                button {
-                class: "w-fit px-8 py-1 h-min bg-green-600/70 rounded-lg font-semibold text-gray-300 cursor-pointer",
-                    onclick: move |_| send_user_response(UserResponse::Yes),
-                    "Yes"
+                BlockButton {
+                    label: "Yes",
+                    onclick: |_| send_user_response(UserResponse::Yes),
+                    additional_classes: "bg-green-600/70",
                 }
-                button {
-                class: "w-fit px-8 py-1 h-min bg-red-600/70 rounded-lg font-semibold text-gray-300 cursor-pointer",
-                    onclick: move |_| send_user_response(UserResponse::No),
-                    "No"
+                BlockButton {
+                    label: "No",
+                    onclick: |_| send_user_response(UserResponse::No),
+                    additional_classes: "bg-red-600/70",
                 }
             }
         }
-        CardPicker { message: "Select a card" }
         MessageModal {
-            enabled: !state.positions_to_select.is_empty(),
-            message: "Select battle position",
+            trigger: !state.positions_to_select.is_empty(),
+            title: "Select battle position",
             {
                 rsx!(
                     for position in (state.positions_to_select)() {
-                        button {
-                            class: "h-12 w-max rounded-lg font-semibold text-white bg-gray-600 cursor-pointer text-center px-4",
+                        BlockButton {
+                            label: position,
                             onclick: move |_| send_user_response(UserResponse::SelectPosition { position }),
-                            {position.to_string()}
+                            additional_classes: "bg-gray-600 text-white",
                         }
                     }
                 )
             }
         }
-        GraveyardModal { }
+
+        CardSelector { }
+        GraveyardModal {}
+
     )
 }
 
 #[component]
-pub fn MessageModal(enabled: bool, message: String, children: Element) -> Element {
-    rsx!(
-        div {
-            class: "absolute left-1/2 -translate-x-[50%] z-40",
-            class: "flex items-center justify-between w-max gap-4 py-2 px-4 rounded-lg",
-            class: "bg-gray-700/80 shadow-xl transition-all duration-300 ease-in-out text-sm",
-            class: if enabled { "top-[2vh]" } else { "-top-[25%]" },
-            p {
-                class: "text-white font-semibold text-gray-300 w-max",
-                "{message}"
-            }
-            {children}
-        }
-    )
-}
-
-#[component]
-pub fn CardPicker(message: String) -> Element {
+pub fn CardSelector() -> Element {
     let state = use_context::<DuelState>();
-    let mut picker_selected_card = use_signal(|| None);
+    let mut selected_card = use_signal(|| None);
 
     rsx!(
-        div {
-            class: "absolute left-1/2 -translate-x-[50%] z-40 max-w-[60vw] min-w-[50vw] p-4",
-            class: "flex flex-col gap-4",
-            class: "bg-gray-700/80 shadow-xl transition-all duration-300 ease-in-out text-sm rounded-lg",
-            class: if !state.selectables.is_empty() { "top-[2vh]" } else { "-top-[50%]" },
-            p {
-                class: "text-white font-semibold text-gray-300",
-                "{message}"
-            }
+        CardPickerModal {
+            title: "Select a card",
+            trigger: !state.selectables.is_empty(),
             div {
                 class: "flex flex-row gap-2",
                 class: "overflow-x-auto scroll-smooth scrollbar-thin",
                 for card in (state.selectables)() {
-                    img {
-                        class: "w-[12vw] border-2",
-                        class: if picker_selected_card() == Some(card.sequence) { "border-yellow-300" } else { "border-transparent" },
-                        src: format!("https://images.ygoprodeck.com/images/cards/{}.jpg", card.card_code),
-                        onclick: move |_| {
-                            picker_selected_card.set(Some(card.sequence));
-                        }
+                    SelectableCard {
+                        card_code: card.card_code,
+                        value_to_set: card.sequence,
+                        select_signal: selected_card
                     }
                 }
             }
-            div {
-                class: "flex flex-row",
-                button {
-                    class: "h-10 w-24 rounded-lg font-semibold text-white mx-auto",
-                    class: if !picker_selected_card().is_some() { "bg-gray-600 cursor-not-allowed" } else { "bg-green-700 cursor-pointer" },
-                    disabled: !picker_selected_card().is_some(),
-                    onclick: move |_| {
-                        send_user_response(UserResponse::SelectCard { sequence: picker_selected_card.unwrap() });
-                        picker_selected_card.set(None);
-                    },
-                    "Done"
-                }
+            BlockButton {
+                label: "Done",
+                disabled: !selected_card().is_some(),
+                onclick: move |_| {
+                    send_user_response(UserResponse::SelectCard { sequence: selected_card.unwrap() });
+                    selected_card.set(None);
+                },
+                additional_classes: if selected_card().is_none() { "bg-gray-600 cursor-not-allowed" } else { "bg-green-700 cursor-pointer" },
             }
         }
     )
 }
 
+#[component]
+pub fn GraveyardModal() -> Element {
+    let state = use_context::<DuelState>();
+    let graveyard = state.graveyard;
+    let mut show_graveyard = state.show_graveyard;
+
+    let mut selected_card = use_signal(|| None);
+
+    rsx!(
+        CardPickerModal {
+            title: "Graveyard",
+            trigger: show_graveyard(),
+            div {
+                class: "flex flex-row gap-2",
+                class: "overflow-x-auto scroll-smooth scrollbar-thin",
+                for (index, card) in graveyard().iter().enumerate() {
+                    ActivatableCard {
+                        index: index as u8,
+                        card: *card,
+                        select_signal: selected_card,
+                    }
+                }
+            }
+            BlockButton {
+                label: "Close",
+                onclick: move |_| {
+                    show_graveyard.set(false);
+                    selected_card.set(None);
+                },
+                additional_classes: "bg-green-600/70"
+            }
+        }
+    )
+}
 
 #[component]
-pub fn Modal(enabled: bool, message: String, children: Element, vertical: Option<bool>) -> Element {
+pub fn ActivatableCard(
+    index: u8,
+    card: Option<ActiveCard>,
+    select_signal: WriteSignal<Option<u8>>,
+) -> Element {
+    let state = use_context::<DuelState>();
+    let cards_prompting_to_activate = state.card_prompting_to_activate;
+
+    let card = match card {
+        Some(card) => card,
+        None => return Err(anyhow!("lala").into()),
+    };
+
+    let prompted_card = cards_prompting_to_activate()
+        .iter()
+        .find(|card| card.location == CardLocation::Graveyard && card.sequence == index)
+        .copied();
+
+    let prompted = prompted_card.is_some();
+    let chain_option = prompted_card.and_then(|card| card.chain_option);
+
     rsx!(
         div {
-            class: "absolute left-1/2 -translate-x-[50%] z-40",
-            class: "max-h-[70vh] w-full p-4 rounded-lg",
-            class: if Some(true) == vertical { "flex flex-col items-stretch justify-start gap-4 h-full max-w-[70%]" } else { "flex items-center justify-between max-w-[90%]" },
-            class: "bg-gray-700/80 transition-all duration-300 ease-in-out",
-            class: if enabled { "top-[2vh] shadow-xl " } else { "-top-[100%] shadow-none" },
-            p {
-                class: "text-white font-semibold text-gray-300",
-                "{message}"
-            }
-            {children}
-        }
-    )
-}
-
-#[component]
-fn GraveyardModal() -> Element {
-    let mut state = use_context::<DuelState>();
-    let mut gy_selected_card: Signal<Option<usize>> = use_signal(|| None);
-
-    rsx!(
-        Modal {
-            enabled: (state.show_graveyard)(),
-            message: "Graveyard",
-            vertical: true,
+            class: "relative m-2 h-min",
             div {
-                class: "flex flex-row gap-2 overflow-x-auto overflow-y-hidden w-full flex-1 max-h-[40vh] items-stretch p-4",
-                for (index, card) in state.graveyard.iter().enumerate() {
-                    {
-                        let prompted_card = state
-                            .card_prompting_to_activate
-                            .iter()
-                            .find(|card| card.location == CardLocation::Graveyard && card.sequence == index as u8);
-                        let prompted = prompted_card.is_some();
-                        let chain_option = prompted_card.and_then(|card| card.chain_option);
-
-                            rsx!(
-                            div {
-                                class: "relative border-2 h-full flex-none",
-                                   class: if gy_selected_card() == Some(index) { "border-yellow-300" } else { "border-transparent" },
-                                onclick: move |_| {
-                                    gy_selected_card.set(Some(index));
-                                },
-                                if prompted {
-                                    div {
-                                        class: "absolute -inset-[4px] rounded-[4px] bg-yellow-400 blur-[2px] mix-blend-screen pointer-events-none"
-                                    }
-                                }
-                                   img {
-                                    class: "h-full w-auto max-h-none relative",
-                                    image_rendering: "smooth",
-                                    aspect_ratio: "59/86",
-                                    src: format!("https://images.ygoprodeck.com/images/cards/{}.jpg", card.unwrap().card_code),
-                                }
-                                if prompted && gy_selected_card() == Some(index) {
-                                    div {
-                                        class: "absolute inset-0 border-5 border-yellow-300/50 blur-[2px] mix-blend-screen pointer-events-none animate-pulse"
-                                    }
-                                    div {
-                                        class: "relative bottom-[50%] flex flex-col items-center justify-center",
-                                        div {
-                                            p {
-                                                class: "text-white font-semibold shadow-md",
-                                                "Activate"
-                                            }
-                                            button {
-                                                class: "bg-black size-16 p-2 rounded-full border-3 border-yellow-500 text-yellow-300 cursor-pointer relative",
-                                                onclick: move |evt| {
-                                                    evt.stop_propagation();
-
-                                                    if prompted {
-                                                        if let Some(chain_option) = chain_option {
-                                                            send_user_response(UserResponse::Chain { sequence: chain_option });
-                                                        } else {
-                                                            send_user_response(UserResponse::Yes);
-                                                        }
-                                                    }
-
-                                                    // if activatable {
-                                                    //     send_user_response(UserResponse::Activate { sequence: activatable_eff_index as u8 });
-                                                    // }
-                                                },
-                                                SummonIcon {}
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        )
-                    }
-                }
+                class: "absolute -inset-[2px] rounded-[4px] bg-yellow-400 blur-[2px] mix-blend-screen pointer-events-none -z-10",
+                class: if !prompted {"hidden"},
+            }
+            SelectableCard {
+                card_code: card.card_code,
+                value_to_set: index,
+                select_signal: select_signal
             }
             div {
-                class: "flex flex-row",
-                button {
-                    class: "h-10 w-24 rounded-lg font-semibold text-white mx-auto bg-green-700 cursor-pointer",
+                class: "absolute inset-1 border-5 border-yellow-300/50 blur-[2px] mix-blend-screen pointer-events-none animate-pulse z-20",
+                class: if !prompted {"hidden"},
+            }
+            div {
+                class: "absolute z-30 flex flex-col items-center justify-center w-min left-1/2 -translate-x-[50%] -translate-y-[128px] bg-black/60 px-8 py-1",
+                class: if (select_signal() != Some(index)) || !prompted {"hidden"},
+                style: "mask_image: linear-gradient(to right, transparent 0%, black 10%, black 90%, transparent 100%); -webkit-mask-image: linear-gradient(to right, transparent 0%, black 30%, black 70%, transparent 100%);",
+                ActivateButton {
                     onclick: move |_| {
-                        gy_selected_card.set(None);
-                        state.show_graveyard.set(false);
-                    },
-                    "Close"
+                        if prompted {
+                            if let Some(chain_option) = chain_option {
+                                send_user_response(UserResponse::Chain { sequence: chain_option });
+                            } else {
+                                send_user_response(UserResponse::Yes);
+                            }
+
+                            // if activatable {
+                            //     send_user_response(UserResponse::Activate { sequence: activatable_eff_index as u8 });
+                            // }
+
+                            select_signal.set(None);
+                        }
+                    }
                 }
             }
         }
