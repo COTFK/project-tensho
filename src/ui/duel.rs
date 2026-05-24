@@ -33,6 +33,7 @@ pub fn DuelScreen(duel: Duel) -> Element {
         available_zones: use_signal(Vec::new),
         positions_to_select: use_signal(Vec::new),
         show_graveyard: use_signal(|| false),
+        effects_to_select_from: use_signal(Vec::new),
     };
     use_context_provider(|| state);
 

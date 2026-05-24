@@ -1,13 +1,14 @@
 use dioxus::prelude::*;
 
 use super::components::BlockButton;
-use super::components::CardPickerModal;
+use super::components::PickerModal;
 use super::components::MessageModal;
 use super::components::SelectableCard;
 use super::graveyard::GraveyardModal;
 use crate::ocgcore::UserResponse;
 use crate::state::DuelState;
 use crate::state::send_user_response;
+use crate::utility::get_cached_label;
 
 #[component]
 pub fn ModalContainer() -> Element {
@@ -52,21 +53,18 @@ pub fn ModalContainer() -> Element {
         MessageModal {
             trigger: !state.positions_to_select.is_empty(),
             title: "Select battle position",
-            {
-                rsx!(
-                    for position in (state.positions_to_select)() {
-                        BlockButton {
-                            label: position,
-                            onclick: move |_| send_user_response(UserResponse::SelectPosition { position }),
-                            additional_classes: "bg-gray-600 text-white",
-                        }
-                    }
-                )
+            for position in (state.positions_to_select)() {
+                BlockButton {
+                    label: position,
+                    onclick: move |_| send_user_response(UserResponse::SelectPosition { position }),
+                    additional_classes: "bg-gray-600 text-white",
+                }
             }
         }
 
         CardSelector { }
         GraveyardModal {}
+        EffectSelector {}
 
     )
 }
@@ -77,7 +75,7 @@ pub fn CardSelector() -> Element {
     let mut selected_card = use_signal(|| None);
 
     rsx!(
-        CardPickerModal {
+        PickerModal {
             title: "Select a card",
             trigger: !state.selectables.is_empty(),
             div {
@@ -100,6 +98,39 @@ pub fn CardSelector() -> Element {
                 },
                 additional_classes: if selected_card().is_none() { "bg-gray-600 cursor-not-allowed" } else { "bg-green-700 cursor-pointer" },
             }
+        }
+    )
+}
+
+#[component]
+pub fn EffectSelector() -> Element {
+    let mut state = use_context::<DuelState>();
+
+    rsx!(
+        PickerModal {
+            title: "Choose which effect to activate",
+            trigger: !state.effects_to_select_from.is_empty(),
+            for (index, effect) in (state.effects_to_select_from)() {
+                BlockButton {
+                    label: {
+                        get_cached_label(effect.card_code)
+                            .and_then(|card_label| {
+                                effect.description.and_then(|description| {
+                                    card_label.optional_strings.get(&(description as usize)).cloned()
+                                })
+                            })
+                            .unwrap_or_else(|| String::from("error"))
+                    },
+                    onclick: move |_| send_user_response(UserResponse::Activate { sequence: index as u8 }),
+                    additional_classes: "bg-gray-600 text-white w-full",
+                }
+            }
+            BlockButton {
+                label: "Cancel",
+                onclick: move |_| state.effects_to_select_from.clear(),
+                additional_classes: "bg-gray-600 text-white w-full",
+            }
+
         }
     )
 }

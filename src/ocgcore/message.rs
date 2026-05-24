@@ -61,6 +61,7 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                     position: None,
                     sequence,
                     chain_option: None,
+                    description: None,
                 }))
             }
             13 => {
@@ -109,6 +110,7 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                         position: None,
                         sequence: index as u8,
                         chain_option: None,
+                        description: None,
                     });
                 }
 
@@ -157,6 +159,7 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                             position: None,
                             sequence: *sequence,
                             chain_option: Some(chain_option as u8),
+                            description: None,
                         })
                     }
 

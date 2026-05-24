@@ -76,7 +76,7 @@ pub fn Field() -> Element {
 
 #[component]
 fn Zone(index: u8, card: Option<ActiveCard>, zone_type: CardLocation) -> Element {
-    let state = use_context::<DuelState>();
+    let mut state = use_context::<DuelState>();
     let trigger_or_chain_effects = state.card_prompting_to_activate;
     let mut selected_card = state.selected_card;
 
@@ -104,6 +104,12 @@ fn Zone(index: u8, card: Option<ActiveCard>, zone_type: CardLocation) -> Element
     let clickable = available_zones()
         .iter()
         .any(|zone| zone.0 == zone_type && zone.1 == index);
+
+    let effects_of_this_card: Vec<(u16, ActiveCard)> = activatable_effects
+        .iter()
+        .filter(|(_eff_index, card)| card.location == zone_type && card.sequence == index)
+        .map(|(eff_index, card)| (*eff_index, card.clone()))
+        .collect();
 
     rsx!(
         div {
@@ -176,7 +182,11 @@ fn Zone(index: u8, card: Option<ActiveCard>, zone_type: CardLocation) -> Element
                                                 }
 
                                                 if activatable {
-                                                    send_user_response(UserResponse::Activate { sequence: activatable_eff_index as u8 });
+                                                    if effects_of_this_card.len() > 1 {
+                                                        state.effects_to_select_from.set(effects_of_this_card.clone());
+                                                    } else {
+                                                        send_user_response(UserResponse::Activate { sequence: activatable_eff_index as u8 });
+                                                    }
                                                 }
                                             },
                                             SummonIcon {}

@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 
 use super::card::ActivatableCard;
 use super::components::BlockButton;
-use super::components::CardPickerModal;
+use super::components::PickerModal;
 use crate::ocgcore::constants::CardLocation;
 use crate::state::DuelState;
 
@@ -45,7 +45,7 @@ pub fn GraveyardModal() -> Element {
     let mut selected_card = use_signal(|| None);
 
     rsx!(
-        CardPickerModal {
+        PickerModal {
             title: "Graveyard",
             trigger: show_graveyard(),
             div {

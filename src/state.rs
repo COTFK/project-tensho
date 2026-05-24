@@ -35,6 +35,7 @@ pub struct DuelState {
     pub available_zones: Signal<Vec<(CardLocation, u8)>>,
     pub positions_to_select: Signal<Vec<BattlePosition>>,
     pub show_graveyard: Signal<bool>,
+    pub effects_to_select_from: Signal<Vec<(u16, ActiveCard)>>
 }
 
 pub fn send_user_response(response: UserResponse) {
@@ -56,6 +57,7 @@ pub fn send_user_response(response: UserResponse) {
     state.available_zones.clear();
     state.positions_to_select.clear();
     state.show_graveyard.set(false);
+    state.effects_to_select_from.clear();
 }
 
 pub fn handle_core_message() {

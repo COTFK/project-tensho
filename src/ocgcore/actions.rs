@@ -13,6 +13,7 @@ pub struct ActiveCard {
     pub position: Option<BattlePosition>,
     pub sequence: u8,
     pub chain_option: Option<u8>,
+    pub description: Option<u32>
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -148,6 +149,7 @@ impl TryFrom<&[u8]> for AvailableActions {
                     location: CardLocation::try_from(read_u8(raw, c, "normal_summons.location")?)?,
                     sequence: read_u32(raw, c, "normal_summons.sequence")? as u8,
                     chain_option: None,
+                    description: None,
                 })
             })?;
 
@@ -164,6 +166,7 @@ impl TryFrom<&[u8]> for AvailableActions {
                     location: CardLocation::try_from(read_u8(raw, c, "special_summons.location")?)?,
                     sequence: read_u32(raw, c, "special_summons.sequence")? as u8,
                     chain_option: None,
+                    description: None,
                 })
             })?;
 
@@ -184,6 +187,7 @@ impl TryFrom<&[u8]> for AvailableActions {
                     )?)?,
                     sequence: read_u8(raw, c, "battle_positions.sequence")?,
                     chain_option: None,
+                    description: None,
                 })
             })?;
 
@@ -195,6 +199,7 @@ impl TryFrom<&[u8]> for AvailableActions {
                 position: None,
                 sequence: read_u32(raw, c, "monster_sets.sequence")? as u8,
                 chain_option: None,
+                description: None,
             })
         })?;
 
@@ -211,6 +216,7 @@ impl TryFrom<&[u8]> for AvailableActions {
                     location: CardLocation::try_from(read_u8(raw, c, "spell_trap_sets.location")?)?,
                     sequence: read_u32(raw, c, "spell_trap_sets.sequence")? as u8,
                     chain_option: None,
+                    description: None,
                 })
             })?;
 
@@ -223,6 +229,8 @@ impl TryFrom<&[u8]> for AvailableActions {
                 let _description = read_u64(raw, c, "activatable_effects.description")?;
                 let _client_mode = read_u8(raw, c, "activatable_effects.client_mode")?;
 
+                let description_id = (_description & 0xFFFFF) as u32;
+
                 Ok(ActiveCard {
                     card_code,
                     controller: CardController::try_from(controller)?,
@@ -230,6 +238,7 @@ impl TryFrom<&[u8]> for AvailableActions {
                     position: None,
                     sequence,
                     chain_option: None,
+                    description: Some(description_id),
                 })
             })?;
 

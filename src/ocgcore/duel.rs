@@ -221,6 +221,7 @@ impl Duel {
                 location,
                 sequence: 0,
                 chain_option: None,
+                description: None,
             }));
         }
 
