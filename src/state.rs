@@ -15,6 +15,8 @@ use crate::ocgcore::constants::CardLocation;
 use crate::ocgcore::constants::CardOwner;
 use crate::utility::EXTRA_DECK_IDS;
 use crate::utility::MAIN_DECK_IDS;
+use crate::utility::cache_labels;
+use crate::utility::cache_scripts;
 use crate::utility::get_cached_label;
 use crate::utility::get_cached_script;
 
@@ -125,49 +127,67 @@ pub fn handle_left_click() {
     }
 }
 
-pub async fn load_duel(cache_resource: Resource<()>) -> anyhow::Result<Duel> {
-    let cache_ready = *cache_resource.read_unchecked();
+pub async fn cache_dependencies() -> anyhow::Result<OCGCore> {
+    let all_cards = MAIN_DECK_IDS
+        .into_iter()
+        .chain(EXTRA_DECK_IDS)
+        .collect::<Vec<_>>();
 
-    match cache_ready {
-        Some(()) => {
-            let core = OCGCore::load().await?;
-            let duel = core.create_duel()?;
+    cache_scripts(&all_cards).await;
+    cache_labels(&all_cards).await;
 
-            duel.load_script(get_cached_script("constant.lua").unwrap(), "constant.lua");
-            duel.load_script(get_cached_script("utility.lua").unwrap(), "utility.lua");
+    OCGCore::load().await
+}
 
-            let mut main_deck = MAIN_DECK_IDS;
-            main_deck.shuffle(&mut rand::rng());
-
-            for card_id in main_deck {
-                duel.add_card(
-                    CardOwner::Player,
-                    card_id,
-                    CardController::Player,
-                    CardLocation::Deck,
-                    0,
-                    0,
-                );
-            }
-
-            for card_id in EXTRA_DECK_IDS {
-                duel.add_card(
-                    CardOwner::Player,
-                    card_id,
-                    CardController::Player,
-                    CardLocation::ExtraDeck,
-                    0,
-                    0,
-                );
-            }
-
-            duel.start();
-            debug!("Duel started successfully.");
-
-            Ok(duel)
+pub async fn load_duel(cache_resource: Resource<anyhow::Result<OCGCore>>) -> anyhow::Result<Duel> {
+    let core = {
+        let cache_state = cache_resource.read();
+        match &*cache_state {
+            Some(Ok(core)) => Some(core.clone()),
+            Some(Err(err)) => return Err(anyhow::anyhow!("Core initialization failed: {err:#}")),
+            None => None,
         }
+    };
+
+    let core = match core {
+        Some(core) => core,
         None => pending().await,
+    };
+
+    let duel = core.create_duel()?;
+
+    duel.load_script(get_cached_script("constant.lua").unwrap(), "constant.lua");
+    duel.load_script(get_cached_script("utility.lua").unwrap(), "utility.lua");
+
+    let mut main_deck = MAIN_DECK_IDS;
+    main_deck.shuffle(&mut rand::rng());
+
+    for card_id in main_deck {
+        duel.add_card(
+            CardOwner::Player,
+            card_id,
+            CardController::Player,
+            CardLocation::Deck,
+            0,
+            0,
+        );
     }
+
+    for card_id in EXTRA_DECK_IDS {
+        duel.add_card(
+            CardOwner::Player,
+            card_id,
+            CardController::Player,
+            CardLocation::ExtraDeck,
+            0,
+            0,
+        );
+    }
+
+    duel.start();
+    debug!("Duel started successfully.");
+
+    Ok(duel)
 }
 
 pub fn send_user_response(response: UserResponse) {

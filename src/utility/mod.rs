@@ -21,12 +21,3 @@ pub const GIT_HASH: &str = match option_env!("GIT_HASH") {
     None => "unknown",
 };
 
-pub async fn cache_card_data() {
-    let all_cards = MAIN_DECK_IDS
-        .into_iter()
-        .chain(EXTRA_DECK_IDS)
-        .collect::<Vec<_>>();
-
-    cache_scripts(&all_cards).await;
-    cache_labels(&all_cards).await;
-}

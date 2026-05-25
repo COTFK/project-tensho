@@ -6,11 +6,11 @@ mod utility;
 use dioxus::prelude::*;
 
 use crate::state::load_duel;
+use crate::state::cache_dependencies;
 use crate::ui::DuelScreen;
 use crate::ui::LoadingScreen;
 use crate::utility::BUILD_VERSION;
 use crate::utility::GIT_HASH;
-use crate::utility::cache_card_data;
 
 fn main() {
     dioxus::launch(AppContainer);
@@ -18,7 +18,7 @@ fn main() {
 
 #[component]
 pub fn AppContainer() -> Element {
-    let cache_resource = use_resource(cache_card_data);
+    let cache_resource = use_resource(cache_dependencies);
 
     let core_resource = use_resource(move || load_duel(cache_resource));
 
@@ -27,6 +27,7 @@ pub fn AppContainer() -> Element {
         match &*core_resource.read() {
             Some(Ok(duel)) => rsx!(
                 DuelScreen {
+                    key: "{duel:?}",
                     duel: duel.clone(),
                     resource_handle: core_resource,
                 }
