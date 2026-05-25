@@ -1,9 +1,14 @@
 use dioxus::prelude::*;
 
 #[component]
-pub fn UIButton(label: String, class: String, onclick: EventHandler<MouseEvent>, children: Element) -> Element {
+pub fn UIButton(
+    label: String,
+    class: String,
+    onclick: EventHandler<MouseEvent>,
+    children: Element,
+) -> Element {
     rsx!(
-        button { 
+        button {
             class: "{class} w-8 h-8 rounded-md border border-white/20 bg-black/70 text-[10px] font-semibold text-white shadow-lg backdrop-blur-sm flex items-center justify-center cursor-pointer hover:bg-black/85",
             aria_label: label,
             onclick: onclick,
@@ -30,7 +35,12 @@ pub fn OptionButton(
 }
 
 #[component]
-pub fn ActionButton(label: String, class: String, onclick: EventHandler<MouseEvent>, children: Element) -> Element {
+pub fn ActionButton(
+    label: String,
+    class: String,
+    onclick: EventHandler<MouseEvent>,
+    children: Element,
+) -> Element {
     rsx!(
         div {
             class: "flex flex-col items-center justify-center gap-2",
