@@ -1,9 +1,9 @@
 use anyhow::anyhow;
 use dioxus::prelude::*;
+use js_sys::Reflect;
 use js_sys::Uint8Array;
 use js_sys::Uint32Array;
 use js_sys::futures::JsFuture;
-use js_sys::Reflect;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 
@@ -38,8 +38,12 @@ impl OCGCore {
             }
         }) as Box<dyn FnMut(JsValue, JsValue) -> JsValue>);
 
-        Reflect::set(&module, &JsValue::from_str("locateFile"), locate_file.as_ref())
-            .map_err(|e| anyhow!("Failed to configure ocgcore locateFile: {e:?}"))?;
+        Reflect::set(
+            &module,
+            &JsValue::from_str("locateFile"),
+            locate_file.as_ref(),
+        )
+        .map_err(|e| anyhow!("Failed to configure ocgcore locateFile: {e:?}"))?;
 
         let promise = init_core(&module.into());
 

@@ -76,7 +76,7 @@ impl Display for BattlePosition {
             Self::FaceUpAttack => String::from("Face-up Attack Position"),
             Self::FaceDownAttack => String::from("Face-down Attack Position"),
             Self::FaceUpDefense => String::from("Face-up Defense Position"),
-            Self::FaceDownDefense => String::from("Face-down Defense Position")
+            Self::FaceDownDefense => String::from("Face-down Defense Position"),
         };
         write!(f, "{}", text)
     }

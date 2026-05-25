@@ -2,9 +2,9 @@ use anyhow::anyhow;
 
 use super::actions::ActiveCard;
 use super::actions::AvailableActions;
+use super::constants::BattlePosition;
 use super::constants::CardController;
 use super::constants::CardLocation;
-use super::constants::BattlePosition;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CoreMessage {
@@ -229,7 +229,7 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                 }
 
                 Ok(CoreMessage::SelectPosition(allowed_positions))
-            },
+            }
             _ => anyhow::bail!("Received wrong message: {msg_value}"),
         }
     }

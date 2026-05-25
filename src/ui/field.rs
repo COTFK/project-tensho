@@ -93,8 +93,8 @@ fn Zone(index: u8, card: Option<ActiveCard>, zone_type: CardLocation) -> Element
     let activatable = activatable_card.is_some();
     let chain_option = prompted_card.and_then(|card| card.chain_option);
 
-    let is_selected = selected_card()
-        .is_some_and(|card| card.location == zone_type && card.index == index);
+    let is_selected =
+        selected_card().is_some_and(|card| card.location == zone_type && card.index == index);
 
     let mut available_zones = state.available_zones;
     let clickable = available_zones()

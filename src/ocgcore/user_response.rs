@@ -23,8 +23,8 @@ pub enum UserResponse {
         sequence: u8,
     },
     SelectPosition {
-        position: BattlePosition
-    }
+        position: BattlePosition,
+    },
 }
 
 impl UserResponse {
@@ -42,7 +42,7 @@ impl UserResponse {
             Self::Activate { sequence } => vec![5, 0, *sequence, 0],
             Self::NormalSummon { sequence } => vec![0, 0, *sequence, 0],
             Self::SelectCard { sequence } => vec![2, 0, 0, 0, 1, 0, 0, 0, *sequence],
-            Self::SelectPosition { position } => vec![*position as u8, 0, 0, 0]
+            Self::SelectPosition { position } => vec![*position as u8, 0, 0, 0],
         }
     }
 }

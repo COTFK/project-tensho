@@ -1,9 +1,9 @@
 use anyhow::Context;
 use std::collections::HashMap;
 
+use super::constants::BattlePosition;
 use super::constants::CardController;
 use super::constants::CardLocation;
-use super::constants::BattlePosition;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ActiveCard {
@@ -13,7 +13,7 @@ pub struct ActiveCard {
     pub position: Option<BattlePosition>,
     pub sequence: u8,
     pub chain_option: Option<u8>,
-    pub description: Option<u32>
+    pub description: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

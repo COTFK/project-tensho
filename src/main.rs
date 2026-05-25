@@ -5,12 +5,12 @@ mod utility;
 
 use dioxus::prelude::*;
 
+use crate::state::load_duel;
 use crate::ui::DuelScreen;
 use crate::ui::LoadingScreen;
-use crate::state::load_duel;
-use crate::utility::cache_card_data;
-use crate::utility::GIT_HASH;
 use crate::utility::BUILD_VERSION;
+use crate::utility::GIT_HASH;
+use crate::utility::cache_card_data;
 
 fn main() {
     dioxus::launch(AppContainer);

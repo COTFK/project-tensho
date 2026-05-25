@@ -1,5 +1,5 @@
-use dioxus::prelude::*;
 use super::svg::Spinner;
+use dioxus::prelude::*;
 
 #[component]
 pub fn LoadingScreen() -> Element {
@@ -15,6 +15,6 @@ pub fn LoadingScreen() -> Element {
                     "Loading..."
                 }
         }
-        
+
     )
 }

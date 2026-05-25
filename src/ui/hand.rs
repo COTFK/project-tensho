@@ -142,7 +142,7 @@ pub fn Hand() -> Element {
                                                         if activatable {
                                                             send_user_response(UserResponse::Activate { sequence: activatable_index as u8 });
                                                         }
-                                                        
+
                                                     },
                                                     SummonIcon {}
                                                 }

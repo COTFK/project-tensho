@@ -1,13 +1,12 @@
-use dioxus::prelude::*;
 use crate::ui::svg::SummonIcon;
+use dioxus::prelude::*;
 
 #[component]
 pub fn BlockButton(
     label: String,
     disabled: Option<bool>,
     onclick: EventHandler<MouseEvent>,
-    #[props(default)]
-    additional_classes: String,
+    #[props(default)] additional_classes: String,
 ) -> Element {
     rsx!(
         button {

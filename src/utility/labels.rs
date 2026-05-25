@@ -8,7 +8,7 @@ static CARD_DATA_FOLDER: Asset = asset!("/assets/card_data");
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CardLabel {
     pub name: String,
-    pub optional_strings: HashMap<usize, String>
+    pub optional_strings: HashMap<usize, String>,
 }
 
 thread_local! {
@@ -41,21 +41,39 @@ async fn get_label_data(id: &str) -> anyhow::Result<CardLabel> {
 
     let mut optional_strings = HashMap::new();
 
-    if id == "44455560" { // Ulcanix
-        optional_strings.insert(2, String::from("Make this card's Level become that added monster's?"));
+    if id == "44455560" {
+        // Ulcanix
+        optional_strings.insert(
+            2,
+            String::from("Make this card's Level become that added monster's?"),
+        );
     }
     if id == "65305978" {
-        optional_strings.insert(0, String::from("Place 1 \"Fire King Island\" from your Deck face-up in your Field Zone?"));
+        optional_strings.insert(
+            0,
+            String::from("Place 1 \"Fire King Island\" from your Deck face-up in your Field Zone?"),
+        );
     }
     if id == "57554544" {
-        optional_strings.insert(0, String::from("Destroy 1 monster in your hand/field, and search 1 \"Fire King\" monster"));
-        optional_strings.insert(1, String::from("Special Summon 1 FIRE Winged Beast from your hand"));
+        optional_strings.insert(
+            0,
+            String::from(
+                "Destroy 1 monster in your hand/field, and search 1 \"Fire King\" monster",
+            ),
+        );
+        optional_strings.insert(
+            1,
+            String::from("Special Summon 1 FIRE Winged Beast from your hand"),
+        );
     }
     if id == "02526224" {
         optional_strings.insert(2, String::from("Destroy 1 card on the field?"));
     }
 
-    Ok(CardLabel { name, optional_strings })
+    Ok(CardLabel {
+        name,
+        optional_strings,
+    })
 }
 
 pub async fn cache_labels(deck_card_ids: &[u32]) {

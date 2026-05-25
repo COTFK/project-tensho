@@ -32,7 +32,11 @@ fn read_u32_le(bytes: &[u8]) -> u32 {
 }
 
 /// Parse card code from OCG query data field
-fn extract_card_code(data: &[u8], offset: &mut usize, field_len: usize) -> (u32, Option<BattlePosition>) {
+fn extract_card_code(
+    data: &[u8],
+    offset: &mut usize,
+    field_len: usize,
+) -> (u32, Option<BattlePosition>) {
     let mut remaining = field_len;
     let mut code = 0;
     let mut position = None;
