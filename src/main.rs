@@ -9,6 +9,8 @@ use crate::ui::DuelScreen;
 use crate::ui::LoadingScreen;
 use crate::state::load_duel;
 use crate::utility::cache_card_data;
+use crate::utility::GIT_HASH;
+use crate::utility::BUILD_VERSION;
 
 fn main() {
     dioxus::launch(AppContainer);
@@ -31,6 +33,12 @@ pub fn AppContainer() -> Element {
             ),
             Some(Err(e)) => rsx!("{e:#?}"),
             None => rsx!(LoadingScreen {}),
+        }
+        div {
+            class: "fixed bottom-3 left-3 z-50 rounded-md bg-gray-950/70 px-2 py-1 font-mono text-gray-200 shadow-lg ring-1 ring-white/10 backdrop-blur-sm pointer-events-none",
+            style: "font-size: 12px",
+            title: "Build version and commit hash",
+            {format!("burning_draw v{BUILD_VERSION} · {GIT_HASH}")}
         }
     )
 }
