@@ -9,8 +9,8 @@ fn main() {
 
     let git_hash = std::env::var("GIT_HASH")
         .ok()
-        .or_else(|| std::env::var("GITHUB_SHA").ok())
-        .or_else(|| std::env::var("VERCEL_GIT_COMMIT_SHA").ok())
+        .or_else(|| std::env::var("GITHUB_SHA").ok().and_then(shorten_hash))
+        .or_else(|| std::env::var("VERCEL_GIT_COMMIT_SHA").ok().and_then(shorten_hash))
         .or_else(short_git_hash)
         .unwrap_or_else(|| "unknown".to_string());
 
@@ -34,5 +34,15 @@ fn short_git_hash() -> Option<String> {
         None
     } else {
         Some(hash.to_string())
+    }
+}
+
+fn shorten_hash(hash: String) -> Option<String> {
+    let hash = hash.trim();
+
+    if hash.is_empty() {
+        None
+    } else {
+        Some(hash.chars().take(7).collect())
     }
 }
