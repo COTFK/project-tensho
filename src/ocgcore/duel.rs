@@ -147,9 +147,8 @@ impl Duel {
         DuelStatus::try_from(self.core.instance.process(self.handle.0)).unwrap()
     }
 
-    pub fn destroy(&self) -> anyhow::Result<()> {
+    pub fn destroy(&self) {
         self.core.instance.destroy_duel(self.handle.0);
-        Ok(())
     }
 
     pub fn count_location(&self, team: CardOwner, location: CardLocation) -> u32 {

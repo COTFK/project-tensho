@@ -10,12 +10,13 @@ use crate::state::DuelState;
 use crate::state::handle_left_click;
 use crate::state::handle_right_click;
 use crate::state::run_game_loop;
-
 #[component]
 pub fn DuelScreen(duel: Duel, resource_handle: Resource<anyhow::Result<Duel>>) -> Element {
+
     // Initialize duel state
-    let state = DuelState::new(duel);
+    let state = DuelState::new(duel.clone());
     use_context_provider(move || state);
+    use_drop(move || duel.destroy());
 
     // Start game loop
     use_effect(run_game_loop);
