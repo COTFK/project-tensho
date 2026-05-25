@@ -8,7 +8,7 @@ pub fn Card(
     highlight_on_select: bool,
     is_normal_summonable: bool,
     is_activatable: bool,
-    onclick: EventHandler<MouseEvent>
+    onclick: EventHandler<MouseEvent>,
 ) -> Element {
     rsx! {
         div {
@@ -46,6 +46,24 @@ pub fn CardActionMenu(class: String, trigger: bool, children: Element) -> Elemen
             class: if !trigger {"hidden"},
             class: "[mask-image:linear-gradient(to_right,transparent_0%,black_20%,black_80%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,transparent_0%,black_20%,black_80%,transparent_100%)]",
             {children}
+        }
+    )
+}
+
+#[component]
+pub fn CardStack(length: u32, image_url: String) -> Element {
+    rsx!(
+        for index in 1..(length + 1) {
+            div {
+                class: "absolute inset-[clamp(2px,0.6vw,8px)]",
+                img {
+                    class: "w-full h-full object-contain",
+                    style: "z-index: 10; transform: translate({index as f32 * 0.01}vw, -{index as f32 * 0.01}vh);",
+                    image_rendering: "smooth",
+                    aspect_ratio: "59/86",
+                    src: "{image_url}",
+                }
+            }
         }
     )
 }

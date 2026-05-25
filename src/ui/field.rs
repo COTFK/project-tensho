@@ -10,6 +10,7 @@ use crate::ocgcore::constants::CardLocation;
 use crate::state::DuelState;
 use crate::state::SelectedCard;
 use crate::state::send_user_response;
+use crate::ui::components::CardStack;
 use crate::utility::CARD_BACK;
 use crate::utility::EXTRA_BACK;
 
@@ -207,17 +208,9 @@ fn MainDeck() -> Element {
     rsx!(
         div {
             class: "relative shadow-xl bg-slate-50/2 size-[9vw] aspect-square flex items-center justify-center border-0.5",
-            for index in 1..(state.main_deck_length)() + 1 {
-                div {
-                    class: "absolute inset-[clamp(2px,0.6vw,8px)]",
-                    img {
-                        class: "w-full h-full object-contain",
-                        style: "z-index: 10; transform: translate({index as f32 * 0.01}vw, -{index as f32 * 0.01}vh);",
-                        image_rendering: "smooth",
-                        aspect_ratio: "59/86",
-                        src: CARD_BACK,
-                    }
-                }
+            CardStack {
+                length: (state.main_deck_length)(),
+                image_url: CARD_BACK,
             }
         }
     )
@@ -230,17 +223,9 @@ fn ExtraDeck() -> Element {
     rsx!(
         div {
             class: "relative shadow-xl bg-slate-50/2 size-[9vw] aspect-square flex items-center justify-center border-0.5",
-            for index in 1..(state.extra_deck_length)() + 1 {
-                div {
-                    class: "absolute inset-[clamp(2px,0.6vw,8px)]",
-                    img {
-                        class: "w-full h-full object-contain",
-                        style: "z-index: 10; transform: translate({index as f32 * 0.01}vw, -{index as f32 * 0.01}vh);",
-                        image_rendering: "smooth",
-                        aspect_ratio: "59/86",
-                        src: EXTRA_BACK,
-                    }
-                }
+            CardStack {
+                length: (state.extra_deck_length)(),
+                image_url: EXTRA_BACK,
             }
         }
     )

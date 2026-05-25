@@ -8,5 +8,6 @@ pub use buttons::OptionButton;
 pub use buttons::UIButton;
 pub use card::Card;
 pub use card::CardActionMenu;
+pub use card::CardStack;
 pub use modals::MessageModal;
 pub use modals::PickerModal;
