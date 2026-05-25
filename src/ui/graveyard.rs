@@ -1,10 +1,11 @@
 use dioxus::prelude::*;
 
-use super::components::ActivateButton;
-use super::components::BlockButton;
+use super::components::ActionButton;
+use super::components::OptionButton;
 use super::components::Card;
 use super::components::CardActionMenu;
 use super::components::PickerModal;
+use super::components::svg::SummonIcon;
 use crate::ocgcore::UserResponse;
 use crate::ocgcore::constants::CardLocation;
 use crate::state::DuelState;
@@ -79,7 +80,9 @@ pub fn GraveyardModal() -> Element {
                                 CardActionMenu {
                                     class: "absolute left-1/2 -translate-x-[50%] -translate-y-[96px]",
                                     trigger: selected_card() == Some(index) && prompted_card.is_some(),
-                                    ActivateButton {
+                                    ActionButton {
+                                        label: "Activate",
+                                        class: "border-yellow-500 text-yellow-300",
                                         onclick: move |_| {
                                             if prompted_card.is_some() {
                                                 if let Some(chain_option) = chain_option {
@@ -94,7 +97,8 @@ pub fn GraveyardModal() -> Element {
 
                                                 selected_card.set(None);
                                             }
-                                        }
+                                        },
+                                        SummonIcon {  }
                                     }
                                 }
                             }
@@ -103,7 +107,7 @@ pub fn GraveyardModal() -> Element {
 
                 }
             }
-            BlockButton {
+            OptionButton {
                 label: "Close",
                 onclick: move |_| {
                     show_graveyard.set(false);

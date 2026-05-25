@@ -1,4 +1,4 @@
-use super::svg::Spinner;
+use super::components::svg::Spinner;
 use dioxus::prelude::*;
 
 #[component]

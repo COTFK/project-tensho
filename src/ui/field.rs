@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use super::graveyard::Graveyard;
-use super::svg::SummonIcon;
+use super::components::svg::SummonIcon;
 use crate::ocgcore::ActiveCard;
 use crate::ocgcore::UserResponse;
 use crate::ocgcore::constants::BattlePosition;

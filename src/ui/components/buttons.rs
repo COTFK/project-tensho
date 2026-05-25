@@ -1,8 +1,19 @@
-use crate::ui::svg::SummonIcon;
 use dioxus::prelude::*;
 
 #[component]
-pub fn BlockButton(
+pub fn UIButton(label: String, class: String, onclick: EventHandler<MouseEvent>, children: Element) -> Element {
+    rsx!(
+        button { 
+            class: "{class} w-8 h-8 rounded-md border border-white/20 bg-black/70 text-[10px] font-semibold text-white shadow-lg backdrop-blur-sm flex items-center justify-center cursor-pointer hover:bg-black/85",
+            aria_label: label,
+            onclick: onclick,
+            {children}
+        }
+    )
+}
+
+#[component]
+pub fn OptionButton(
     label: String,
     disabled: Option<bool>,
     onclick: EventHandler<MouseEvent>,
@@ -19,36 +30,18 @@ pub fn BlockButton(
 }
 
 #[component]
-pub fn ActivateButton(onclick: EventHandler<MouseEvent>) -> Element {
+pub fn ActionButton(label: String, class: String, onclick: EventHandler<MouseEvent>, children: Element) -> Element {
     rsx!(
         div {
             class: "flex flex-col items-center justify-center gap-2",
             p {
                 class: "text-white text-sm font-semibold shadow-md text-center",
-                "Activate"
+                "{label}"
             },
             button {
-                class: "bg-black size-12 p-1 rounded-full border-3 border-yellow-500 text-yellow-300 cursor-pointer text-center",
+                class: "bg-black size-12 p-1 rounded-full border-3 {class} cursor-pointer text-center",
                 onclick: onclick,
-                SummonIcon {  }
-            }
-        }
-    )
-}
-
-#[component]
-pub fn SummonButton(onclick: EventHandler<MouseEvent>) -> Element {
-    rsx!(
-        div {
-            class: "flex flex-col items-center justify-center gap-2",
-            p {
-                class: "text-white text-sm font-semibold shadow-md text-center",
-                "Summon"
-            }
-            button {
-                class: "bg-black size-12 p-1 rounded-full border-3 border-cyan-500 text-cyan-300 cursor-pointer text-center",
-                onclick: onclick,
-                SummonIcon {}
+                {children}
             }
         }
     )

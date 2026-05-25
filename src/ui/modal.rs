@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use super::components::BlockButton;
+use super::components::OptionButton;
 use super::components::MessageModal;
 use super::components::PickerModal;
 use super::components::Card;
@@ -18,7 +18,7 @@ pub fn ModalContainer() -> Element {
         MessageModal {
             trigger: state.card_prompting_to_activate.iter().any(|card| card.chain_option.is_some()),
             title: "A card or effect can be activated. Activate?",
-            BlockButton {
+            OptionButton {
                 label: "No",
                 onclick: |_| send_user_response(UserResponse::PassPriority),
                 additional_classes: "bg-red-600/70",
@@ -27,7 +27,7 @@ pub fn ModalContainer() -> Element {
         MessageModal {
             trigger: !state.card_prompting_to_activate.iter().any(|card| card.chain_option.is_some()) && !state.card_prompting_to_activate.is_empty(),
             title: "Activate trigger effect?",
-            BlockButton {
+            OptionButton {
                 label: "No",
                 onclick: |_| send_user_response(UserResponse::No),
                 additional_classes: "bg-red-600/70",
@@ -38,12 +38,12 @@ pub fn ModalContainer() -> Element {
             title: (state.yes_no_question)().unwrap_or_default(),
             div {
                 class: "flex flex-row gap-4",
-                BlockButton {
+                OptionButton {
                     label: "Yes",
                     onclick: |_| send_user_response(UserResponse::Yes),
                     additional_classes: "bg-green-600/70",
                 }
-                BlockButton {
+                OptionButton {
                     label: "No",
                     onclick: |_| send_user_response(UserResponse::No),
                     additional_classes: "bg-red-600/70",
@@ -54,7 +54,7 @@ pub fn ModalContainer() -> Element {
             trigger: !state.positions_to_select.is_empty(),
             title: "Select battle position",
             for position in (state.positions_to_select)() {
-                BlockButton {
+                OptionButton {
                     label: position,
                     onclick: move |_| send_user_response(UserResponse::SelectPosition { position }),
                     additional_classes: "bg-gray-600 text-white",
@@ -93,7 +93,7 @@ pub fn CardSelector() -> Element {
                     }
                 }
             }
-            BlockButton {
+            OptionButton {
                 label: "Done",
                 disabled: selected_card().is_none(),
                 onclick: move |_| {
@@ -115,7 +115,7 @@ pub fn EffectSelector() -> Element {
             title: "Choose which effect to activate",
             trigger: !state.effects_to_select_from.is_empty(),
             for (index, effect) in (state.effects_to_select_from)() {
-                BlockButton {
+                OptionButton {
                     label: {
                         get_cached_label(effect.card_code)
                             .and_then(|card_label| {
@@ -129,7 +129,7 @@ pub fn EffectSelector() -> Element {
                     additional_classes: "bg-gray-600 text-white w-full",
                 }
             }
-            BlockButton {
+            OptionButton {
                 label: "Cancel",
                 onclick: move |_| state.effects_to_select_from.clear(),
                 additional_classes: "bg-gray-600 text-white w-full",

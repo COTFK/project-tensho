@@ -2,13 +2,13 @@ use dioxus::prelude::*;
 
 use super::components::Card;
 use super::components::CardActionMenu;
-use super::components::ActivateButton;
-use super::components::SummonButton;
+use super::components::ActionButton;
 use crate::ocgcore::UserResponse;
 use crate::ocgcore::constants::CardLocation;
 use crate::state::DuelState;
 use crate::state::SelectedCard;
 use crate::state::send_user_response;
+use crate::ui::components::svg::SummonIcon;
 
 #[component]
 pub fn Hand() -> Element {
@@ -86,10 +86,20 @@ pub fn Hand() -> Element {
                                 class: "absolute -top-28 left-1/2 transform -translate-x-1/2",
                                 trigger: is_selected && (is_normal_summonable || is_activatable),
                                 if is_normal_summonable {
-                                    SummonButton { onclick: on_normal_summon }
+                                    ActionButton { 
+                                        label: "Summon",
+                                        class: "border-cyan-500 text-cyan-300",
+                                        onclick: on_normal_summon,
+                                        SummonIcon { }
+                                    }
                                 }
                                 if is_activatable {
-                                    ActivateButton { onclick: on_activate }
+                                    ActionButton {
+                                        label: "Activate",
+                                        class: "border-yellow-500 text-yellow-300",
+                                        onclick: on_activate,
+                                        SummonIcon {}
+                                    }
                                 }
                             }
                             Card {

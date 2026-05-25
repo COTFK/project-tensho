@@ -17,6 +17,42 @@ pub fn SummonIcon() -> Element {
 }
 
 #[component]
+pub fn ResetIcon() -> Element {
+    rsx!(
+        svg {
+            view_box: "0 0 24 24",
+            xmlns: "http://www.w3.org/2000/svg",
+            class: "w-5 h-5",
+            fill: "none",
+            stroke: "currentColor",
+            color: "currentColor",
+            stroke_width: "2",
+            stroke_linecap: "square",
+            stroke_linejoin: "miter",
+            polyline { points: "22 12 19 15 16 12" }
+            path { d: "M11,20 C6.581722,20 3,16.418278 3,12 C3,7.581722 6.581722,4 11,4 C15.418278,4 19,7.581722 19,12 L19,14" }
+        }
+    )
+}
+
+#[component]
+pub fn FullscreenIcon() -> Element {
+    rsx!(
+        svg {
+            view_box: "0 0 24 24",
+            xmlns: "http://www.w3.org/2000/svg",
+            class: "w-5 h-5",
+            fill: "currentColor",
+            stroke: "currentColor",
+            stroke_width: "0.5",
+            stroke_linecap: "round",
+            stroke_linejoin: "round",
+            path { d: "M3 3h6v2H5v4H3V3zm18 0v6h-2V5h-4V3h6zM3 21v-6h2v4h4v2H3zm18-6v6h-6v-2h4v-4h2z" }
+        }
+    )
+}
+
+#[component]
 pub fn Spinner() -> Element {
     rsx!(
         svg {
