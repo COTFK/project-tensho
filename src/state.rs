@@ -30,7 +30,7 @@ pub struct SelectedCard {
 pub struct DuelState {
     pub duel: Signal<Duel>,
     pub main_deck_length: Signal<u32>,
-    pub extra_deck_length: Signal<u32>,
+    pub extra_deck: Signal<Vec<Option<ActiveCard>>>,
     pub hand_contents: Signal<Vec<Option<ActiveCard>>>,
     pub selected_card: Signal<Option<SelectedCard>>,
     pub normal_summons: Signal<HashMap<u8, u16>>,
@@ -45,6 +45,7 @@ pub struct DuelState {
     pub available_zones: Signal<Vec<(CardLocation, u8)>>,
     pub positions_to_select: Signal<Vec<BattlePosition>>,
     pub show_graveyard: Signal<bool>,
+pub show_extra_deck: Signal<bool>,
     pub effects_to_select_from: Signal<Vec<(u16, ActiveCard)>>,
 }
 
@@ -53,7 +54,7 @@ impl DuelState {
         Self {
             duel: use_signal(move || duel),
             main_deck_length: use_signal(|| 0),
-            extra_deck_length: use_signal(|| 0),
+            extra_deck: use_signal(Vec::new),
             hand_contents: use_signal(Vec::new),
             selected_card: use_signal(|| None),
             normal_summons: use_signal(HashMap::new),
@@ -68,6 +69,7 @@ impl DuelState {
             available_zones: use_signal(Vec::new),
             positions_to_select: use_signal(Vec::new),
             show_graveyard: use_signal(|| false),
+show_extra_deck: use_signal(|| false),
             effects_to_select_from: use_signal(Vec::new),
         }
     }
@@ -81,7 +83,7 @@ impl DuelState {
         self.duel.set(duel);
 
         self.main_deck_length.set(0);
-        self.extra_deck_length.set(0);
+        self.extra_deck.clear();
         self.hand_contents.clear();
         self.selected_card.set(None);
         self.normal_summons.clear();
@@ -302,9 +304,7 @@ pub fn handle_core_message() {
     state
         .main_deck_length
         .set(duel.count_location(CardOwner::Player, CardLocation::Deck));
-    state
-        .extra_deck_length
-        .set(duel.count_location(CardOwner::Player, CardLocation::ExtraDeck));
+    state        .extra_deck        .set(duel.get_cards(CardLocation::ExtraDeck));
     state
         .monsters
         .set(duel.get_cards(CardLocation::MonsterZone));

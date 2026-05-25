@@ -2,7 +2,8 @@ use dioxus::prelude::*;
 
 use super::components::svg::SummonIcon;
 use super::graveyard::Graveyard;
-use super::main_deck::{ExtraDeck, MainDeck};
+use super::main_deck::MainDeck;
+use super::extra_deck::ExtraDeck;
 use crate::ocgcore::ActiveCard;
 use crate::ocgcore::UserResponse;
 use crate::ocgcore::constants::BattlePosition;

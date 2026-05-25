@@ -4,6 +4,7 @@ use super::components::Card;
 use super::components::MessageModal;
 use super::components::OptionButton;
 use super::components::PickerModal;
+use super::extra_deck::ExtraDeckModal;
 use super::graveyard::GraveyardModal;
 use crate::ocgcore::UserResponse;
 use crate::state::DuelState;
@@ -64,6 +65,7 @@ pub fn ModalContainer() -> Element {
 
         CardSelector { }
         GraveyardModal {}
+        ExtraDeckModal {}
         EffectSelector {}
 
     )
