@@ -51,6 +51,9 @@ async fn get_label_data(id: &str) -> anyhow::Result<CardLabel> {
         optional_strings.insert(0, String::from("Destroy 1 monster in your hand/field, and search 1 \"Fire King\" monster"));
         optional_strings.insert(1, String::from("Special Summon 1 FIRE Winged Beast from your hand"));
     }
+    if id == "02526224" {
+        optional_strings.insert(2, String::from("Destroy 1 card on the field?"));
+    }
 
     Ok(CardLabel { name, optional_strings })
 }
