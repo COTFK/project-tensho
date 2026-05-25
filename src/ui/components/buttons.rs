@@ -21,14 +21,35 @@ pub fn BlockButton(
 #[component]
 pub fn ActivateButton(onclick: EventHandler<MouseEvent>) -> Element {
     rsx!(
-        p {
-            class: "text-white text-sm font-semibold shadow-md text-center",
-            "Activate"
-        },
-        button {
-            class: "bg-black size-12 p-1 rounded-full border-3 border-yellow-500 text-yellow-300 cursor-pointer text-center",
-            onclick: onclick,
-            SummonIcon {  }
+        div {
+            class: "flex flex-col items-center justify-center gap-2",
+            p {
+                class: "text-white text-sm font-semibold shadow-md text-center",
+                "Activate"
+            },
+            button {
+                class: "bg-black size-12 p-1 rounded-full border-3 border-yellow-500 text-yellow-300 cursor-pointer text-center",
+                onclick: onclick,
+                SummonIcon {  }
+            }
+        }
+    )
+}
+
+#[component]
+pub fn SummonButton(onclick: EventHandler<MouseEvent>) -> Element {
+    rsx!(
+        div {
+            class: "flex flex-col items-center justify-center gap-2",
+            p {
+                class: "text-white text-sm font-semibold shadow-md text-center",
+                "Summon"
+            }
+            button {
+                class: "bg-black size-12 p-1 rounded-full border-3 border-cyan-500 text-cyan-300 cursor-pointer text-center",
+                onclick: onclick,
+                SummonIcon {}
+            }
         }
     )
 }

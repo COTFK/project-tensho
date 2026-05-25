@@ -1,5 +1,4 @@
 mod buttons;
-mod card;
 mod components;
 mod duel;
 mod field;

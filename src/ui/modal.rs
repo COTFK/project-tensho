@@ -3,7 +3,7 @@ use dioxus::prelude::*;
 use super::components::BlockButton;
 use super::components::MessageModal;
 use super::components::PickerModal;
-use super::components::SelectableCard;
+use super::components::Card;
 use super::graveyard::GraveyardModal;
 use crate::ocgcore::UserResponse;
 use crate::state::DuelState;
@@ -79,13 +79,17 @@ pub fn CardSelector() -> Element {
             title: "Select a card",
             trigger: !state.selectables.is_empty(),
             div {
-                class: "flex flex-row gap-2",
-                class: "overflow-x-auto scroll-smooth scrollbar-thin",
+                class: "flex flex-row gap-2 py-2",
+                class: "overflow-x-auto scroll-smooth scrollbar-thin max-w-[80vw]",
                 for card in (state.selectables)() {
-                    SelectableCard {
-                        card_code: card.card_code,
-                        value_to_set: card.sequence,
-                        select_signal: selected_card
+                    Card {
+                        code: card.card_code,
+                        class: "w-[12vw] max-h-[40vh] min-w-[12vw]",
+                        is_selected: selected_card() == Some(card.sequence),
+                        highlight_on_select: true,
+                        is_normal_summonable: false,
+                        is_activatable: false,
+                        onclick: move |_| selected_card.set(Some(card.sequence))
                     }
                 }
             }

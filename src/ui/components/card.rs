@@ -1,0 +1,51 @@
+use dioxus::prelude::*;
+
+#[component]
+pub fn Card(
+    code: u32,
+    class: String,
+    is_selected: bool,
+    highlight_on_select: bool,
+    is_normal_summonable: bool,
+    is_activatable: bool,
+    onclick: EventHandler<MouseEvent>
+) -> Element {
+    rsx! {
+        div {
+            class: "relative {class}",
+            class: if highlight_on_select {"border-2"},
+            class: if is_selected {"border-yellow-300"} else {"border-transparent"},
+            onclick: onclick,
+            div {
+                class: "absolute -inset-[5px] rounded-[4px] blur-[2px] mix-blend-screen pointer-events-none",
+                class: if is_activatable { "bg-yellow-400"},
+                class: if is_normal_summonable && !is_activatable {"bg-cyan-400"},
+                class: if !is_normal_summonable && !is_activatable {"hidden"}
+            }
+            img {
+                class: "relative w-full",
+                image_rendering: "smooth",
+                aspect_ratio: "59/86",
+                src: format!("https://images.ygoprodeck.com/images/cards/{}.jpg", code),
+            }
+            div {
+                class: "absolute inset-0 border-5 blur-[2px] mix-blend-screen pointer-events-none animate-pulse",
+                class: if is_activatable { "border-yellow-300/50"},
+                class: if is_normal_summonable && !is_activatable {"border-cyan-300/50"},
+                class: if !is_normal_summonable && !is_activatable {"hidden"}
+            }
+        }
+    }
+}
+
+#[component]
+pub fn CardActionMenu(class: String, trigger: bool, children: Element) -> Element {
+    rsx!(
+        div {
+            class: "{class} flex flex-row gap-4 bg-black/60 items-center justify-center px-8 py-2",
+            class: if !trigger {"hidden"},
+            class: "[mask-image:linear-gradient(to_right,transparent_0%,black_20%,black_80%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,transparent_0%,black_20%,black_80%,transparent_100%)]",
+            {children}
+        }
+    )
+}
