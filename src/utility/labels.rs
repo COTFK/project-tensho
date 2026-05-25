@@ -12,17 +12,18 @@ pub struct CardLabel {
 }
 
 thread_local! {
-    static LABEL_CACHE: std::cell::RefCell<HashMap<u32, CardLabel>> = std::cell::RefCell::new(HashMap::new());
+    static LABEL_CACHE: std::cell::RefCell<HashMap<String, CardLabel>> = std::cell::RefCell::new(HashMap::new());
 }
 
-fn cache_label(id: u32, data: CardLabel) {
+fn cache_label(id: String, data: CardLabel) {
     LABEL_CACHE.with(|cache| {
         cache.borrow_mut().insert(id, data);
     });
 }
 
 pub fn get_cached_label(id: u32) -> Option<CardLabel> {
-    LABEL_CACHE.with(|cache| cache.borrow().get(&id).cloned())
+    let padded_id = format!("{:08}", id);
+    LABEL_CACHE.with(|cache| cache.borrow().get(padded_id.as_str()).cloned())
 }
 
 async fn get_label_data(id: &str) -> anyhow::Result<CardLabel> {
@@ -61,7 +62,7 @@ pub async fn cache_labels(deck_card_ids: &[u32]) {
         if seen.insert(id) {
             let padded_id = format!("{:08}", id);
             if let Ok(data) = get_label_data(&padded_id).await {
-                cache_label(id, data);
+                cache_label(padded_id, data);
             }
         }
     }
