@@ -2,17 +2,25 @@ mod deck;
 mod labels;
 mod script;
 
-pub use labels::CardLabel;
+pub use deck::EXTRA_DECK_IDS;
+pub use deck::MAIN_DECK_IDS;
+pub use deck::STATIC_CARD_DATA;
 pub use labels::cache_labels;
 pub use labels::get_cached_label;
 pub use script::cache_scripts;
 pub use script::get_cached_script;
 
-pub use deck::EXTRA_DECK_IDS;
-pub use deck::MAIN_DECK_IDS;
-pub use deck::STATIC_CARD_DATA;
-
 use dioxus::prelude::*;
 
 pub static CARD_BACK: Asset = asset!("/assets/images/cover.png");
 pub static EXTRA_BACK: Asset = asset!("/assets/images/cover_extra.png");
+
+pub async fn cache_card_data() {
+    let all_cards = MAIN_DECK_IDS
+        .into_iter()
+        .chain(EXTRA_DECK_IDS)
+        .collect::<Vec<_>>();
+
+    cache_scripts(&all_cards).await;
+    cache_labels(&all_cards).await;
+}

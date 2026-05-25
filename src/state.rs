@@ -1,14 +1,21 @@
 use dioxus::prelude::*;
+use rand::seq::SliceRandom;
 use std::collections::HashMap;
+use std::future::pending;
 
 use crate::ocgcore::ActiveCard;
 use crate::ocgcore::CoreMessage;
 use crate::ocgcore::Duel;
+use crate::ocgcore::OCGCore;
 use crate::ocgcore::UserResponse;
 use crate::ocgcore::constants::BattlePosition;
-use crate::ocgcore::constants::CardOwner;
+use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
+use crate::ocgcore::constants::CardOwner;
+use crate::utility::EXTRA_DECK_IDS;
+use crate::utility::MAIN_DECK_IDS;
 use crate::utility::get_cached_label;
+use crate::utility::get_cached_script;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SelectedCard {
@@ -35,7 +42,52 @@ pub struct DuelState {
     pub available_zones: Signal<Vec<(CardLocation, u8)>>,
     pub positions_to_select: Signal<Vec<BattlePosition>>,
     pub show_graveyard: Signal<bool>,
-    pub effects_to_select_from: Signal<Vec<(u16, ActiveCard)>>
+    pub effects_to_select_from: Signal<Vec<(u16, ActiveCard)>>,
+}
+
+pub async fn load_duel(cache_resource: Resource<()>) -> anyhow::Result<Duel> {
+    let cache_ready = *cache_resource.read_unchecked();
+
+    match cache_ready {
+        Some(()) => {
+            let core = OCGCore::load().await?;
+            let duel = core.create_duel()?;
+
+            duel.load_script(get_cached_script("constant.lua").unwrap(), "constant.lua");
+            duel.load_script(get_cached_script("utility.lua").unwrap(), "utility.lua");
+
+            let mut main_deck = MAIN_DECK_IDS;
+            main_deck.shuffle(&mut rand::rng());
+
+            for card_id in main_deck {
+                duel.add_card(
+                    CardOwner::Player,
+                    card_id,
+                    CardController::Player,
+                    CardLocation::Deck,
+                    0,
+                    0,
+                );
+            }
+
+            for card_id in EXTRA_DECK_IDS {
+                duel.add_card(
+                    CardOwner::Player,
+                    card_id,
+                    CardController::Player,
+                    CardLocation::ExtraDeck,
+                    0,
+                    0,
+                );
+            }
+
+            duel.start();
+            debug!("Duel started successfully.");
+
+            Ok(duel)
+        }
+        None => pending().await,
+    }
 }
 
 pub fn send_user_response(response: UserResponse) {
@@ -119,8 +171,16 @@ pub fn handle_core_message() {
         }
     }
 
-    state.main_deck_length.set(state.duel.count_location(CardOwner::Player, CardLocation::Deck));
-    state.extra_deck_length.set(state.duel.count_location(CardOwner::Player, CardLocation::ExtraDeck));
+    state.main_deck_length.set(
+        state
+            .duel
+            .count_location(CardOwner::Player, CardLocation::Deck),
+    );
+    state.extra_deck_length.set(
+        state
+            .duel
+            .count_location(CardOwner::Player, CardLocation::ExtraDeck),
+    );
 
     state
         .monsters
