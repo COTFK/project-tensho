@@ -1,9 +1,9 @@
 use dioxus::prelude::*;
 
 use super::components::ActionButton;
-use super::components::OptionButton;
 use super::components::Card;
 use super::components::CardActionMenu;
+use super::components::OptionButton;
 use super::components::PickerModal;
 use super::components::svg::SummonIcon;
 use crate::ocgcore::UserResponse;
@@ -11,8 +11,6 @@ use crate::ocgcore::constants::CardLocation;
 use crate::state::DuelState;
 use crate::state::send_user_response;
 use crate::ui::components::CardStack;
-
-
 
 #[component]
 pub fn Graveyard() -> Element {
@@ -25,7 +23,7 @@ pub fn Graveyard() -> Element {
 
     rsx!(
         div {
-            class: "relative shadow-xl bg-slate-50/2 size-[9vw] aspect-square flex items-center justify-center border-0.5 hover:outline-4 hover:outline-yellow-300",
+            class: "relative bg-slate-50/2 size-[9vw] aspect-square flex items-center justify-center border-0.5 hover:outline-4 hover:outline-yellow-300",
             class: if any_trigger_effects_in_gy {"outline-4 outline-yellow-300/50"},
             onclick: move |_| state.show_graveyard.set(true),
             if state.graveyard.len() > 0 {
