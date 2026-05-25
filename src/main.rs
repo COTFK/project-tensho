@@ -9,6 +9,7 @@ use rand::seq::SliceRandom;
 use crate::ocgcore::OCGCore;
 use crate::ocgcore::constants::*;
 use crate::ui::DuelScreen;
+use crate::ui::LoadingScreen;
 use crate::utility::EXTRA_DECK_IDS;
 use crate::utility::MAIN_DECK_IDS;
 use crate::utility::cache_labels;
@@ -76,7 +77,9 @@ pub fn AppContainer() -> Element {
             ),
             Some(Err(e)) => rsx!("{e:#?}"),
             None => {
-                rsx!("Loading...")
+                rsx!(
+                    LoadingScreen {}
+                )
             }
         }
     )
