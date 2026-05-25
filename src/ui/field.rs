@@ -135,7 +135,9 @@ fn Zone(index: u8, card: Option<ActiveCard>, zone_type: CardLocation) -> Element
                     },
                     if activatable || prompted {
                         div {
-                            class: "absolute inset-[clamp(1px,0.3vw,5px)] z-0 rounded-[4px] bg-yellow-400 blur-[2px] mix-blend-screen pointer-events-none"
+                            class: "absolute inset-[clamp(1px,0.3vw,5px)] z-0 rounded-[4px] bg-yellow-400 blur-[2px] mix-blend-screen pointer-events-none",
+                            class: if card.position == Some(BattlePosition::FaceDownDefense) || card.position == Some(BattlePosition::FaceUpDefense) {"-rotate-90"} else {""},
+
                         }
                     }
                     img {
@@ -147,7 +149,8 @@ fn Zone(index: u8, card: Option<ActiveCard>, zone_type: CardLocation) -> Element
                     }
                     if activatable || prompted {
                         div {
-                            class: "absolute inset-[clamp(1px,0.3vw,5px)] z-20 border-5 border-yellow-300/50 blur-[2px] mix-blend-screen pointer-events-none animate-pulse"
+                            class: "absolute inset-[clamp(1px,0.3vw,5px)] z-20 border-5 border-yellow-300/50 blur-[2px] mix-blend-screen pointer-events-none animate-pulse",
+                            class: if card.position == Some(BattlePosition::FaceDownDefense) || card.position == Some(BattlePosition::FaceUpDefense) {"-rotate-90"} else {""},
                         }
                     }
 
