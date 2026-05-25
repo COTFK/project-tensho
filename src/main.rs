@@ -68,7 +68,12 @@ pub fn AppContainer() -> Element {
     rsx!(
         document::Link { rel: "stylesheet", href: asset!("/assets/tailwind.css") }
         match &*core_resource.read() {
-            Some(Ok(duel)) => rsx!(DuelScreen { duel: duel.clone() }),
+            Some(Ok(duel)) => rsx!(
+                DuelScreen { 
+                    duel: duel.clone(),
+                    resource_handle: core_resource,
+                }
+            ),
             Some(Err(e)) => rsx!("{e:#?}"),
             None => {
                 rsx!("Loading...")
