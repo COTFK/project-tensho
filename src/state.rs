@@ -26,9 +26,9 @@ pub struct SelectedCard {
     pub index: u8,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DuelState {
-    pub duel: Duel,
+    pub duel: Signal<Duel>,
     pub main_deck_length: Signal<u32>,
     pub extra_deck_length: Signal<u32>,
     pub hand_contents: Signal<Vec<Option<ActiveCard>>>,
@@ -51,7 +51,7 @@ pub struct DuelState {
 impl DuelState {
     pub fn new(duel: Duel) -> Self {
         Self {
-            duel,
+            duel: use_signal(move || duel),
             main_deck_length: use_signal(|| 0),
             extra_deck_length: use_signal(|| 0),
             hand_contents: use_signal(Vec::new),
@@ -71,6 +71,33 @@ impl DuelState {
             effects_to_select_from: use_signal(Vec::new),
         }
     }
+
+    pub fn reset(&mut self, duel: Duel) {
+        if self.duel.read().clone() == duel {
+            return;
+        }
+
+        (self.duel)().destroy();
+        self.duel.set(duel);
+
+        self.main_deck_length.set(0);
+        self.extra_deck_length.set(0);
+        self.hand_contents.clear();
+        self.selected_card.set(None);
+        self.normal_summons.clear();
+        self.activatable_effects.clear();
+        self.waiting_on_input.set(false);
+        self.monsters.clear();
+        self.spell_traps.clear();
+        self.graveyard.clear();
+        self.card_prompting_to_activate.clear();
+        self.selectables.clear();
+        self.yes_no_question.set(None);
+        self.available_zones.clear();
+        self.positions_to_select.clear();
+        self.show_graveyard.set(false);
+        self.effects_to_select_from.clear();
+    }
 }
 
 pub fn run_game_loop() {
@@ -78,7 +105,7 @@ pub fn run_game_loop() {
 
     if !(state.waiting_on_input)() {
         loop {
-            match state.duel.process() {
+            match (state.duel)().process() {
                 DuelStatus::Awaiting => {
                     handle_core_message();
                     break;
@@ -193,7 +220,7 @@ pub async fn load_duel(cache_resource: Resource<anyhow::Result<OCGCore>>) -> any
 pub fn send_user_response(response: UserResponse) {
     let mut state = use_context::<DuelState>();
 
-    state.duel.set_response(response);
+    state.duel.read().set_response(response);
 
     // Clean up state and wait for new data
     state.hand_contents.clear();
@@ -214,8 +241,9 @@ pub fn send_user_response(response: UserResponse) {
 
 pub fn handle_core_message() {
     let mut state = use_context::<DuelState>();
+    let duel = (state.duel)();
 
-    match state.duel.parse_messages() {
+    match duel.parse_messages() {
         CoreMessage::Retry => {
             warn!("Received Retry - this shouldn't happen.");
         }
@@ -271,27 +299,18 @@ pub fn handle_core_message() {
         }
     }
 
-    state.main_deck_length.set(
-        state
-            .duel
-            .count_location(CardOwner::Player, CardLocation::Deck),
-    );
-    state.extra_deck_length.set(
-        state
-            .duel
-            .count_location(CardOwner::Player, CardLocation::ExtraDeck),
-    );
-
+    state
+        .main_deck_length
+        .set(duel.count_location(CardOwner::Player, CardLocation::Deck));
+    state
+        .extra_deck_length
+        .set(duel.count_location(CardOwner::Player, CardLocation::ExtraDeck));
     state
         .monsters
-        .set(state.duel.get_cards(CardLocation::MonsterZone));
+        .set(duel.get_cards(CardLocation::MonsterZone));
     state
         .spell_traps
-        .set(state.duel.get_cards(CardLocation::SpellTrapZone));
-    state
-        .hand_contents
-        .set(state.duel.get_cards(CardLocation::Hand));
-    state
-        .graveyard
-        .set(state.duel.get_cards(CardLocation::Graveyard));
+        .set(duel.get_cards(CardLocation::SpellTrapZone));
+    state.hand_contents.set(duel.get_cards(CardLocation::Hand));
+    state.graveyard.set(duel.get_cards(CardLocation::Graveyard));
 }

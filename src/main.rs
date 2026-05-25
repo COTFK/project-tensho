@@ -5,8 +5,8 @@ mod utility;
 
 use dioxus::prelude::*;
 
-use crate::state::load_duel;
 use crate::state::cache_dependencies;
+use crate::state::load_duel;
 use crate::ui::DuelScreen;
 use crate::ui::LoadingScreen;
 use crate::utility::BUILD_VERSION;
@@ -27,7 +27,6 @@ pub fn AppContainer() -> Element {
         match &*core_resource.read() {
             Some(Ok(duel)) => rsx!(
                 DuelScreen {
-                    key: "{duel:?}",
                     duel: duel.clone(),
                     resource_handle: core_resource,
                 }

@@ -20,4 +20,3 @@ pub const GIT_HASH: &str = match option_env!("GIT_HASH") {
     Some(hash) => hash,
     None => "unknown",
 };
-
