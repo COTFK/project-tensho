@@ -61,7 +61,7 @@ impl DuelState {
             spell_traps: use_signal(Vec::new),
             graveyard: use_signal(Vec::new),
             card_prompting_to_activate: use_signal(Vec::new),
-            selectables: use_signal(|| Vec::new()),
+            selectables: use_signal(Vec::new),
             yes_no_question: use_signal(|| None),
             available_zones: use_signal(Vec::new),
             positions_to_select: use_signal(Vec::new),
@@ -111,7 +111,7 @@ pub fn handle_right_click(evt: MouseEvent) {
         state.yes_no_question.set(None);
     }
 
-    if (state.show_graveyard)() == true {
+    if (state.show_graveyard)() {
         state.show_graveyard.set(false);
     }
 

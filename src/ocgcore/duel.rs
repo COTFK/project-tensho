@@ -221,7 +221,7 @@ impl Duel {
             codes.push(Some(ActiveCard {
                 card_code: code,
                 controller: CardController::Player,
-                position: position,
+                position,
                 location,
                 sequence: 0,
                 chain_option: None,

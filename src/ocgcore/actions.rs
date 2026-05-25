@@ -43,7 +43,7 @@ impl AvailableActions {
         self.activatable_effects
             .iter()
             .enumerate()
-            .map(|(index, card)| (index as u16, card.clone()))
+            .map(|(index, card)| (index as u16, *card))
             .collect()
     }
 }

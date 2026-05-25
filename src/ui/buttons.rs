@@ -6,7 +6,7 @@ pub fn FullscreenButton() -> Element {
     let toggle_fullscreen = move |_| {
         if let Some(document) = window().and_then(|window| window.document()) {
             if document.fullscreen_element().is_some() {
-                let _ = document.exit_fullscreen();
+                document.exit_fullscreen();
             } else if let Some(element) = document.document_element() {
                 let _ = element.request_fullscreen();
             }

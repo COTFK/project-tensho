@@ -23,7 +23,7 @@ pub fn DuelScreen(duel: Duel, resource_handle: Resource<anyhow::Result<Duel>>) -
     rsx!(
         main {
             class: "relative h-dvh w-dvw bg-gray-800",
-            oncontextmenu: |evt| handle_right_click(evt),
+            oncontextmenu: handle_right_click,
             onclick: |_| handle_left_click(),
             ResetButton {
                 onclick: move |_| {

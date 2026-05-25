@@ -106,7 +106,7 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                     selectables.push(ActiveCard {
                         card_code: id,
                         controller: CardController::Player,
-                        location: location,
+                        location,
                         position: None,
                         sequence: index as u8,
                         chain_option: None,
@@ -172,8 +172,8 @@ impl TryFrom<Vec<u8>> for CoreMessage {
             18 => {
                 let mut zones = Vec::new();
 
-                let player = messages[5];
-                let count = messages[6]; // Number of places to pick
+                let _player = messages[5];
+                let _count = messages[6]; // Number of places to pick
 
                 // Extract the 32-bit zone layout mask
                 let zone_mask =

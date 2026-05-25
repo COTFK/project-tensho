@@ -104,7 +104,7 @@ fn Zone(index: u8, card: Option<ActiveCard>, zone_type: CardLocation) -> Element
     let effects_of_this_card: Vec<(u16, ActiveCard)> = activatable_effects
         .iter()
         .filter(|(_eff_index, card)| card.location == zone_type && card.sequence == index)
-        .map(|(eff_index, card)| (*eff_index, card.clone()))
+        .map(|(eff_index, card)| (*eff_index, *card))
         .collect();
 
     rsx!(

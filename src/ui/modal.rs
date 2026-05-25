@@ -35,7 +35,7 @@ pub fn ModalContainer() -> Element {
         }
         MessageModal {
             trigger: (state.yes_no_question)().is_some(),
-            title: (state.yes_no_question)().unwrap_or(String::new()),
+            title: (state.yes_no_question)().unwrap_or_default(),
             div {
                 class: "flex flex-row gap-4",
                 BlockButton {
@@ -91,7 +91,7 @@ pub fn CardSelector() -> Element {
             }
             BlockButton {
                 label: "Done",
-                disabled: !selected_card().is_some(),
+                disabled: selected_card().is_none(),
                 onclick: move |_| {
                     send_user_response(UserResponse::SelectCard { sequence: selected_card.unwrap() });
                     selected_card.set(None);
