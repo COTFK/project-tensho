@@ -3,6 +3,7 @@ use dioxus::prelude::*;
 use js_sys::Uint8Array;
 use js_sys::Uint32Array;
 use js_sys::futures::JsFuture;
+use js_sys::Reflect;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 
@@ -26,11 +27,27 @@ pub struct OCGCore {
 
 impl OCGCore {
     pub async fn load() -> anyhow::Result<Self> {
-        let promise = init_core();
+        let module = js_sys::Object::new();
+        let locate_file = Closure::wrap(Box::new(|path: JsValue, _prefix: JsValue| -> JsValue {
+            let file_name = path.as_string().unwrap_or_default();
+
+            if file_name == "ocgcore.wasm" {
+                JsValue::from_str("/ocgcore.wasm")
+            } else {
+                JsValue::from_str(&format!("/{file_name}"))
+            }
+        }) as Box<dyn FnMut(JsValue, JsValue) -> JsValue>);
+
+        Reflect::set(&module, &JsValue::from_str("locateFile"), locate_file.as_ref())
+            .map_err(|e| anyhow!("Failed to configure ocgcore locateFile: {e:?}"))?;
+
+        let promise = init_core(&module.into());
 
         let ocgcore = JsFuture::from(promise)
             .await
             .map_err(|e| anyhow!("Core initialization failed: {e:?}"))?;
+
+        drop(locate_file);
 
         let instance: OCGCoreInstance = ocgcore.unchecked_into();
 

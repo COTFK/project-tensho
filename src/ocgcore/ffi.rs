@@ -1,12 +1,12 @@
 use wasm_bindgen::prelude::*;
 
-#[wasm_bindgen(raw_module = "../ocgcore.js")]
+#[wasm_bindgen(module = "/public/ocgcore.js")]
 extern "C" {
     #[derive(Debug, Clone, PartialEq)]
     pub type OCGCoreInstance;
 
     #[wasm_bindgen(js_name = default)]
-    pub fn init_core() -> js_sys::Promise;
+    pub fn init_core(module: &JsValue) -> js_sys::Promise;
 
     #[wasm_bindgen(method, js_name = _OCG_GetVersion)]
     pub fn get_version(this: &OCGCoreInstance, major: u32, minor: u32);

@@ -60,7 +60,7 @@ jobs:
         run: scripts/build_ocgcore.sh
 
       - name: Bundle web app
-        run: dx bundle --platform web --debug-symbols=false --out-dir bundle
+        run: dx bundle --platform web --release --debug-symbols=false --out-dir bundle
 
       - name: Deploy bundle to Vercel
         if: github.event_name == 'push'
