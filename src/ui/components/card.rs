@@ -51,7 +51,7 @@ pub fn CardActionMenu(class: String, trigger: bool, children: Element) -> Elemen
 }
 
 #[component]
-pub fn CardStack(length: u32, image_url: String) -> Element {
+pub fn CardStack(length: usize, image_url: String) -> Element {
     rsx!(
         for index in 1..(length + 1) {
             div {
