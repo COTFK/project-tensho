@@ -76,7 +76,7 @@ pub fn Hand() -> Element {
                                 }));
                             },
 
-                            if summon_index.is_some() {
+                            if summon_index.is_some() && !(chainable || activatable) {
                                 div {
                                     class: "absolute -inset-[5px] rounded-[4px] bg-cyan-400 blur-[2px] mix-blend-screen pointer-events-none"
                                 }
@@ -94,7 +94,7 @@ pub fn Hand() -> Element {
                                 src: format!("https://images.ygoprodeck.com/images/cards/{}.jpg", card.unwrap().card_code),
                             }
 
-                            if summon_index.is_some() {
+                            if summon_index.is_some() && !(chainable || activatable) {
                                 div {
                                     class: "absolute inset-0 border-5 border-cyan-300/50 blur-[2px] mix-blend-screen pointer-events-none animate-pulse"
                                 }
@@ -105,48 +105,46 @@ pub fn Hand() -> Element {
                                 }
                             }
 
-                            // Normal Summon button above selected card
-                            if is_selected {
-                                if summonable || chainable || activatable {
+                            // Button menu above selected card
+                            div {
+                                class: "absolute -top-28 left-1/2 transform -translate-x-1/2 flex flex-row gap-4 bg-black/60 items-center justify-center px-8 py-1",
+                                class: if is_selected && (summonable || chainable || activatable) {""} else {"hidden"},
+                                style: "mask_image: linear-gradient(to right, transparent 0%, black 20%, black 80%, transparent 100%); -webkit-mask-image: linear-gradient(to right, transparent 0%, black 20%, black 80%, transparent 100%);",
+                                if summonable {
                                     div {
-                                        class: "absolute -top-26 left-1/2 transform -translate-x-1/2 flex flex-col items-center justify-center",
-                                        if summonable {
-                                            div {
-                                                p {
-                                                    class: "text-white font-semibold shadow-md",
-                                                    "Summon"
-                                                }
-                                                button {
-                                                    class: "bg-black size-16 p-2 rounded-full border-3 border-cyan-500 text-cyan-300 cursor-pointer",
-                                                    onclick: move |evt| {
-                                                        evt.stop_propagation();
-                                                        send_user_response(UserResponse::NormalSummon { sequence: summon_index.unwrap() as u8 });
-                                                    },
-                                                    SummonIcon {}
-                                                }
-                                            }
+                                        p {
+                                            class: "text-white font-semibold shadow-md",
+                                            "Summon"
                                         }
-                                        if chainable || activatable {
-                                            div {
-                                                p {
-                                                    class: "text-white font-semibold shadow-md",
-                                                    "Activate"
+                                        button {
+                                            class: "bg-black size-16 p-2 rounded-full border-3 border-cyan-500 text-cyan-300 cursor-pointer",
+                                            onclick: move |evt| {
+                                                evt.stop_propagation();
+                                                send_user_response(UserResponse::NormalSummon { sequence: summon_index.unwrap() as u8 });
+                                            },
+                                            SummonIcon {}
+                                        }
+                                    }
+                                }
+                                if chainable || activatable {
+                                    div {
+                                        p {
+                                            class: "text-white font-semibold shadow-md",
+                                            "Activate"
+                                        }
+                                        button {
+                                            class: "bg-black size-16 p-2 rounded-full border-3 border-yellow-500 text-yellow-300 cursor-pointer",
+                                            onclick: move |evt| {
+                                                evt.stop_propagation();
+                                                if chainable {
+                                                    send_user_response(UserResponse::Chain { sequence: chainable_id });
                                                 }
-                                                button {
-                                                    class: "bg-black size-16 p-2 rounded-full border-3 border-yellow-500 text-yellow-300 cursor-pointer",
-                                                    onclick: move |evt| {
-                                                        evt.stop_propagation();
-                                                        if chainable {
-                                                            send_user_response(UserResponse::Chain { sequence: chainable_id });
-                                                        }
-                                                        if activatable {
-                                                            send_user_response(UserResponse::Activate { sequence: activatable_index as u8 });
-                                                        }
+                                                if activatable {
+                                                    send_user_response(UserResponse::Activate { sequence: activatable_index as u8 });
+                                                }
 
-                                                    },
-                                                    SummonIcon {}
-                                                }
-                                            }
+                                            },
+                                            SummonIcon {}
                                         }
                                     }
                                 }
