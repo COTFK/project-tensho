@@ -16,8 +16,8 @@ use crate::ui::components::CardStack;
 pub fn Graveyard() -> Element {
     let mut state = use_context::<DuelState>();
 
-    let any_cards_in_gy = state.graveyard.len() > 0;
-    let any_trigger_effects_in_gy = state
+    let has_cards = state.graveyard.len() > 0;
+    let has_trigger_effects = state
         .card_prompting_to_activate
         .iter()
         .any(|card| card.location == CardLocation::Graveyard);
@@ -25,12 +25,12 @@ pub fn Graveyard() -> Element {
     rsx!(
         div {
             class: "relative bg-slate-50/2 size-[9vw] aspect-square flex items-center justify-center border-0.5",
-            class: if any_trigger_effects_in_gy {"outline-4 outline-yellow-300/50"},
-            class: if any_cards_in_gy {"hover:outline-4 hover:outline-yellow-300"},
-            onclick: move |_| if any_cards_in_gy { state.show_graveyard.set(true) },
-            if any_cards_in_gy {
+            class: if has_trigger_effects {"outline-4 outline-yellow-300/50"},
+            class: if has_cards {"hover:outline-4 hover:outline-yellow-300"},
+            onclick: move |_| if has_cards { state.show_graveyard.set(true) },
+            if has_cards {
                 CardStack {
-                    length: state.graveyard.len() as u32,
+                    length: state.graveyard.len(),
                     image_url: format!("https://images.ygoprodeck.com/images/cards/{}.jpg", (state.graveyard)().last().unwrap().unwrap().card_code),
                 }
             }
