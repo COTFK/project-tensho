@@ -1,5 +1,4 @@
 use anyhow::anyhow;
-use dioxus::prelude::*;
 use js_sys::Reflect;
 use js_sys::Uint8Array;
 use js_sys::Uint32Array;
@@ -246,7 +245,7 @@ impl OCGCore {
             }
             let bytes = view.subarray(0, length).to_vec();
             let message = String::from_utf8_lossy(&bytes);
-            info!(target: "ocgcore", type = log_type, "{}", message.trim());
+            tracing::info!(target: "ocgcore", type = log_type, "{}", message.trim());
         }) as Box<dyn FnMut(u32, u32, u32)>);
         callback_refs.push(log_handler.into_js_value());
         let log_handler_index =
