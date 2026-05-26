@@ -44,14 +44,14 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                 let card_code =
                     u32::from_le_bytes([messages[6], messages[7], messages[8], messages[9]]);
                 let location = CardLocation::try_from(messages[11]).unwrap();
-                let sequence = messages[12];
+                let index = messages[12];
 
                 Ok(CoreMessage::SelectEffectYN(ActiveCard {
                     card_code,
                     controller: CardController::Player,
                     location,
                     position: None,
-                    sequence,
+                    index,
                     chain_option: None,
                     description: None,
                     is_selected: false,
@@ -100,7 +100,7 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                         controller: CardController::Player,
                         location,
                         position: None,
-                        sequence: index as u8,
+                        index: index as u8,
                         chain_option: None,
                         description: None,
                         is_selected: false,
@@ -128,9 +128,9 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                         let location_byte = messages
                             .get(offset + 5)
                             .ok_or(anyhow!("Failed to get location byte"))?;
-                        let sequence = messages
+                        let index = messages
                             .get(offset + 6)
-                            .ok_or(anyhow!("Failed to get sequence byte"))?;
+                            .ok_or(anyhow!("Failed to get index byte"))?;
                         let controller = CardController::try_from(messages[offset + 4])?;
                         let location = CardLocation::try_from(*location_byte)?;
 
@@ -139,7 +139,7 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                             controller,
                             location,
                             position: None,
-                            sequence: *sequence,
+                            index: *index,
                             chain_option: Some(chain_option as u8),
                             description: None,
                             is_selected: false,
@@ -172,7 +172,7 @@ impl TryFrom<Vec<u8>> for CoreMessage {
 
                 // 2. Check Extra Monster Zones (Bits 5 and 6)
                 // Note: In the response layout, EMZONE is submitted as LOCATION_MZONE
-                // with sequence 5 (Left EMZ) or sequence 6 (Right EMZ).
+                // with index 5 (Left EMZ) or index 6 (Right EMZ).
                 for seq in 5..7 {
                     if (zone_mask & (1 << seq)) == 0 {
                         zones.push((CardLocation::MonsterZone, seq));
@@ -189,7 +189,7 @@ impl TryFrom<Vec<u8>> for CoreMessage {
 
                 // 4. Check Field Spell Zone (Bit 13)
                 if (zone_mask & (1 << 13)) == 0 {
-                    zones.push((CardLocation::SpellTrapZone, 5)); // Field zone sequence index
+                    zones.push((CardLocation::SpellTrapZone, 5)); // Field zone index index
                 }
 
                 Ok(CoreMessage::SelectPlace(zones))

@@ -58,7 +58,7 @@ impl TryFrom<&[u8]> for SelectUnselectMessage {
             // Unpack 4 bytes of location tracking configurations
             let controller = read_u8(raw_bytes, &mut cursor, "controller")?;
             let location = read_u8(raw_bytes, &mut cursor, "location")?;
-            let sequence = read_u8(raw_bytes, &mut cursor, "sequence")?;
+            let index = read_u8(raw_bytes, &mut cursor, "index")?;
             let position = read_u8(raw_bytes, &mut cursor, "position")?;
 
             // Check selection status flag
@@ -69,7 +69,7 @@ impl TryFrom<&[u8]> for SelectUnselectMessage {
                 controller: CardController::try_from(controller)?,
                 location: CardLocation::try_from(location)?,
                 position: BattlePosition::try_from(position).ok(),
-                sequence,
+                index,
                 chain_option: None,
                 description: None,
                 is_selected,

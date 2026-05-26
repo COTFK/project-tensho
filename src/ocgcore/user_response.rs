@@ -11,19 +11,19 @@ pub enum UserResponse {
         index: u8,
     },
     Chain {
-        sequence: u8,
+        index: u8,
     },
     Activate {
-        sequence: u8,
+        index: u8,
     },
     SpecialSummon {
-        sequence: u8,
+        index: u8,
     },
     NormalSummon {
-        sequence: u8,
+        index: u8,
     },
     SelectCard {
-        sequence: u8,
+        index: u8,
     },
     SelectPosition {
         position: BattlePosition,
@@ -41,11 +41,11 @@ impl UserResponse {
                 location,
                 index,
             } => vec![*controller, *location, *index],
-            Self::Chain { sequence } => vec![*sequence, 0, 0, 0],
-            Self::Activate { sequence } => vec![5, 0, *sequence, 0],
-            Self::SpecialSummon { sequence } => vec![1, 0, *sequence, 0],
-            Self::NormalSummon { sequence } => vec![0, 0, *sequence, 0],
-            Self::SelectCard { sequence } => vec![2, 0, 0, 0, 1, 0, 0, 0, *sequence],
+            Self::Chain { index } => vec![*index, 0, 0, 0],
+            Self::Activate { index } => vec![5, 0, *index, 0],
+            Self::SpecialSummon { index } => vec![1, 0, *index, 0],
+            Self::NormalSummon { index } => vec![0, 0, *index, 0],
+            Self::SelectCard { index } => vec![2, 0, 0, 0, 1, 0, 0, 0, *index],
             Self::SelectPosition { position } => vec![*position as u8, 0, 0, 0],
         }
     }

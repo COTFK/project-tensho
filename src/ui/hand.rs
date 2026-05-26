@@ -32,17 +32,17 @@ pub fn Hand() -> Element {
 
                     let activatable_index = activatable_effects
                         .iter()
-                        .find(|(_activate_index, c)| c.location == CardLocation::Hand && c.sequence == index as u8)
+                        .find(|(_activate_index, c)| c.location == CardLocation::Hand && c.index == index as u8)
                         .map(|(idx, _c)| *idx as u8);
                     let chainable_index = chainables
                         .iter()
-                        .find(|c| c.location == CardLocation::Hand && c.sequence == index as u8)
+                        .find(|c| c.location == CardLocation::Hand && c.index == index as u8)
                         .and_then(|c| c.chain_option)
                         .map(|v| v as u8);
                     let is_activatable = chainable_index.is_some() || activatable_index.is_some();
 
                     let is_selected = match selected_card() {
-                        Some(sc) => sc.sequence == index as u8 && sc.location == CardLocation::Hand,
+                        Some(sc) => sc.index == index as u8 && sc.location == CardLocation::Hand,
                         None => false,
                     };
 
@@ -62,13 +62,13 @@ pub fn Hand() -> Element {
 
                     let on_normal_summon = move |evt: MouseEvent| {
                         evt.stop_propagation();
-                        if let Some(seq) = normal_summon_index { send_user_response(UserResponse::NormalSummon { sequence: seq }); }
+                        if let Some(seq) = normal_summon_index { send_user_response(UserResponse::NormalSummon { index: seq }); }
                     };
 
                     let on_activate = move |evt: MouseEvent| {
                         evt.stop_propagation();
-                        if let Some(seq) = chainable_index { send_user_response(UserResponse::Chain { sequence: seq }); }
-                        if let Some(seq) = activatable_index { send_user_response(UserResponse::Activate { sequence: seq }); }
+                        if let Some(seq) = chainable_index { send_user_response(UserResponse::Chain { index: seq }); }
+                        if let Some(seq) = activatable_index { send_user_response(UserResponse::Activate { index: seq }); }
                     };
 
                     rsx!(

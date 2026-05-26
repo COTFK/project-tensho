@@ -96,7 +96,7 @@ pub fn FieldCard(index: u8, location: CardLocation, card: ActiveCard) -> Element
     let selected_snapshot = selected_card();
     let effects_of_this_card: Vec<(u16, ActiveCard)> = activatable_map
         .iter()
-        .filter(|(_eff_index, card)| card.location == location && card.sequence == index)
+        .filter(|(_eff_index, card)| card.location == location && card.index == index)
         .map(|(eff_index, card)| (*eff_index, *card))
         .collect();
 
@@ -104,18 +104,18 @@ pub fn FieldCard(index: u8, location: CardLocation, card: ActiveCard) -> Element
 
     let prompted_card = prompt_list
         .iter()
-        .find(|card| card.location == location && card.sequence == index);
+        .find(|card| card.location == location && card.index == index);
 
     let prompted = prompted_card.is_some();
     let activatable = !effects_of_this_card.is_empty();
     let chain_option = prompted_card.and_then(|card| card.chain_option);
 
     let is_selected =
-        selected_snapshot.is_some_and(|card| card.location == location && card.sequence == index);
+        selected_snapshot.is_some_and(|card| card.location == location && card.index == index);
 
     let cards_to_select_from = (state.cards_to_select_from)();
     let selectable = if let Some(message) = cards_to_select_from {
-        message.cards.iter().any(|card| card.location == location && card.sequence == index)
+        message.cards.iter().any(|card| card.location == location && card.index == index)
     } else {
         false
     };
@@ -135,7 +135,7 @@ pub fn FieldCard(index: u8, location: CardLocation, card: ActiveCard) -> Element
 
                             if prompted {
                                 if let Some(chain_option) = chain_option {
-                                    send_user_response(UserResponse::Chain { sequence: chain_option });
+                                    send_user_response(UserResponse::Chain { index: chain_option });
                                 } else {
                                     send_user_response(UserResponse::Yes);
                                 }
@@ -146,7 +146,7 @@ pub fn FieldCard(index: u8, location: CardLocation, card: ActiveCard) -> Element
                                     state.effects_to_select_from.set(effects_of_this_card.clone());
                                     state.selected_card.set(None);
                                 } else if let Some(idx) = activatable_eff_index {
-                                    send_user_response(UserResponse::Activate { sequence: idx as u8 });
+                                    send_user_response(UserResponse::Activate { index: idx as u8 });
                                 }
                             }
                         },

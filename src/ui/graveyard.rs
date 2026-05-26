@@ -58,7 +58,7 @@ pub fn GraveyardModal() -> Element {
                     {
                         let prompted_card = cards_prompting_to_activate()
                             .iter()
-                            .find(|card| card.location == CardLocation::Graveyard && card.sequence == index as u8)
+                            .find(|card| card.location == CardLocation::Graveyard && card.index == index as u8)
                             .copied();
                         let chain_option = prompted_card.and_then(|card| card.chain_option);
 
@@ -83,13 +83,13 @@ pub fn GraveyardModal() -> Element {
                                         onclick: move |_| {
                                             if prompted_card.is_some() {
                                                 if let Some(chain_option) = chain_option {
-                                                    send_user_response(UserResponse::Chain { sequence: chain_option });
+                                                    send_user_response(UserResponse::Chain { index: chain_option });
                                                 } else {
                                                     send_user_response(UserResponse::Yes);
                                                 }
 
                                                 // if activatable {
-                                                //     send_user_response(UserResponse::Activate { sequence: activatable_eff_index as u8 });
+                                                //     send_user_response(UserResponse::Activate { index: activatable_eff_index as u8 });
                                                 // }
 
                                                 selected_card.set(None);

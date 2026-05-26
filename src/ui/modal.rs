@@ -87,11 +87,11 @@ pub fn CardSelector() -> Element {
                     Card {
                         code: card.card_code,
                         class: "w-[12vw] max-h-[40vh] min-w-[12vw]",
-                        is_selected: selected_card() == Some(card.sequence),
+                        is_selected: selected_card() == Some(card.index),
                         highlight_on_select: true,
                         is_normal_summonable: false,
                         is_activatable: false,
-                        onclick: move |_| selected_card.set(Some(card.sequence))
+                        onclick: move |_| selected_card.set(Some(card.index))
                     }
                 }
             }
@@ -99,7 +99,7 @@ pub fn CardSelector() -> Element {
                 label: "Done",
                 disabled: selected_card().is_none(),
                 onclick: move |_| {
-                    send_user_response(UserResponse::SelectCard { sequence: selected_card.unwrap() });
+                    send_user_response(UserResponse::SelectCard { index: selected_card.unwrap() });
                     selected_card.set(None);
                 },
                 additional_classes: if selected_card().is_none() { "bg-gray-600 cursor-not-allowed" } else { "bg-green-700 cursor-pointer" },
@@ -127,7 +127,7 @@ pub fn EffectSelector() -> Element {
                             })
                             .unwrap_or_else(|| String::from("error"))
                     },
-                    onclick: move |_| send_user_response(UserResponse::Activate { sequence: index as u8 }),
+                    onclick: move |_| send_user_response(UserResponse::Activate { index: index as u8 }),
                     additional_classes: "bg-gray-600 text-white w-full",
                 }
             }

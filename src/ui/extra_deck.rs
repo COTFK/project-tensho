@@ -51,7 +51,7 @@ pub fn ExtraDeckModal() -> Element {
                 for (index, card) in extra_deck().iter().enumerate() {
                     {
                         let card = card.clone();
-                        let is_special_summonable = available_special_summons.iter().any(|card| card.location == CardLocation::ExtraDeck && card.sequence == index as u8);
+                        let is_special_summonable = available_special_summons.iter().any(|card| card.location == CardLocation::ExtraDeck && card.index == index as u8);
 
                         rsx!(
                             div {
@@ -73,7 +73,7 @@ pub fn ExtraDeckModal() -> Element {
                                         class: "border-yellow-500 text-yellow-300",
                                         onclick: move |_| {
                                             if is_special_summonable {
-                                                send_user_response(UserResponse::SpecialSummon{sequence: card.unwrap().sequence});
+                                                send_user_response(UserResponse::SpecialSummon{index: card.unwrap().index});
                                             }
                                             selected_card.set(None);
                                             show_extra_deck.set(false);

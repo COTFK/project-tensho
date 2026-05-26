@@ -146,7 +146,7 @@ impl Duel {
         };
 
         let mut cards = Vec::new();
-        let mut current_sequence: u8 = 0;
+        let mut current_index: u8 = 0;
         let mut cursor = 0usize;
 
         while cursor < orig_buf.len() {
@@ -154,7 +154,7 @@ impl Duel {
                 let marker = u16::from_le_bytes([orig_buf[cursor], orig_buf[cursor + 1]]);
                 if marker == 0 {
                     cards.push(None);
-                    current_sequence += 1;
+                    current_index += 1;
                     cursor += 2;
                     continue;
                 }
@@ -210,12 +210,12 @@ impl Duel {
                             controller: CardController::Player,
                             location,
                             position,
-                            sequence: current_sequence,
+                            index: current_index,
                             chain_option: None,
                             description: None,
                             is_selected: false,
                         }));
-                        current_sequence += 1;
+                        current_index += 1;
                         cursor = record_end;
                         break;
                     }
@@ -246,7 +246,7 @@ impl Duel {
         code: u32,
         controller: CardController,
         location: CardLocation,
-        sequence: u32,
+        index: u32,
         position: u32,
     ) {
         let info_ptr = self.core.allocate_memory(24);
@@ -277,7 +277,7 @@ impl Duel {
         // Padding at 9-11 is left as-is
 
         write_le_bytes(&info_view, 12, &(location as isize).to_le_bytes());
-        write_le_bytes(&info_view, 16, &sequence.to_le_bytes());
+        write_le_bytes(&info_view, 16, &index.to_le_bytes());
         write_le_bytes(&info_view, 20, &position.to_le_bytes());
 
         self.core.instance.add_card(self.handle.into(), info_offset);
