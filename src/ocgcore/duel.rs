@@ -31,63 +31,6 @@ fn read_u32_le(bytes: &[u8]) -> u32 {
     u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
 }
 
-/// Parse card code from OCG query data field
-fn extract_card_code(
-    data: &[u8],
-    offset: &mut usize,
-    field_len: usize,
-) -> (u32, Option<BattlePosition>) {
-    let mut remaining = field_len;
-    let mut code = 0;
-    let mut position = None;
-
-    while remaining > 0 && *offset + 4 <= data.len() {
-        let flag = read_u32_le(&data[*offset..*offset + 4]);
-        *offset += 4;
-        remaining = remaining.saturating_sub(4);
-
-        let value_size = remaining;
-        if *offset + value_size > data.len() {
-            break;
-        }
-
-        // Flag 0x1 = card code
-        if flag == 0x1 && value_size >= 4 {
-            code = read_u32_le(&data[*offset..*offset + 4]);
-        }
-
-        // Flag 0x2 = card position
-        if flag == 0x2 && value_size >= 4 {
-            let position_code = read_u32_le(&data[*offset..*offset + 4]);
-
-            position = match position_code {
-                1 => Some(BattlePosition::FaceUpAttack),
-                2 => Some(BattlePosition::FaceDownAttack),
-                4 => Some(BattlePosition::FaceUpDefense),
-                8 => Some(BattlePosition::FaceDownDefense),
-                _ => None,
-            };
-        }
-
-        *offset += value_size;
-
-        // Flag 0x80000000 = end of card
-        if flag == 0x80000000 {
-            break;
-        }
-
-        // Read next field length
-        if *offset + 2 <= data.len() {
-            remaining = u16::from_le_bytes([data[*offset], data[*offset + 1]]) as usize;
-            *offset += 2;
-        } else {
-            break;
-        }
-    }
-
-    (code, position)
-}
-
 impl Duel {
     pub fn new(handle: CorePointer, core: &OCGCore) -> Self {
         Self {
@@ -101,7 +44,6 @@ impl Duel {
     }
 
     pub fn set_response(&self, response: UserResponse) {
-        tracing::debug!("Sending response: {response:?}");
         let bytes = response.get_response_bytes();
         let buffer = bytes.as_slice();
         let buf_len = buffer.len() as u32;
@@ -198,37 +140,104 @@ impl Duel {
     }
 
     pub fn get_cards(&self, location: CardLocation) -> Vec<Option<ActiveCard>> {
-        let buf = self
-            .query_location(0xFFFFFFFF, CardOwner::Player, location)
-            .map(|b| b.to_vec())
-            .unwrap_or_default();
+        let orig_buf = match self.query_location(0xFFFFFFFF, CardOwner::Player, location) {
+            Some(js_array) => js_array.to_vec(), // Fast block copy across WASM boundary
+            None => return Vec::new(),
+        };
 
-        let mut codes = Vec::new();
-        let mut offset = 0usize;
+        let mut cards = Vec::new();
+        let mut current_sequence: u8 = 0;
+        let mut cursor = 0usize;
 
-        while offset + 2 <= buf.len() {
-            let field_len = i16::from_le_bytes([buf[offset], buf[offset + 1]]) as usize;
-            offset += 2;
-
-            if field_len == 0 {
-                codes.push(None);
-                continue;
+        while cursor < orig_buf.len() {
+            if cursor + 2 <= orig_buf.len() {
+                let marker = u16::from_le_bytes([orig_buf[cursor], orig_buf[cursor + 1]]);
+                if marker == 0 {
+                    cards.push(None);
+                    current_sequence += 1;
+                    cursor += 2;
+                    continue;
+                }
             }
 
-            let (code, position) = extract_card_code(&buf, &mut offset, field_len);
+            if cursor + 6 > orig_buf.len() {
+                panic!("Malformed buffer payload: unexpected end of stream");
+            }
 
-            codes.push(Some(ActiveCard {
-                card_code: code,
-                controller: CardController::Player,
-                position,
-                location,
-                sequence: 0,
-                chain_option: None,
-                description: None,
-            }));
+            let mut card_code = 0u32;
+            let mut position = None;
+
+            loop {
+                let length = u16::from_le_bytes([orig_buf[cursor], orig_buf[cursor + 1]]) as usize;
+                let record_end = cursor + 2 + length;
+
+                if length < 4 || record_end > orig_buf.len() {
+                    panic!("Malformed buffer payload: unexpected end of stream");
+                }
+
+                let query_flag = u32::from_le_bytes([
+                    orig_buf[cursor + 2],
+                    orig_buf[cursor + 3],
+                    orig_buf[cursor + 4],
+                    orig_buf[cursor + 5],
+                ]);
+
+                match query_flag {
+                    0x0000_0001 => {
+                        if cursor + 10 <= orig_buf.len() {
+                            card_code = u32::from_le_bytes([
+                                orig_buf[cursor + 6],
+                                orig_buf[cursor + 7],
+                                orig_buf[cursor + 8],
+                                orig_buf[cursor + 9],
+                            ]);
+                        }
+                    }
+                    0x0000_0002 => {
+                        if cursor + 10 <= orig_buf.len() {
+                            let raw_position = u32::from_le_bytes([
+                                orig_buf[cursor + 6],
+                                orig_buf[cursor + 7],
+                                orig_buf[cursor + 8],
+                                orig_buf[cursor + 9],
+                            ]);
+                            position = BattlePosition::try_from(raw_position).ok();
+                        }
+                    }
+                    0x8000_0000 => {
+                        cards.push(Some(ActiveCard {
+                            card_code,
+                            controller: CardController::Player,
+                            location,
+                            position,
+                            sequence: current_sequence,
+                            chain_option: None,
+                            description: None,
+                            is_selected: false,
+                        }));
+                        current_sequence += 1;
+                        cursor = record_end;
+                        break;
+                    }
+                    _ => {}
+                }
+
+                cursor = record_end;
+
+                if cursor >= orig_buf.len() {
+                    panic!("Malformed buffer payload: unexpected end of stream");
+                }
+
+                if cursor + 2 <= orig_buf.len() {
+                    let next_marker = u16::from_le_bytes([orig_buf[cursor], orig_buf[cursor + 1]]);
+                    if next_marker == 0 {
+                        panic!("Malformed buffer payload: missing QUERY_END");
+                    }
+                }
+            }
         }
 
-        codes
+        cards
     }
 
     pub fn add_card(
