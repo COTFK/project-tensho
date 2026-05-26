@@ -6,7 +6,6 @@ use super::components::CardActionMenu;
 use crate::ocgcore::UserResponse;
 use crate::ocgcore::constants::CardLocation;
 use crate::state::DuelState;
-use crate::state::SelectedCard;
 use crate::state::send_user_response;
 use crate::ui::components::svg::SummonIcon;
 
@@ -43,7 +42,7 @@ pub fn Hand() -> Element {
                     let is_activatable = chainable_index.is_some() || activatable_index.is_some();
 
                     let is_selected = match selected_card() {
-                        Some(sc) => sc.index == index as u8 && sc.location == CardLocation::Hand,
+                        Some(sc) => sc.sequence == index as u8 && sc.location == CardLocation::Hand,
                         None => false,
                     };
 
@@ -58,10 +57,7 @@ pub fn Hand() -> Element {
 
                     let on_select = move |evt: MouseEvent| {
                         evt.stop_propagation();
-                        selected_card.set(Some(SelectedCard{
-                            location: CardLocation::Hand,
-                            index: index as u8,
-                        }));
+                        selected_card.set(card);
                     };
 
                     let on_normal_summon = move |evt: MouseEvent| {

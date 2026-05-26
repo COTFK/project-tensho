@@ -20,19 +20,13 @@ use crate::utility::cache_scripts;
 use crate::utility::get_cached_label;
 use crate::utility::get_cached_script;
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct SelectedCard {
-    pub location: CardLocation,
-    pub index: u8,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DuelState {
     pub duel: Signal<Duel>,
     pub main_deck_length: Signal<u32>,
     pub extra_deck: Signal<Vec<Option<ActiveCard>>>,
     pub hand_contents: Signal<Vec<Option<ActiveCard>>>,
-    pub selected_card: Signal<Option<SelectedCard>>,
+    pub selected_card: Signal<Option<ActiveCard>>,
     pub normal_summons: Signal<HashMap<u8, u16>>,
     pub special_summons: Signal<Vec<ActiveCard>>,
     pub activatable_effects: Signal<HashMap<u16, ActiveCard>>,

@@ -10,7 +10,6 @@ use crate::ocgcore::constants::BattlePosition;
 use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
 use crate::state::DuelState;
-use crate::state::SelectedCard;
 use crate::state::send_user_response;
 use crate::ui::components::ActionButton;
 use crate::ui::components::Card;
@@ -160,10 +159,7 @@ pub fn FieldCard(index: u8, location: CardLocation, card: ActiveCard) -> Element
                 onclick: move |evt: MouseEvent| {
                     evt.stop_propagation();
 
-                    selected_card.set(Some(SelectedCard{
-                        location: location,
-                        index: index as u8
-                    }));
+                    selected_card.set(Some(card));
                 },
             }
         }
