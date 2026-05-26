@@ -6,8 +6,10 @@ use super::components::CardActionMenu;
 use super::components::CardStack;
 use super::components::OptionButton;
 use super::components::PickerModal;
+use crate::ocgcore::UserResponse;
 use crate::ocgcore::constants::CardLocation;
 use crate::state::DuelState;
+use crate::state::send_user_response;
 use crate::ui::components::svg::SummonIcon;
 use crate::utility::EXTRA_BACK;
 
@@ -70,6 +72,9 @@ pub fn ExtraDeckModal() -> Element {
                                         label: "Summon",
                                         class: "border-yellow-500 text-yellow-300",
                                         onclick: move |_| {
+                                            if is_special_summonable {
+                                                send_user_response(UserResponse::SpecialSummon{sequence: card.unwrap().sequence});
+                                            }
                                             selected_card.set(None);
                                             show_extra_deck.set(false);
                                         },

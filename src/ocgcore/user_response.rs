@@ -16,6 +16,9 @@ pub enum UserResponse {
     Activate {
         sequence: u8,
     },
+    SpecialSummon {
+        sequence: u8,
+    },
     NormalSummon {
         sequence: u8,
     },
@@ -40,6 +43,7 @@ impl UserResponse {
             } => vec![*controller, *location, *index],
             Self::Chain { sequence } => vec![*sequence, 0, 0, 0],
             Self::Activate { sequence } => vec![5, 0, *sequence, 0],
+            Self::SpecialSummon { sequence } => vec![1, 0, *sequence, 0],
             Self::NormalSummon { sequence } => vec![0, 0, *sequence, 0],
             Self::SelectCard { sequence } => vec![2, 0, 0, 0, 1, 0, 0, 0, *sequence],
             Self::SelectPosition { position } => vec![*position as u8, 0, 0, 0],
