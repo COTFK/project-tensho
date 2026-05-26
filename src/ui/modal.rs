@@ -109,12 +109,12 @@ pub fn CardSelector() -> Element {
                     Card {
                         code: card.card_code,
                         class: "w-[12vw] max-h-[40vh] min-w-[12vw]",
-                        is_selected: selected_card() == Some(card.index),
+                        is_selected: selected_card() == Some(card.sequence),
                         highlight_on_select: true,
                         show_dotted_highlight: false,
                         is_normal_summonable: false,
                         is_activatable: false,
-                        onclick: move |_| selected_card.set(Some(card.index))
+                        onclick: move |_| selected_card.set(Some(card.sequence))
                     }
                 }
             }

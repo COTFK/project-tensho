@@ -55,7 +55,7 @@ pub fn ExtraDeckModal() -> Element {
                             .iter()
                             .position(|summon| {
                                 summon.location == CardLocation::ExtraDeck
-                                    && summon.index == card.index
+                                    && summon.sequence == card.sequence
                             })
                             .map(|index| index as u8);
                         let is_special_summonable = special_summon_index.is_some();

@@ -32,17 +32,17 @@ pub fn Hand() -> Element {
 
                     let activatable_index = activatable_effects
                         .iter()
-                        .find(|(_activate_index, c)| c.location == CardLocation::Hand && c.index == index as u8)
+                        .find(|(_activate_index, c)| c.location == CardLocation::Hand && c.sequence == index as u8)
                         .map(|(idx, _c)| *idx as u8);
                     let chainable_index = chainables
                         .iter()
-                        .find(|c| c.location == CardLocation::Hand && c.index == index as u8)
+                        .find(|c| c.location == CardLocation::Hand && c.sequence == index as u8)
                         .and_then(|c| c.chain_option)
                         .map(|v| v as u8);
                     let is_activatable = chainable_index.is_some() || activatable_index.is_some();
 
                     let is_selected = match selected_card() {
-                        Some(sc) => sc.index == index as u8 && sc.location == CardLocation::Hand,
+                        Some(sc) => sc.sequence == index as u8 && sc.location == CardLocation::Hand,
                         None => false,
                     };
 

@@ -96,7 +96,7 @@ pub fn FieldCard(index: u8, location: CardLocation, card: ActiveCard) -> Element
     let selected_snapshot = selected_card();
     let effects_of_this_card: Vec<(u16, ActiveCard)> = activatable_map
         .iter()
-        .filter(|(_eff_index, card)| card.location == location && card.index == index)
+        .filter(|(_eff_index, card)| card.location == location && card.sequence == index)
         .map(|(eff_index, card)| (*eff_index, *card))
         .collect();
 
@@ -104,14 +104,14 @@ pub fn FieldCard(index: u8, location: CardLocation, card: ActiveCard) -> Element
 
     let prompted_card = prompt_list
         .iter()
-        .find(|card| card.location == location && card.index == index);
+        .find(|card| card.location == location && card.sequence == index);
 
     let prompted = prompted_card.is_some();
     let activatable = !effects_of_this_card.is_empty();
     let chain_option = prompted_card.and_then(|card| card.chain_option);
 
     let is_selected =
-        selected_snapshot.is_some_and(|card| card.location == location && card.index == index);
+        selected_snapshot.is_some_and(|card| card.location == location && card.sequence == index);
 
     let cards_to_select_from = (state.cards_to_select_from)();
     let card_in_select_list = cards_to_select_from

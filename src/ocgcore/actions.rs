@@ -13,7 +13,7 @@ pub struct ActiveCard {
     pub controller: CardController,
     pub location: CardLocation,
     pub position: Option<BattlePosition>,
-    pub index: u8,
+    pub sequence: u8,
     pub chain_option: Option<u8>,
     pub description: Option<u32>,
     pub is_selected: bool,
@@ -38,7 +38,7 @@ impl AvailableActions {
         self.normal_summons
             .iter()
             .enumerate()
-            .map(|(index, card)| (card.index, index as u16))
+            .map(|(index, card)| (card.sequence, index as u16))
             .collect()
     }
 
@@ -129,7 +129,7 @@ impl TryFrom<&[u8]> for AvailableActions {
                     )?)?,
                     position: None,
                     location: CardLocation::try_from(read_u8(raw, c, "normal_summons.location")?)?,
-                    index: read_u32(raw, c, "normal_summons.index")? as u8,
+                    sequence: read_u32(raw, c, "normal_summons.index")? as u8,
                     chain_option: None,
                     description: None,
                     is_selected: false,
@@ -147,7 +147,7 @@ impl TryFrom<&[u8]> for AvailableActions {
                     )?)?,
                     position: None,
                     location: CardLocation::try_from(read_u8(raw, c, "special_summons.location")?)?,
-                    index: read_u32(raw, c, "special_summons.index")? as u8,
+                    sequence: read_u32(raw, c, "special_summons.index")? as u8,
                     chain_option: None,
                     description: None,
                     is_selected: false,
@@ -169,7 +169,7 @@ impl TryFrom<&[u8]> for AvailableActions {
                         c,
                         "battle_positions.location",
                     )?)?,
-                    index: read_u8(raw, c, "battle_positions.index")?,
+                    sequence: read_u8(raw, c, "battle_positions.index")?,
                     chain_option: None,
                     description: None,
                     is_selected: false,
@@ -182,7 +182,7 @@ impl TryFrom<&[u8]> for AvailableActions {
                 controller: CardController::try_from(read_u8(raw, c, "monster_sets.controller")?)?,
                 location: CardLocation::try_from(read_u8(raw, c, "monster_sets.location")?)?,
                 position: None,
-                index: read_u32(raw, c, "monster_sets.index")? as u8,
+                sequence: read_u32(raw, c, "monster_sets.index")? as u8,
                 chain_option: None,
                 description: None,
                 is_selected: false,
@@ -200,7 +200,7 @@ impl TryFrom<&[u8]> for AvailableActions {
                     )?)?,
                     position: None,
                     location: CardLocation::try_from(read_u8(raw, c, "spell_trap_sets.location")?)?,
-                    index: read_u32(raw, c, "spell_trap_sets.index")? as u8,
+                    sequence: read_u32(raw, c, "spell_trap_sets.index")? as u8,
                     chain_option: None,
                     description: None,
                     is_selected: false,
@@ -212,7 +212,7 @@ impl TryFrom<&[u8]> for AvailableActions {
                 let card_code = read_u32(raw, c, "activatable_effects.card_code")?;
                 let controller = read_u8(raw, c, "activatable_effects.controller")?;
                 let location = read_u8(raw, c, "activatable_effects.location")?;
-                let index = read_u32(raw, c, "activatable_effects.index")? as u8;
+                let sequence = read_u32(raw, c, "activatable_effects.sequence")? as u8;
                 let _description = read_u64(raw, c, "activatable_effects.description")?;
                 let _client_mode = read_u8(raw, c, "activatable_effects.client_mode")?;
 
@@ -223,7 +223,7 @@ impl TryFrom<&[u8]> for AvailableActions {
                     controller: CardController::try_from(controller)?,
                     location: CardLocation::try_from(location)?,
                     position: None,
-                    index,
+                    sequence,
                     chain_option: None,
                     description: Some(description_id),
                     is_selected: false,

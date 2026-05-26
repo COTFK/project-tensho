@@ -21,7 +21,7 @@ pub enum CoreMessage {
     SelectChain(Vec<ActiveCard>),
     SelectPlace(Vec<(CardLocation, u8)>),
     SelectPosition(Vec<BattlePosition>),
-    SelectUnselectCard(SelectUnselectMessage)
+    SelectUnselectCard(SelectUnselectMessage),
 }
 
 impl TryFrom<Vec<u8>> for CoreMessage {
@@ -44,14 +44,14 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                 let card_code =
                     u32::from_le_bytes([messages[6], messages[7], messages[8], messages[9]]);
                 let location = CardLocation::try_from(messages[11]).unwrap();
-                let index = messages[12];
+                let sequence = messages[12];
 
                 Ok(CoreMessage::SelectEffectYN(ActiveCard {
                     card_code,
                     controller: CardController::Player,
                     location,
                     position: None,
-                    index,
+                    sequence,
                     chain_option: None,
                     description: None,
                     is_selected: false,
@@ -100,7 +100,7 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                         controller: CardController::Player,
                         location,
                         position: None,
-                        index: index as u8,
+                        sequence,
                         chain_option: None,
                         description: None,
                         is_selected: false,
@@ -128,9 +128,9 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                         let location_byte = messages
                             .get(offset + 5)
                             .ok_or(anyhow!("Failed to get location byte"))?;
-                        let index = messages
+                        let sequence = messages
                             .get(offset + 6)
-                            .ok_or(anyhow!("Failed to get index byte"))?;
+                            .ok_or(anyhow!("Failed to get sequence byte"))?;
                         let controller = CardController::try_from(messages[offset + 4])?;
                         let location = CardLocation::try_from(*location_byte)?;
 
@@ -139,7 +139,7 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                             controller,
                             location,
                             position: None,
-                            index: *index,
+                            sequence: *sequence,
                             chain_option: Some(chain_option as u8),
                             description: None,
                             is_selected: false,
@@ -212,8 +212,10 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                 }
 
                 Ok(CoreMessage::SelectPosition(allowed_positions))
-            },
-            26 => Ok(CoreMessage::SelectUnselectCard(SelectUnselectMessage::try_from(&messages[..])?)),
+            }
+            26 => Ok(CoreMessage::SelectUnselectCard(
+                SelectUnselectMessage::try_from(&messages[..])?,
+            )),
             _ => anyhow::bail!("Received wrong message: {msg_value}"),
         }
     }

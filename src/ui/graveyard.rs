@@ -58,7 +58,7 @@ pub fn GraveyardModal() -> Element {
                     {
                         let prompted_card = cards_prompting_to_activate()
                             .iter()
-                            .find(|card| card.location == CardLocation::Graveyard && card.index == index as u8)
+                            .find(|card| card.location == CardLocation::Graveyard && card.sequence == index as u8)
                             .copied();
                         let chain_option = prompted_card.and_then(|card| card.chain_option);
 

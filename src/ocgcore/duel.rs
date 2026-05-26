@@ -146,7 +146,7 @@ impl Duel {
         };
 
         let mut cards = Vec::new();
-        let mut current_index: u8 = 0;
+        let mut current_sequence: u8 = 0;
         let mut cursor = 0usize;
 
         while cursor < orig_buf.len() {
@@ -154,7 +154,7 @@ impl Duel {
                 let marker = u16::from_le_bytes([orig_buf[cursor], orig_buf[cursor + 1]]);
                 if marker == 0 {
                     cards.push(None);
-                    current_index += 1;
+                    current_sequence += 1;
                     cursor += 2;
                     continue;
                 }
@@ -210,12 +210,12 @@ impl Duel {
                             controller: CardController::Player,
                             location,
                             position,
-                            index: current_index,
+                            sequence: current_sequence,
                             chain_option: None,
                             description: None,
                             is_selected: false,
                         }));
-                        current_index += 1;
+                        current_sequence += 1;
                         cursor = record_end;
                         break;
                     }

@@ -20,7 +20,7 @@ impl SelectUnselectMessage {
     pub fn response_index_for(&self, card: &ActiveCard) -> Option<u32> {
         if let Some(index) = self.unselect_cards.iter().position(|selectable_card| {
             selectable_card.location == card.location
-                && selectable_card.index == card.index
+                && selectable_card.sequence == card.sequence
                 && selectable_card.card_code == card.card_code
         }) {
             return Some((self.select_cards.len() + index) as u32);
@@ -28,7 +28,7 @@ impl SelectUnselectMessage {
 
         self.select_cards.iter().position(|selectable_card| {
             selectable_card.location == card.location
-                && selectable_card.index == card.index
+                && selectable_card.sequence == card.sequence
                 && selectable_card.card_code == card.card_code
         }).map(|index| index as u32)
     }
@@ -37,7 +37,7 @@ impl SelectUnselectMessage {
         self.select_cards
             .iter()
             .chain(self.unselect_cards.iter())
-            .find(|card| card.location == location && card.index == index)
+            .find(|card| card.location == location && card.sequence == index)
             .copied()
     }
 }
@@ -91,7 +91,7 @@ impl TryFrom<&[u8]> for SelectUnselectMessage {
                 controller: CardController::try_from(controller)?,
                 location: CardLocation::try_from(location)?,
                 position: BattlePosition::try_from(position).ok(),
-                index: sequence as u8,
+                sequence: sequence as u8,
                 chain_option: None,
                 description: None,
                 is_selected: false,
@@ -119,7 +119,7 @@ impl TryFrom<&[u8]> for SelectUnselectMessage {
                 controller: CardController::try_from(controller)?,
                 location: CardLocation::try_from(location)?,
                 position: BattlePosition::try_from(position).ok(),
-                index: sequence as u8,
+                sequence: sequence as u8,
                 chain_option: None,
                 description: None,
                 is_selected: true,
