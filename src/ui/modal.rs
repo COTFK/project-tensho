@@ -52,6 +52,23 @@ pub fn ModalContainer() -> Element {
             }
         }
         MessageModal {
+            trigger: (state.cards_to_select_from)().is_some(),
+            title: "Select cards",
+            div {
+                class: "flex flex-row gap-4",
+                OptionButton {
+                    label: "Confirm",
+                    onclick: |_| {},
+                    additional_classes: "bg-green-600/70",
+                }
+                OptionButton {
+                    label: "Cancel",
+                    onclick: |_| {},
+                    additional_classes: "bg-red-600/70",
+                }
+            }
+        }
+        MessageModal {
             trigger: !state.positions_to_select.is_empty(),
             title: "Select battle position",
             for position in (state.positions_to_select)() {
