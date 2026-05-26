@@ -1,13 +1,15 @@
 use dioxus::prelude::*;
 
-use super::components::CardStack;
-use crate::state::DuelState;
-use crate::utility::EXTRA_BACK;
-use super::components::PickerModal;
 use super::components::ActionButton;
 use super::components::Card;
 use super::components::CardActionMenu;
+use super::components::CardStack;
 use super::components::OptionButton;
+use super::components::PickerModal;
+use crate::ocgcore::constants::CardLocation;
+use crate::state::DuelState;
+use crate::ui::components::svg::SummonIcon;
+use crate::utility::EXTRA_BACK;
 
 #[component]
 pub fn ExtraDeck() -> Element {
@@ -32,6 +34,7 @@ pub fn ExtraDeck() -> Element {
 pub fn ExtraDeckModal() -> Element {
     let state = use_context::<DuelState>();
     let extra_deck = state.extra_deck;
+    let available_special_summons = (state.special_summons)();
     let mut show_extra_deck = state.show_extra_deck;
 
     let mut selected_card = use_signal(|| None);
@@ -41,46 +44,38 @@ pub fn ExtraDeckModal() -> Element {
             title: "Extra Deck",
             trigger: show_extra_deck(),
             div {
-                class: "flex flex-row min-w-[40vw] gap-[0.5vw] w-full max-w-[76vw]",
+                class: "flex flex-row min-w-[40vw] w-full max-w-[77vw]",
                 class: "overflow-x-auto scroll-smooth scrollbar-thin",
                 for (index, card) in extra_deck().iter().enumerate() {
                     {
+                        let card = card.clone();
+                        let is_special_summonable = available_special_summons.iter().any(|card| card.location == CardLocation::ExtraDeck && card.sequence == index as u8);
+
                         rsx!(
                             div {
-                                class: "relative",
+                                class: "relative p-[0.3vw]",
                                 Card {
                                     code: card.unwrap().card_code,
                                     class: "w-[8vw]",
                                     is_selected: selected_card() == Some(index),
                                     highlight_on_select: true,
                                     is_normal_summonable: false,
-                                    is_activatable: false,
+                                    is_activatable: is_special_summonable,
                                     onclick: move |_| selected_card.set(Some(index))
                                 }
-                                // CardActionMenu {
-                                //     class: "absolute left-1/2 -translate-x-[50%] -translate-y-[96px]",
-                                //     trigger: selected_card() == Some(index) && prompted_card.is_some(),
-                                //     ActionButton {
-                                //         label: "Activate",
-                                //         class: "border-yellow-500 text-yellow-300",
-                                //         onclick: move |_| {
-                                //             if prompted_card.is_some() {
-                                //                 if let Some(chain_option) = chain_option {
-                                //                     send_user_response(UserResponse::Chain { sequence: chain_option });
-                                //                 } else {
-                                //                     send_user_response(UserResponse::Yes);
-                                //                 }
-
-                                //                 // if activatable {
-                                //                 //     send_user_response(UserResponse::Activate { sequence: activatable_eff_index as u8 });
-                                //                 // }
-
-                                //                 selected_card.set(None);
-                                //             }
-                                //         },
-                                //         SummonIcon {  }
-                                //     }
-                                // }
+                                CardActionMenu {
+                                    class: "absolute left-1/2 -translate-x-[50%] -translate-y-[96px]",
+                                    trigger: selected_card() == Some(index) && is_special_summonable,
+                                    ActionButton {
+                                        label: "Summon",
+                                        class: "border-yellow-500 text-yellow-300",
+                                        onclick: move |_| {
+                                            selected_card.set(None);
+                                            show_extra_deck.set(false);
+                                        },
+                                        SummonIcon {  }
+                                    }
+                                }
                             }
                         )
                     }
@@ -98,81 +93,3 @@ pub fn ExtraDeckModal() -> Element {
         }
     )
 }
-
-// #[component]
-// pub fn extra_deckModal() -> Element {
-//     let state = use_context::<DuelState>();
-//     let extra_deck = state.extra_deck;
-//     let cards_prompting_to_activate = state.card_prompting_to_activate;
-//     let mut show_extra_deck = state.show_extra_deck;
-
-//     let mut selected_card = use_signal(|| None);
-
-//     rsx!(
-//         PickerModal {
-//             title: "extra_deck",
-//             trigger: show_extra_deck(),
-//             div {
-//                 class: "flex flex-row gap-2 min-w-[40vw] w-[40vw] max-w-[40vw]",
-//                 class: "overflow-x-auto scroll-smooth scrollbar-thin",
-//                 for (index, card) in extra_deck().iter().enumerate() {
-//                     {
-//                         let prompted_card = cards_prompting_to_activate()
-//                             .iter()
-//                             .find(|card| card.location == CardLocation::extra_deck && card.sequence == index as u8)
-//                             .copied();
-//                         let chain_option = prompted_card.and_then(|card| card.chain_option);
-
-//                         rsx!(
-//                             div {
-//                                 class: "relative p-2",
-//                                 Card {
-//                                     code: card.unwrap().card_code,
-//                                     class: "w-[12vw]",
-//                                     is_selected: selected_card() == Some(index),
-//                                     highlight_on_select: true,
-//                                     is_normal_summonable: false,
-//                                     is_activatable: prompted_card.is_some(),
-//                                     onclick: move |_| selected_card.set(Some(index))
-//                                 }
-//                                 CardActionMenu {
-//                                     class: "absolute left-1/2 -translate-x-[50%] -translate-y-[96px]",
-//                                     trigger: selected_card() == Some(index) && prompted_card.is_some(),
-//                                     ActionButton {
-//                                         label: "Activate",
-//                                         class: "border-yellow-500 text-yellow-300",
-//                                         onclick: move |_| {
-//                                             if prompted_card.is_some() {
-//                                                 if let Some(chain_option) = chain_option {
-//                                                     send_user_response(UserResponse::Chain { sequence: chain_option });
-//                                                 } else {
-//                                                     send_user_response(UserResponse::Yes);
-//                                                 }
-
-//                                                 // if activatable {
-//                                                 //     send_user_response(UserResponse::Activate { sequence: activatable_eff_index as u8 });
-//                                                 // }
-
-//                                                 selected_card.set(None);
-//                                             }
-//                                         },
-//                                         SummonIcon {  }
-//                                     }
-//                                 }
-//                             }
-//                         )
-//                     }
-
-//                 }
-//             }
-//             OptionButton {
-//                 label: "Close",
-//                 onclick: move |_| {
-//                     show_extra_deck.set(false);
-//                     selected_card.set(None);
-//                 },
-//                 additional_classes: "bg-green-600/70"
-//             }
-//         }
-//     )
-// }
