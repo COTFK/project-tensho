@@ -34,6 +34,7 @@ pub struct DuelState {
     pub hand_contents: Signal<Vec<Option<ActiveCard>>>,
     pub selected_card: Signal<Option<SelectedCard>>,
     pub normal_summons: Signal<HashMap<u8, u16>>,
+    pub special_summons: Signal<Vec<ActiveCard>>,
     pub activatable_effects: Signal<HashMap<u16, ActiveCard>>,
     pub waiting_on_input: Signal<bool>,
     pub monsters: Signal<Vec<Option<ActiveCard>>>,
@@ -58,6 +59,7 @@ impl DuelState {
             hand_contents: use_signal(Vec::new),
             selected_card: use_signal(|| None),
             normal_summons: use_signal(HashMap::new),
+            special_summons: use_signal(Vec::new),
             activatable_effects: use_signal(HashMap::new),
             waiting_on_input: use_signal(|| false),
             monsters: use_signal(Vec::new),
@@ -87,6 +89,7 @@ show_extra_deck: use_signal(|| false),
         self.hand_contents.clear();
         self.selected_card.set(None);
         self.normal_summons.clear();
+        self.special_summons.clear();
         self.activatable_effects.clear();
         self.waiting_on_input.set(false);
         self.monsters.clear();
@@ -227,6 +230,7 @@ pub fn send_user_response(response: UserResponse) {
     state.hand_contents.clear();
     state.selected_card.set(None);
     state.normal_summons.clear();
+    state.special_summons.clear();
     state.activatable_effects.clear();
     state.waiting_on_input.set(false);
     state.monsters.clear();
@@ -250,6 +254,7 @@ pub fn handle_core_message() {
         }
         CoreMessage::Idle(actions) => {
             state.normal_summons.set(actions.get_normal_summons());
+            state.special_summons.set(actions.get_special_summons());
             state
                 .activatable_effects
                 .set(actions.get_activatable_effects());
@@ -300,7 +305,9 @@ pub fn handle_core_message() {
     state
         .main_deck_length
         .set(duel.count_location(CardOwner::Player, CardLocation::Deck));
-    state        .extra_deck        .set(duel.get_cards(CardLocation::ExtraDeck));
+    state
+        .extra_deck
+        .set(duel.get_cards(CardLocation::ExtraDeck));
     state
         .monsters
         .set(duel.get_cards(CardLocation::MonsterZone));
