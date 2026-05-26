@@ -28,7 +28,7 @@ pub fn DuelScreen(duel: Duel, resource_handle: Resource<anyhow::Result<Duel>>) -
 
     rsx!(
         main {
-            class: "relative h-dvh w-dvw bg-gray-800",
+            class: "relative h-dvh w-dvw bg-gray-800 select-none",
             oncontextmenu: handle_right_click,
             onclick: |_| handle_left_click(),
             UIButton {
