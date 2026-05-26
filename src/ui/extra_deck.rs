@@ -50,14 +50,21 @@ pub fn ExtraDeckModal() -> Element {
                 class: "overflow-x-auto scroll-smooth scrollbar-thin",
                 for (index, card) in extra_deck().iter().enumerate() {
                     {
-                        let card = card.clone();
-                        let is_special_summonable = available_special_summons.iter().any(|card| card.location == CardLocation::ExtraDeck && card.index == index as u8);
+                        let card = card.clone().unwrap();
+                        let special_summon_index = available_special_summons
+                            .iter()
+                            .position(|summon| {
+                                summon.location == CardLocation::ExtraDeck
+                                    && summon.index == card.index
+                            })
+                            .map(|index| index as u8);
+                        let is_special_summonable = special_summon_index.is_some();
 
                         rsx!(
                             div {
                                 class: "relative p-[0.3vw]",
                                 Card {
-                                    code: card.unwrap().card_code,
+                                    code: card.card_code,
                                     class: "w-[8vw]",
                                     is_selected: selected_card() == Some(index),
                                     highlight_on_select: true,
@@ -72,8 +79,8 @@ pub fn ExtraDeckModal() -> Element {
                                         label: "Summon",
                                         class: "border-yellow-500 text-yellow-300",
                                         onclick: move |_| {
-                                            if is_special_summonable {
-                                                send_user_response(UserResponse::SpecialSummon{index: card.unwrap().index});
+                                            if let Some(special_summon_index) = special_summon_index {
+                                                send_user_response(UserResponse::SpecialSummon { index: special_summon_index });
                                             }
                                             selected_card.set(None);
                                             show_extra_deck.set(false);
