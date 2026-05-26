@@ -111,7 +111,7 @@ pub fn FieldCard(index: u8, location: CardLocation, card: ActiveCard) -> Element
     let chain_option = prompted_card.and_then(|card| card.chain_option);
 
     let is_selected =
-        selected_snapshot.is_some_and(|card| card.location == location && card.index == index);
+        selected_snapshot.is_some_and(|card| card.location == location && card.sequence == index);
 
     let cards_to_select_from = (state.cards_to_select_from)();
     let selectable = if let Some(message) = cards_to_select_from {
