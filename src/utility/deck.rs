@@ -45,7 +45,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             setcodes: 0,
             lscale: 0,
             rscale: 0,
-            link_marker: 0,
+            link_marker: 42,
         },
     ),
     (
@@ -79,7 +79,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             setcodes: 281018559,
             lscale: 0,
             rscale: 0,
-            link_marker: 0,
+            link_marker: 5,
         },
     ),
     (
@@ -215,7 +215,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             setcodes: 0,
             lscale: 0,
             rscale: 0,
-            link_marker: 0,
+            link_marker: 40,
         },
     ),
     (
@@ -283,7 +283,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             setcodes: 281018559,
             lscale: 0,
             rscale: 0,
-            link_marker: 0,
+            link_marker: 5,
         },
     ),
     (
@@ -334,7 +334,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             setcodes: 281,
             lscale: 0,
             rscale: 0,
-            link_marker: 0,
+            link_marker: 4,
         },
     ),
     (
@@ -419,7 +419,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             setcodes: 281,
             lscale: 0,
             rscale: 0,
-            link_marker: 0,
+            link_marker: 130,
         },
     ),
     (
@@ -487,7 +487,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             setcodes: 272,
             lscale: 0,
             rscale: 0,
-            link_marker: 0,
+            link_marker: 128,
         },
     ),
     (
