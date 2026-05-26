@@ -73,8 +73,6 @@ fn Zone(index: u8, location: CardLocation, card: Option<ActiveCard>) -> Element 
                         location: location as u8,
                         index: index as u8,
                     });
-
-                    state.available_zones.clear();
                 }
             },
             if let Some(card) = card {
