@@ -58,6 +58,7 @@ impl Duel {
         );
 
         dest_view.set(&js_sys::Uint8Array::from(buffer), 0);
+        tracing::debug!("Sending response {response:?} with bytes {buffer:?}");
 
         self.core
             .instance

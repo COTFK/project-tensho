@@ -278,7 +278,7 @@ pub fn handle_core_message() {
             state.waiting_on_input.set(true);
         }
         CoreMessage::SelectCard(received_selectables) => {
-            state.selectables.set(received_selectables);
+            state.selectables.set(received_selectables.cards);
             state.waiting_on_input.set(true);
         }
         CoreMessage::SelectYesNo {

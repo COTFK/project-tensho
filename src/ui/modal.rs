@@ -105,16 +105,16 @@ pub fn CardSelector() -> Element {
             div {
                 class: "flex flex-row gap-2 py-2",
                 class: "overflow-x-auto scroll-smooth scrollbar-thin max-w-[80vw]",
-                for card in (state.selectables)() {
+                for (index, card) in (state.selectables)().iter().enumerate() {
                     Card {
                         code: card.card_code,
                         class: "w-[12vw] max-h-[40vh] min-w-[12vw]",
-                        is_selected: selected_card() == Some(card.sequence),
+                        is_selected: selected_card() == Some(index as u8),
                         highlight_on_select: true,
                         show_dotted_highlight: false,
                         is_normal_summonable: false,
                         is_activatable: false,
-                        onclick: move |_| selected_card.set(Some(card.sequence))
+                        onclick: move |_| selected_card.set(Some(index as u8))
                     }
                 }
             }

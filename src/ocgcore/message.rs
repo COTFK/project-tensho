@@ -6,6 +6,7 @@ use super::constants::BattlePosition;
 use super::constants::CardController;
 use super::constants::CardLocation;
 use super::messages::SelectUnselectMessage;
+use super::messages::SelectCardMessage;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CoreMessage {
@@ -17,7 +18,7 @@ pub enum CoreMessage {
         card_code: u32,
         string_index: usize,
     },
-    SelectCard(Vec<ActiveCard>),
+    SelectCard(SelectCardMessage),
     SelectChain(Vec<ActiveCard>),
     SelectPlace(Vec<(CardLocation, u8)>),
     SelectPosition(Vec<BattlePosition>),
@@ -31,6 +32,8 @@ impl TryFrom<Vec<u8>> for CoreMessage {
         let msg_value = messages
             .get(4)
             .ok_or(anyhow!("Unable to get message value"))?;
+
+        tracing::debug!("Received message {msg_value:?} with bytes: {messages:?}");
 
         match msg_value {
             1 => Ok(CoreMessage::Retry),
@@ -80,35 +83,7 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                     string_index,
                 })
             }
-            15 => {
-                let mut selectables = Vec::new();
-                let count = messages[15] as usize;
-
-                for index in 0..count {
-                    let offset = 19 + (index * 14);
-
-                    let id = u32::from_le_bytes([
-                        messages[offset],
-                        messages[offset + 1],
-                        messages[offset + 2],
-                        messages[offset + 3],
-                    ]);
-                    let location = CardLocation::try_from(messages[offset + 5]).unwrap();
-
-                    selectables.push(ActiveCard {
-                        card_code: id,
-                        controller: CardController::Player,
-                        location,
-                        position: None,
-                        sequence,
-                        chain_option: None,
-                        description: None,
-                        is_selected: false,
-                    });
-                }
-
-                Ok(CoreMessage::SelectCard(selectables))
-            }
+            15 => Ok(CoreMessage::SelectCard(SelectCardMessage::try_from(&messages[..])?)),
             16 => {
                 let count =
                     u32::from_le_bytes([messages[16], messages[17], messages[18], messages[19]])
