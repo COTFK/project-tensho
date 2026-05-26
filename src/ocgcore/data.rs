@@ -68,6 +68,8 @@ pub struct OCGDuelOptions {
     _padding: [u8; 7],
 }
 
+const DUEL_MODE_MR5: u64 = 0x2E800;
+
 impl Default for OCGDuelOptions {
     fn default() -> Self {
         Self {
@@ -77,7 +79,7 @@ impl Default for OCGDuelOptions {
                 rand::random(),
                 rand::random(),
             ],
-            flags: 0,
+            flags: DUEL_MODE_MR5,
             team1: OCGPlayer {
                 starting_lp: 8000,
                 starting_draw_count: 5,
