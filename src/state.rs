@@ -214,7 +214,6 @@ pub async fn load_duel(cache_resource: Resource<anyhow::Result<OCGCore>>) -> any
     }
 
     duel.start();
-    debug!("Duel started successfully.");
 
     Ok(duel)
 }
@@ -275,7 +274,6 @@ pub fn handle_core_message() {
             state.waiting_on_input.set(true);
         }
         CoreMessage::SelectCard(received_selectables) => {
-            debug!("selecting from {:?}", received_selectables);
             state.selectables.set(received_selectables);
             state.waiting_on_input.set(true);
         }
@@ -284,8 +282,6 @@ pub fn handle_core_message() {
             card_code,
             string_index,
         } => {
-            debug!("got {card_code}, {string_index}");
-
             let label = get_cached_label(card_code).unwrap();
             state.yes_no_question.set(Some(
                 label

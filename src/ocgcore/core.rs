@@ -57,7 +57,6 @@ impl OCGCore {
         // Build callbacks once at init
         let (callback_indices, callback_refs) = Self::build_callbacks(&instance)?;
 
-        tracing::debug!("Core loaded successfully.");
         Ok(Self {
             instance,
             callback_indices,

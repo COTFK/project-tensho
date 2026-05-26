@@ -30,8 +30,6 @@ impl TryFrom<Vec<u8>> for CoreMessage {
             .get(4)
             .ok_or(anyhow!("Unable to get message value"))?;
 
-        tracing::debug!("Received message {msg_value} with bytes: {messages:?}");
-
         match msg_value {
             1 => Ok(CoreMessage::Retry),
             11 => {
@@ -45,14 +43,6 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                     u32::from_le_bytes([messages[6], messages[7], messages[8], messages[9]]);
                 let location = CardLocation::try_from(messages[11]).unwrap();
                 let sequence = messages[12];
-
-                tracing::debug!(
-                    "SelectEffectYN -> Player: {}, Card: {}, Location: {:?}, Zone Index: {}",
-                    player,
-                    card_code,
-                    location,
-                    sequence
-                );
 
                 Ok(CoreMessage::SelectEffectYN(ActiveCard {
                     card_code,
@@ -80,7 +70,6 @@ impl TryFrom<Vec<u8>> for CoreMessage {
 
                 let card_code = ((description_id >> 20) & 0xffff_ffff) as u32;
                 let string_index = (description_id & 0xfffff) as usize;
-                tracing::debug!("card {}, string index {}", card_code, string_index);
 
                 Ok(CoreMessage::SelectYesNo {
                     player,
@@ -122,8 +111,6 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                         as usize;
                 let mut chainables = Vec::new();
 
-                tracing::debug!("SelectChain -> Count: {}", count);
-
                 let mut offset = 20;
                 for chain_option in 0..count {
                     if offset + 7 <= messages.len() {
@@ -142,15 +129,6 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                             .ok_or(anyhow!("Failed to get sequence byte"))?;
                         let controller = CardController::try_from(messages[offset + 4])?;
                         let location = CardLocation::try_from(*location_byte)?;
-
-                        tracing::debug!(
-                            "  Option #{}: Card ID {}, Controller: {:?}, Location: {:?}, Slot: {}",
-                            chain_option,
-                            card_code,
-                            controller,
-                            location,
-                            sequence
-                        );
 
                         chainables.push(ActiveCard {
                             card_code,
