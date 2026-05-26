@@ -114,11 +114,12 @@ pub fn FieldCard(index: u8, location: CardLocation, card: ActiveCard) -> Element
         selected_snapshot.is_some_and(|card| card.location == location && card.index == index);
 
     let cards_to_select_from = (state.cards_to_select_from)();
-    let card_in_select_list = if let Some(message) = cards_to_select_from {
-        message.cards.iter().find(|card| card.location == location && card.index == index).copied()
-    } else {
-        None
-    };
+    let card_in_select_list = cards_to_select_from
+        .as_ref()
+        .and_then(|message| message.select_card_for(location, index));
+    let select_unselect_index = cards_to_select_from.as_ref().and_then(|message| {
+        card_in_select_list.and_then(|selectable_card| message.response_index_for(&selectable_card))
+    });
 
     let selectable_for_extra_deck_summon = card_in_select_list.is_some();
     let is_selected_for_extra_deck_summon = if selectable_for_extra_deck_summon {
@@ -172,7 +173,11 @@ pub fn FieldCard(index: u8, location: CardLocation, card: ActiveCard) -> Element
                 onclick: move |evt: MouseEvent| {
                     evt.stop_propagation();
 
-                    selected_card.set(Some(card));
+                    if let Some(index) = select_unselect_index {
+                        send_user_response(UserResponse::SelectUnselectCard { index });
+                    } else {
+                        selected_card.set(Some(card));
+                    }
                 },
             }
         }

@@ -14,6 +14,7 @@ use crate::utility::get_cached_label;
 #[component]
 pub fn ModalContainer() -> Element {
     let state = use_context::<DuelState>();
+    let cards_to_select_from = (state.cards_to_select_from)();
 
     rsx!(
         MessageModal {
@@ -52,19 +53,23 @@ pub fn ModalContainer() -> Element {
             }
         }
         MessageModal {
-            trigger: (state.cards_to_select_from)().is_some(),
+            trigger: cards_to_select_from.is_some(),
             title: "Select cards",
-            div {
-                class: "flex flex-row gap-4",
-                OptionButton {
-                    label: "Confirm",
-                    onclick: |_| {},
-                    additional_classes: "bg-green-600/70",
-                }
-                OptionButton {
-                    label: "Cancel",
-                    onclick: |_| {},
-                    additional_classes: "bg-red-600/70",
+            if let Some(selection_message) = cards_to_select_from {
+                div {
+                    class: "flex flex-row gap-4",
+                    OptionButton {
+                        label: "Confirm",
+                        disabled: !selection_message.finishable,
+                        onclick: |_| send_user_response(UserResponse::PassPriority),
+                        additional_classes: "bg-green-600/70",
+                    }
+                    OptionButton {
+                        label: "Cancel",
+                        disabled: !selection_message.cancelable,
+                        onclick: |_| send_user_response(UserResponse::PassPriority),
+                        additional_classes: "bg-red-600/70",
+                    }
                 }
             }
         }

@@ -98,6 +98,7 @@ impl DuelState {
         self.available_zones.clear();
         self.positions_to_select.clear();
         self.show_graveyard.set(false);
+        self.cards_to_select_from.set(None);
         self.effects_to_select_from.clear();
     }
 }
@@ -238,6 +239,7 @@ pub fn send_user_response(response: UserResponse) {
     state.available_zones.clear();
     state.positions_to_select.clear();
     state.show_graveyard.set(false);
+    state.cards_to_select_from.set(None);
     state.effects_to_select_from.clear();
 }
 

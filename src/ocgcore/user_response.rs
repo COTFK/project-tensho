@@ -25,6 +25,9 @@ pub enum UserResponse {
     SelectCard {
         index: u8,
     },
+    SelectUnselectCard {
+        index: u32,
+    },
     SelectPosition {
         position: BattlePosition,
     },
@@ -46,6 +49,10 @@ impl UserResponse {
             Self::SpecialSummon { index } => vec![1, 0, *index, 0],
             Self::NormalSummon { index } => vec![0, 0, *index, 0],
             Self::SelectCard { index } => vec![2, 0, 0, 0, 1, 0, 0, 0, *index],
+            Self::SelectUnselectCard { index } => {
+                let index_bytes = index.to_le_bytes();
+                vec![1, 0, 0, 0, index_bytes[0], index_bytes[1], index_bytes[2], index_bytes[3]]
+            }
             Self::SelectPosition { position } => vec![*position as u8, 0, 0, 0],
         }
     }
