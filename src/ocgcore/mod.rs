@@ -8,6 +8,7 @@ mod ffi;
 mod memory;
 mod message;
 mod user_response;
+pub mod messages;
 mod utility;
 
 pub use actions::ActiveCard;

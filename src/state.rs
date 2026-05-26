@@ -13,6 +13,7 @@ use crate::ocgcore::constants::BattlePosition;
 use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
 use crate::ocgcore::constants::CardOwner;
+use crate::ocgcore::messages::SelectUnselectMessage;
 use crate::utility::EXTRA_DECK_IDS;
 use crate::utility::MAIN_DECK_IDS;
 use crate::utility::cache_labels;
@@ -40,8 +41,9 @@ pub struct DuelState {
     pub available_zones: Signal<Vec<(CardLocation, u8)>>,
     pub positions_to_select: Signal<Vec<BattlePosition>>,
     pub show_graveyard: Signal<bool>,
-pub show_extra_deck: Signal<bool>,
+    pub show_extra_deck: Signal<bool>,
     pub effects_to_select_from: Signal<Vec<(u16, ActiveCard)>>,
+    pub cards_to_select_from: Signal<Option<SelectUnselectMessage>>,
 }
 
 impl DuelState {
@@ -65,8 +67,9 @@ impl DuelState {
             available_zones: use_signal(Vec::new),
             positions_to_select: use_signal(Vec::new),
             show_graveyard: use_signal(|| false),
-show_extra_deck: use_signal(|| false),
+            show_extra_deck: use_signal(|| false),
             effects_to_select_from: use_signal(Vec::new),
+            cards_to_select_from: use_signal(|| None),
         }
     }
 
@@ -292,6 +295,10 @@ pub fn handle_core_message() {
         }
         CoreMessage::SelectPosition(positions) => {
             state.positions_to_select.set(positions);
+            state.waiting_on_input.set(true);
+        }
+        CoreMessage::SelectUnselectCard(message) => {
+            state.cards_to_select_from.set(Some(message));
             state.waiting_on_input.set(true);
         }
     }

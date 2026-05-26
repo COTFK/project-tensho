@@ -16,6 +16,7 @@ pub struct ActiveCard {
     pub sequence: u8,
     pub chain_option: Option<u8>,
     pub description: Option<u32>,
+    pub is_selected: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -131,6 +132,7 @@ impl TryFrom<&[u8]> for AvailableActions {
                     sequence: read_u32(raw, c, "normal_summons.sequence")? as u8,
                     chain_option: None,
                     description: None,
+                    is_selected: false,
                 })
             })?;
 
@@ -148,6 +150,7 @@ impl TryFrom<&[u8]> for AvailableActions {
                     sequence: read_u32(raw, c, "special_summons.sequence")? as u8,
                     chain_option: None,
                     description: None,
+                    is_selected: false,
                 })
             })?;
 
@@ -169,6 +172,7 @@ impl TryFrom<&[u8]> for AvailableActions {
                     sequence: read_u8(raw, c, "battle_positions.sequence")?,
                     chain_option: None,
                     description: None,
+                    is_selected: false,
                 })
             })?;
 
@@ -181,6 +185,7 @@ impl TryFrom<&[u8]> for AvailableActions {
                 sequence: read_u32(raw, c, "monster_sets.sequence")? as u8,
                 chain_option: None,
                 description: None,
+                is_selected: false,
             })
         })?;
 
@@ -198,6 +203,7 @@ impl TryFrom<&[u8]> for AvailableActions {
                     sequence: read_u32(raw, c, "spell_trap_sets.sequence")? as u8,
                     chain_option: None,
                     description: None,
+                    is_selected: false,
                 })
             })?;
 
@@ -220,6 +226,7 @@ impl TryFrom<&[u8]> for AvailableActions {
                     sequence,
                     chain_option: None,
                     description: Some(description_id),
+                    is_selected: false,
                 })
             })?;
 

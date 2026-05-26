@@ -5,6 +5,7 @@ use super::actions::AvailableActions;
 use super::constants::BattlePosition;
 use super::constants::CardController;
 use super::constants::CardLocation;
+use super::messages::SelectUnselectMessage;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CoreMessage {
@@ -20,6 +21,7 @@ pub enum CoreMessage {
     SelectChain(Vec<ActiveCard>),
     SelectPlace(Vec<(CardLocation, u8)>),
     SelectPosition(Vec<BattlePosition>),
+    SelectUnselectCard(SelectUnselectMessage)
 }
 
 impl TryFrom<Vec<u8>> for CoreMessage {
@@ -52,6 +54,7 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                     sequence,
                     chain_option: None,
                     description: None,
+                    is_selected: false,
                 }))
             }
             13 => {
@@ -100,6 +103,7 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                         sequence: index as u8,
                         chain_option: None,
                         description: None,
+                        is_selected: false,
                     });
                 }
 
@@ -138,6 +142,7 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                             sequence: *sequence,
                             chain_option: Some(chain_option as u8),
                             description: None,
+                            is_selected: false,
                         })
                     }
 
@@ -207,7 +212,8 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                 }
 
                 Ok(CoreMessage::SelectPosition(allowed_positions))
-            }
+            },
+            26 => Ok(CoreMessage::SelectUnselectCard(SelectUnselectMessage::try_from(&messages[..])?)),
             _ => anyhow::bail!("Received wrong message: {msg_value}"),
         }
     }
