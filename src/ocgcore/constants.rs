@@ -70,6 +70,20 @@ pub enum BattlePosition {
     FaceDownDefense = 8,
 }
 
+impl TryFrom<u8> for BattlePosition {
+    type Error = anyhow::Error;
+
+    fn try_from(value: u8) -> anyhow::Result<Self, Self::Error> {
+        match value {
+            1 => Ok(BattlePosition::FaceUpAttack),
+            2 => Ok(BattlePosition::FaceDownAttack),
+            4 => Ok(BattlePosition::FaceUpDefense),
+            8 => Ok(BattlePosition::FaceDownDefense),
+            _ => anyhow::bail!("Received wrong battle position value: {value}"),
+        }
+    }
+}
+
 impl Display for BattlePosition {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let text = match self {
