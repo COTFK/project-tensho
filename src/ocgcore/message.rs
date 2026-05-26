@@ -5,8 +5,8 @@ use super::actions::AvailableActions;
 use super::constants::BattlePosition;
 use super::constants::CardController;
 use super::constants::CardLocation;
-use super::messages::SelectUnselectMessage;
 use super::messages::SelectCardMessage;
+use super::messages::SelectUnselectMessage;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CoreMessage {
@@ -83,7 +83,9 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                     string_index,
                 })
             }
-            15 => Ok(CoreMessage::SelectCard(SelectCardMessage::try_from(&messages[..])?)),
+            15 => Ok(CoreMessage::SelectCard(SelectCardMessage::try_from(
+                &messages[..],
+            )?)),
             16 => {
                 let count =
                     u32::from_le_bytes([messages[16], messages[17], messages[18], messages[19]])

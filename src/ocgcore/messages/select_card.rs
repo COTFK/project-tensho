@@ -13,11 +13,12 @@ impl TryFrom<&[u8]> for SelectCardMessage {
     type Error = anyhow::Error;
 
     fn try_from(raw_bytes: &[u8]) -> anyhow::Result<Self, Self::Error> {
-        let min_select = u32::from_le_bytes([raw_bytes[7], raw_bytes[8], raw_bytes[9], raw_bytes[10]]);
+        let min_select =
+            u32::from_le_bytes([raw_bytes[7], raw_bytes[8], raw_bytes[9], raw_bytes[10]]);
         let max_select =
             u32::from_le_bytes([raw_bytes[11], raw_bytes[12], raw_bytes[13], raw_bytes[14]]);
-        let count =
-            u32::from_le_bytes([raw_bytes[15], raw_bytes[16], raw_bytes[17], raw_bytes[18]]) as usize;
+        let count = u32::from_le_bytes([raw_bytes[15], raw_bytes[16], raw_bytes[17], raw_bytes[18]])
+            as usize;
 
         let mut cards = Vec::new();
 
@@ -80,7 +81,7 @@ impl TryFrom<&[u8]> for SelectCardMessage {
         Ok(Self {
             min_select,
             max_select,
-            cards
+            cards,
         })
     }
 }

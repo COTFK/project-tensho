@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
-use crate::ocgcore::utility::read_u32;
-use crate::ocgcore::utility::read_u8;
-use crate::ocgcore::utility::read_u64;
 use super::constants::BattlePosition;
 use super::constants::CardController;
 use super::constants::CardLocation;
+use crate::ocgcore::utility::read_u8;
+use crate::ocgcore::utility::read_u32;
+use crate::ocgcore::utility::read_u64;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ActiveCard {

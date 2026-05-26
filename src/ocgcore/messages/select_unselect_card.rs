@@ -1,9 +1,9 @@
-use crate::ocgcore::utility::read_u8;
-use crate::ocgcore::utility::read_u32;
 use crate::ocgcore::ActiveCard;
 use crate::ocgcore::constants::BattlePosition;
 use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
+use crate::ocgcore::utility::read_u8;
+use crate::ocgcore::utility::read_u32;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SelectUnselectMessage {
@@ -26,11 +26,14 @@ impl SelectUnselectMessage {
             return Some((self.select_cards.len() + index) as u32);
         }
 
-        self.select_cards.iter().position(|selectable_card| {
-            selectable_card.location == card.location
-                && selectable_card.sequence == card.sequence
-                && selectable_card.card_code == card.card_code
-        }).map(|index| index as u32)
+        self.select_cards
+            .iter()
+            .position(|selectable_card| {
+                selectable_card.location == card.location
+                    && selectable_card.sequence == card.sequence
+                    && selectable_card.card_code == card.card_code
+            })
+            .map(|index| index as u32)
     }
 
     pub fn select_card_for(&self, location: CardLocation, index: u8) -> Option<ActiveCard> {
@@ -101,7 +104,10 @@ impl TryFrom<&[u8]> for SelectUnselectMessage {
         let unselectable_count = read_u32(raw_bytes, &mut cursor, "unselectable_count")? as usize;
 
         if unselectable_count > 100 {
-            anyhow::bail!("Impossible unselectable count detected: {}", unselectable_count);
+            anyhow::bail!(
+                "Impossible unselectable count detected: {}",
+                unselectable_count
+            );
         }
 
         let mut unselect_cards = Vec::with_capacity(unselectable_count);

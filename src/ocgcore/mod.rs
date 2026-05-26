@@ -7,8 +7,8 @@ mod duel_status;
 mod ffi;
 mod memory;
 mod message;
-mod user_response;
 pub mod messages;
+mod user_response;
 mod utility;
 
 pub use actions::ActiveCard;
