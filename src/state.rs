@@ -244,7 +244,7 @@ pub fn handle_core_message() {
 
     match duel.parse_messages() {
         CoreMessage::Retry => {
-            warn!("Received Retry - this shouldn't happen.");
+            panic!("Received Retry - this shouldn't happen.");
         }
         CoreMessage::Idle(actions) => {
             state.normal_summons.set(actions.get_normal_summons());
