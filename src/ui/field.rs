@@ -114,8 +114,15 @@ pub fn FieldCard(index: u8, location: CardLocation, card: ActiveCard) -> Element
         selected_snapshot.is_some_and(|card| card.location == location && card.index == index);
 
     let cards_to_select_from = (state.cards_to_select_from)();
-    let selectable = if let Some(message) = cards_to_select_from {
-        message.cards.iter().any(|card| card.location == location && card.index == index)
+    let card_in_select_list = if let Some(message) = cards_to_select_from {
+        message.cards.iter().find(|card| card.location == location && card.index == index).copied()
+    } else {
+        None
+    };
+
+    let selectable_for_extra_deck_summon = card_in_select_list.is_some();
+    let is_selected_for_extra_deck_summon = if selectable_for_extra_deck_summon {
+        card_in_select_list.unwrap().is_selected
     } else {
         false
     };
@@ -157,10 +164,10 @@ pub fn FieldCard(index: u8, location: CardLocation, card: ActiveCard) -> Element
             Card {
                 code: card.card_code,
                 class: if card.position == Some(BattlePosition::FaceDownDefense) || card.position == Some(BattlePosition::FaceUpDefense) { "-rotate-90" } else {""},
-                is_selected,
+                is_selected: is_selected || is_selected_for_extra_deck_summon,
                 highlight_on_select: true,
                 is_normal_summonable: false,
-                show_dotted_highlight: selectable,
+                show_dotted_highlight: selectable_for_extra_deck_summon,
                 is_activatable: activatable || prompted,
                 onclick: move |evt: MouseEvent| {
                     evt.stop_propagation();

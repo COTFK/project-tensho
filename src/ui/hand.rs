@@ -103,6 +103,7 @@ pub fn Hand() -> Element {
                                 class: "w-[8vw]",
                                 is_selected,
                                 highlight_on_select: false,
+                                show_dotted_highlight: false,
                                 is_normal_summonable,
                                 is_activatable,
                                 onclick: on_select,

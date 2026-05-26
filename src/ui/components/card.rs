@@ -5,6 +5,7 @@ pub fn Card(
     code: u32,
     class: String,
     is_selected: bool,
+    show_dotted_highlight: bool,
     highlight_on_select: bool,
     is_normal_summonable: bool,
     is_activatable: bool,
@@ -14,7 +15,9 @@ pub fn Card(
         div {
             class: "relative {class}",
             class: if highlight_on_select {"border-2"},
-            class: if is_selected {"border-yellow-300"} else {"border-transparent"},
+            class: if show_dotted_highlight && !is_selected {"border-yellow-300 border-dashed"},
+            class: if is_selected {"border-yellow-300"},
+            class: if !is_selected && !show_dotted_highlight {"border-transparent"},
             onclick: onclick,
             div {
                 class: "absolute -inset-[5px] rounded-[4px] blur-[2px] mix-blend-screen pointer-events-none",

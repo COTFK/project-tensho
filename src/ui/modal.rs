@@ -89,6 +89,7 @@ pub fn CardSelector() -> Element {
                         class: "w-[12vw] max-h-[40vh] min-w-[12vw]",
                         is_selected: selected_card() == Some(card.index),
                         highlight_on_select: true,
+                        show_dotted_highlight: false,
                         is_normal_summonable: false,
                         is_activatable: false,
                         onclick: move |_| selected_card.set(Some(card.index))
