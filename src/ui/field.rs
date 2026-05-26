@@ -56,18 +56,18 @@ pub fn Field() -> Element {
 
 #[component]
 fn Zone(index: u8, location: CardLocation, card: Option<ActiveCard>) -> Element {
-    let mut state = use_context::<DuelState>();
+    let state = use_context::<DuelState>();
 
-    let clickable = (state.available_zones)()
+    let placeable_on = (state.available_zones)()
         .iter()
         .any(|zone| zone.0 == location && zone.1 == index);
 
     rsx!(
         div {
             class: "bg-slate-50/2 size-[9vw] aspect-square flex items-center justify-center",
-            class: if clickable {"border-2 border-yellow-300"} else {"border-0.5"},
+            class: if placeable_on {"border-2 border-yellow-300"} else {"border-0.5"},
             onclick: move |_| {
-                if clickable {
+                if placeable_on {
                     send_user_response(UserResponse::Place {
                         controller: CardController::Player as u8,
                         location: location as u8,
@@ -115,6 +115,13 @@ pub fn FieldCard(index: u8, location: CardLocation, card: ActiveCard) -> Element
     let is_selected =
         selected_snapshot.is_some_and(|card| card.location == location && card.index == index);
 
+    let cards_to_select_from = (state.cards_to_select_from)();
+    let selectable = if let Some(message) = cards_to_select_from {
+        message.cards.iter().any(|card| card.location == location && card.sequence == index)
+    } else {
+        false
+    };
+
     rsx!(
         div {
             class: "relative h-full aspect-[59/86] mx-auto p-[clamp(1px,0.3vw,5px)]",
@@ -155,6 +162,7 @@ pub fn FieldCard(index: u8, location: CardLocation, card: ActiveCard) -> Element
                 is_selected,
                 highlight_on_select: true,
                 is_normal_summonable: false,
+                show_dotted_highlight: selectable,
                 is_activatable: activatable || prompted,
                 onclick: move |evt: MouseEvent| {
                     evt.stop_propagation();
