@@ -1,6 +1,8 @@
-use anyhow::Context;
 use std::collections::HashMap;
 
+use crate::ocgcore::utility::read_u32;
+use crate::ocgcore::utility::read_u8;
+use crate::ocgcore::utility::read_u64;
 use super::constants::BattlePosition;
 use super::constants::CardController;
 use super::constants::CardLocation;
@@ -85,31 +87,6 @@ impl TryFrom<&[u8]> for AvailableActions {
                 "Invalid message ID: Expected MSG_SELECT_IDLECMD (11), got {}",
                 raw_bytes.get(message_offset).copied().unwrap_or_default()
             );
-        }
-
-        fn read_u8(raw_bytes: &[u8], cursor: &mut usize, label: &str) -> anyhow::Result<u8> {
-            let value = raw_bytes
-                .get(*cursor)
-                .copied()
-                .with_context(|| format!("Missing {label} at offset {}", *cursor))?;
-            *cursor += 1;
-            Ok(value)
-        }
-
-        fn read_u32(raw_bytes: &[u8], cursor: &mut usize, label: &str) -> anyhow::Result<u32> {
-            let bytes = raw_bytes
-                .get(*cursor..*cursor + 4)
-                .with_context(|| format!("Missing {label} at offset {}", *cursor))?;
-            *cursor += 4;
-            Ok(u32::from_le_bytes(bytes.try_into().unwrap()))
-        }
-
-        fn read_u64(raw_bytes: &[u8], cursor: &mut usize, label: &str) -> anyhow::Result<u64> {
-            let bytes = raw_bytes
-                .get(*cursor..*cursor + 8)
-                .with_context(|| format!("Missing {label} at offset {}", *cursor))?;
-            *cursor += 8;
-            Ok(u64::from_le_bytes(bytes.try_into().unwrap()))
         }
 
         fn read_block_common(
