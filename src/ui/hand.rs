@@ -38,7 +38,7 @@ pub fn Hand() -> Element {
                         .iter()
                         .find(|c| c.location == CardLocation::Hand && c.sequence == index as u8)
                         .and_then(|c| c.chain_option)
-                        .map(|v| v as u8);
+                        .map(|v| v);
                     let is_activatable = chainable_index.is_some() || activatable_index.is_some();
 
                     let is_selected = match selected_card() {

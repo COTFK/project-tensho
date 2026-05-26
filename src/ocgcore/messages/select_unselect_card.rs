@@ -61,7 +61,7 @@ impl TryFrom<&[u8]> for SelectUnselectMessage {
         } else {
             anyhow::bail!(
                 "Invalid message ID: Expected MSG_SELECT_UNSELECT_CARD (26), got {}",
-                raw_bytes.get(0).copied().unwrap_or_default()
+                raw_bytes.first().copied().unwrap_or_default()
             );
         };
 

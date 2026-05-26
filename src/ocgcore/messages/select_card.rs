@@ -51,7 +51,7 @@ impl TryFrom<&[u8]> for SelectCardMessage {
 
             // 3. Bitmask Location Extraction
             let raw_location_byte = raw_bytes[offset + 5];
-            let is_xyz_material = (raw_location_byte & 0x80) != 0;
+            let _is_xyz_material = (raw_location_byte & 0x80) != 0;
             let base_location_byte = raw_location_byte & 0x7F;
 
             let location = CardLocation::try_from(base_location_byte).unwrap_or_else(|err| {

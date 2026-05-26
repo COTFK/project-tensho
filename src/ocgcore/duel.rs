@@ -184,8 +184,8 @@ impl Duel {
                 ]);
 
                 match query_flag {
-                    0x0000_0001 => {
-                        if cursor + 10 <= orig_buf.len() {
+                    0x0000_0001
+                        if cursor + 10 <= orig_buf.len() => {
                             card_code = u32::from_le_bytes([
                                 orig_buf[cursor + 6],
                                 orig_buf[cursor + 7],
@@ -193,9 +193,8 @@ impl Duel {
                                 orig_buf[cursor + 9],
                             ]);
                         }
-                    }
-                    0x0000_0002 => {
-                        if cursor + 10 <= orig_buf.len() {
+                    0x0000_0002
+                        if cursor + 10 <= orig_buf.len() => {
                             let raw_position = u32::from_le_bytes([
                                 orig_buf[cursor + 6],
                                 orig_buf[cursor + 7],
@@ -204,7 +203,6 @@ impl Duel {
                             ]);
                             position = BattlePosition::try_from(raw_position).ok();
                         }
-                    }
                     0x8000_0000 => {
                         cards.push(Some(ActiveCard {
                             card_code,

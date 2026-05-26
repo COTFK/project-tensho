@@ -50,7 +50,7 @@ pub fn ExtraDeckModal() -> Element {
                 class: "overflow-x-auto scroll-smooth scrollbar-thin",
                 for (index, card) in extra_deck().iter().enumerate() {
                     {
-                        let card = card.clone().unwrap();
+                        let card = (*card).unwrap();
                         let special_summon_index = available_special_summons
                             .iter()
                             .position(|summon| {

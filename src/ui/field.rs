@@ -32,7 +32,7 @@ pub fn Field() -> Element {
             // Main row (row 2)
             div { class: "col-start-1 row-start-2", Zone { index: 5, card: spell_traps.get(5).copied().flatten(), location: CardLocation::SpellTrapZone } }
 
-            div { class: "col-start-2 row-start-2" , Zone { index: 0, card: monsters.get(0).copied().flatten(), location: CardLocation::MonsterZone} }
+            div { class: "col-start-2 row-start-2" , Zone { index: 0, card: monsters.first().copied().flatten(), location: CardLocation::MonsterZone} }
             div { class: "col-start-3 row-start-2" , Zone { index: 1, card: monsters.get(1).copied().flatten(), location: CardLocation::MonsterZone} }
             div { class: "col-start-4 row-start-2" , Zone { index: 2, card: monsters.get(2).copied().flatten(), location: CardLocation::MonsterZone} }
             div { class: "col-start-5 row-start-2" , Zone { index: 3, card: monsters.get(3).copied().flatten(), location: CardLocation::MonsterZone} }
@@ -43,7 +43,7 @@ pub fn Field() -> Element {
             // Spell/Trap row (row 3)
             div { class: "col-start-1 row-start-3", ExtraDeck {} }
 
-            div { class: "col-start-2 row-start-3", Zone { index: 0, card: spell_traps.get(0).copied().flatten(), location: CardLocation::SpellTrapZone} }
+            div { class: "col-start-2 row-start-3", Zone { index: 0, card: spell_traps.first().copied().flatten(), location: CardLocation::SpellTrapZone} }
             div { class: "col-start-3 row-start-3", Zone { index: 1, card: spell_traps.get(1).copied().flatten(), location: CardLocation::SpellTrapZone} }
             div { class: "col-start-4 row-start-3", Zone { index: 2, card: spell_traps.get(2).copied().flatten(), location: CardLocation::SpellTrapZone} }
             div { class: "col-start-5 row-start-3", Zone { index: 3, card: spell_traps.get(3).copied().flatten(), location: CardLocation::SpellTrapZone} }
@@ -100,7 +100,7 @@ pub fn FieldCard(index: u8, location: CardLocation, card: ActiveCard) -> Element
         .map(|(eff_index, card)| (*eff_index, *card))
         .collect();
 
-    let activatable_eff_index: Option<u16> = effects_of_this_card.get(0).map(|(i, _)| *i);
+    let activatable_eff_index: Option<u16> = effects_of_this_card.first().map(|(i, _)| *i);
 
     let prompted_card = prompt_list
         .iter()

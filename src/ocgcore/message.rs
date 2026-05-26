@@ -43,7 +43,7 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                 Ok(CoreMessage::Idle(actions))
             }
             12 => {
-                let player = messages[5];
+                let _player = messages[5];
                 let card_code =
                     u32::from_le_bytes([messages[6], messages[7], messages[8], messages[9]]);
                 let location = CardLocation::try_from(messages[11]).unwrap();
