@@ -3,13 +3,13 @@ use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SelectCardMessage {
+pub struct SelectCardMessageData {
     pub min_select: u32,
     pub max_select: u32,
     pub cards: Vec<CardData>,
 }
 
-impl TryFrom<&[u8]> for SelectCardMessage {
+impl TryFrom<&[u8]> for SelectCardMessageData {
     type Error = anyhow::Error;
 
     fn try_from(raw_bytes: &[u8]) -> anyhow::Result<Self, Self::Error> {

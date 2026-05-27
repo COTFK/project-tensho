@@ -1,28 +1,28 @@
 use anyhow::anyhow;
 
-use super::actions::AvailableActions;
-use super::actions::CardData;
 use super::constants::BattlePosition;
 use super::constants::CardController;
 use super::constants::CardLocation;
-use super::messages::SelectCardMessage;
-use super::messages::SelectUnselectMessage;
+use super::data::CardData;
+use super::messages::IdleMessageData;
+use super::messages::SelectCardMessageData;
+use super::messages::SelectUnselectMessageData;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CoreMessage {
     Retry,
-    Idle(AvailableActions),
+    Idle(IdleMessageData),
     SelectEffectYN(CardData),
     SelectYesNo {
         player: u8,
         card_code: u32,
         string_index: usize,
     },
-    SelectCard(SelectCardMessage),
+    SelectCard(SelectCardMessageData),
     SelectChain(Vec<CardData>),
     SelectPlace(Vec<(CardLocation, u8)>),
     SelectPosition(Vec<BattlePosition>),
-    SelectUnselectCard(SelectUnselectMessage),
+    SelectUnselectCard(SelectUnselectMessageData),
 }
 
 impl TryFrom<Vec<u8>> for CoreMessage {
@@ -37,11 +37,7 @@ impl TryFrom<Vec<u8>> for CoreMessage {
 
         match msg_value {
             1 => Ok(CoreMessage::Retry),
-            11 => {
-                let actions = AvailableActions::try_from(&messages[..])?;
-
-                Ok(CoreMessage::Idle(actions))
-            }
+            11 => Ok(CoreMessage::Idle(IdleMessageData::try_from(&messages[..])?)),
             12 => {
                 let _player = messages[5];
                 let card_code =
@@ -83,7 +79,7 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                     string_index,
                 })
             }
-            15 => Ok(CoreMessage::SelectCard(SelectCardMessage::try_from(
+            15 => Ok(CoreMessage::SelectCard(SelectCardMessageData::try_from(
                 &messages[..],
             )?)),
             16 => {
@@ -191,7 +187,7 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                 Ok(CoreMessage::SelectPosition(allowed_positions))
             }
             26 => Ok(CoreMessage::SelectUnselectCard(
-                SelectUnselectMessage::try_from(&messages[..])?,
+                SelectUnselectMessageData::try_from(&messages[..])?,
             )),
             _ => anyhow::bail!("Received wrong message: {msg_value}"),
         }

@@ -1,3 +1,19 @@
+use super::constants::BattlePosition;
+use super::constants::CardController;
+use super::constants::CardLocation;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CardData {
+    pub action_index: Option<u8>,
+    pub card_code: u32,
+    pub controller: CardController,
+    pub location: CardLocation,
+    pub position: Option<BattlePosition>,
+    pub sequence: u8,
+    pub description: Option<u32>,
+    pub is_selected: bool,
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct OCGPlayer {

@@ -1,37 +1,25 @@
-use super::constants::BattlePosition;
-use super::constants::CardController;
-use super::constants::CardLocation;
+use crate::ocgcore::constants::CardController;
+use crate::ocgcore::constants::CardLocation;
+use crate::ocgcore::data::CardData;
 use crate::ocgcore::utility::read_u8;
 use crate::ocgcore::utility::read_u32;
 use crate::ocgcore::utility::read_u64;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct CardData {
-    pub action_index: Option<u8>,
-    pub card_code: u32,
-    pub controller: CardController,
-    pub location: CardLocation,
-    pub position: Option<BattlePosition>,
-    pub sequence: u8,
-    pub description: Option<u32>,
-    pub is_selected: bool,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct AvailableActions {
+pub struct IdleMessageData {
     pub playerid: u8,
-    pub normal_summons: Vec<CardData>,      // Block 1: Summonable
-    pub special_summons: Vec<CardData>,     // Block 2: SpSummonable
-    pub battle_positions: Vec<CardData>,    // Block 3: Repositionable
-    pub monster_sets: Vec<CardData>,        // Block 4: MSetable (Monster Set)
-    pub spell_trap_sets: Vec<CardData>,     // Block 5: Setable (S/T Set)
-    pub activatable_effects: Vec<CardData>, // Block 6: Activatable
+    pub normal_summons: Vec<CardData>,
+    pub special_summons: Vec<CardData>,
+    pub battle_positions: Vec<CardData>,
+    pub monster_sets: Vec<CardData>,
+    pub spell_trap_sets: Vec<CardData>,
+    pub activatable_effects: Vec<CardData>,
     pub can_to_bp: bool,
     pub can_to_ep: bool,
     pub can_shuffle: bool,
 }
 
-impl AvailableActions {
+impl IdleMessageData {
     pub fn get_normal_summons(&self) -> &Vec<CardData> {
         &self.normal_summons
     }
@@ -45,7 +33,7 @@ impl AvailableActions {
     }
 }
 
-impl TryFrom<&[u8]> for AvailableActions {
+impl TryFrom<&[u8]> for IdleMessageData {
     type Error = anyhow::Error;
 
     fn try_from(raw_bytes: &[u8]) -> anyhow::Result<Self, Self::Error> {

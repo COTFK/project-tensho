@@ -6,7 +6,7 @@ use crate::ocgcore::utility::read_u8;
 use crate::ocgcore::utility::read_u32;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SelectUnselectMessage {
+pub struct SelectUnselectMessageData {
     pub playerid: u8,
     pub finishable: bool,
     pub cancelable: bool,
@@ -16,7 +16,7 @@ pub struct SelectUnselectMessage {
     pub unselect_cards: Vec<CardData>,
 }
 
-impl SelectUnselectMessage {
+impl SelectUnselectMessageData {
     pub fn response_index_for(&self, card: &CardData) -> Option<u32> {
         if let Some(index) = self.unselect_cards.iter().position(|selectable_card| {
             selectable_card.location == card.location
@@ -45,7 +45,7 @@ impl SelectUnselectMessage {
     }
 }
 
-impl TryFrom<&[u8]> for SelectUnselectMessage {
+impl TryFrom<&[u8]> for SelectUnselectMessageData {
     type Error = anyhow::Error;
 
     fn try_from(raw_bytes: &[u8]) -> anyhow::Result<Self, Self::Error> {

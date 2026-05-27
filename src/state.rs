@@ -12,7 +12,7 @@ use crate::ocgcore::constants::BattlePosition;
 use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
 use crate::ocgcore::constants::CardOwner;
-use crate::ocgcore::messages::SelectUnselectMessage;
+use crate::ocgcore::messages::SelectUnselectMessageData;
 use crate::utility::EXTRA_DECK_IDS;
 use crate::utility::MAIN_DECK_IDS;
 use crate::utility::cache_labels;
@@ -42,7 +42,7 @@ pub struct DuelState {
     pub show_graveyard: Signal<bool>,
     pub show_extra_deck: Signal<bool>,
     pub effects_to_select_from: Signal<Vec<CardData>>,
-    pub cards_to_select_from: Signal<Option<SelectUnselectMessage>>,
+    pub cards_to_select_from: Signal<Option<SelectUnselectMessageData>>,
 }
 
 impl DuelState {
