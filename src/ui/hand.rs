@@ -27,13 +27,13 @@ pub fn Hand() -> Element {
             class: "fixed flex flex-row justify-center self-end place-self-center inset-0 translate-y-[27.5%] z-50",
             for (index, card) in cards().iter().copied().enumerate() {
                 {
-                    let normal_summon_index = normal_summons.iter().find(|card| card.sequence == index as u8).map(|card| card.action_index).flatten();
+                    let normal_summon_index = normal_summons.iter().find(|card| card.sequence == index as u8).and_then(|card| card.action_index);
                     let is_normal_summonable = normal_summon_index.is_some();
 
                     let activatable_index = activatable_effects
                         .iter()
                         .find(|c| c.location == CardLocation::Hand && c.sequence == index as u8)
-                        .map(|c| c.action_index).flatten();
+                        .and_then(|c| c.action_index);
                     let chainable_index = chainables
                         .iter()
                         .find(|c| c.location == CardLocation::Hand && c.sequence == index as u8)

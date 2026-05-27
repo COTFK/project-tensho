@@ -150,7 +150,7 @@ pub fn EffectSelector() -> Element {
                             })
                             .unwrap_or_else(|| String::from("error"))
                     },
-                    onclick: move |_| send_user_response(UserResponse::Activate { index: effect.action_index.unwrap() as u8 }),
+                    onclick: move |_| send_user_response(UserResponse::Activate { index: effect.action_index.unwrap() }),
                     additional_classes: "bg-gray-600 text-white w-full",
                 }
             }

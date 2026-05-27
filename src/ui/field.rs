@@ -102,8 +102,7 @@ pub fn FieldCard(index: u8, location: CardLocation, card: CardData) -> Element {
 
     let activatable_eff_index = effects_of_this_card
         .first()
-        .map(|card| card.action_index)
-        .flatten();
+        .and_then(|card| card.action_index);
 
     let prompted_card = prompt_list
         .iter()
@@ -157,7 +156,7 @@ pub fn FieldCard(index: u8, location: CardLocation, card: CardData) -> Element {
                                     state.effects_to_select_from.set(effects_of_this_card.to_owned());
                                     state.selected_card.set(None);
                                 } else if let Some(idx) = activatable_eff_index {
-                                    send_user_response(UserResponse::Activate { index: idx as u8 });
+                                    send_user_response(UserResponse::Activate { index: idx });
                                 }
                             }
                         },
