@@ -28,7 +28,7 @@ pub struct DuelState {
     pub extra_deck: Signal<Vec<Option<CardData>>>,
     pub hand_contents: Signal<Vec<Option<CardData>>>,
     pub selected_card: Signal<Option<CardData>>,
-    pub normal_summons: Signal<HashMap<u8, u16>>,
+    pub normal_summons: Signal<Vec<CardData>>,
     pub special_summons: Signal<Vec<CardData>>,
     pub activatable_effects: Signal<HashMap<u16, CardData>>,
     pub waiting_on_input: Signal<bool>,
@@ -54,7 +54,7 @@ impl DuelState {
             extra_deck: use_signal(Vec::new),
             hand_contents: use_signal(Vec::new),
             selected_card: use_signal(|| None),
-            normal_summons: use_signal(HashMap::new),
+            normal_summons: use_signal(Vec::new),
             special_summons: use_signal(Vec::new),
             activatable_effects: use_signal(HashMap::new),
             waiting_on_input: use_signal(|| false),
@@ -252,7 +252,7 @@ pub fn handle_core_message() {
             panic!("Received Retry - this shouldn't happen.");
         }
         CoreMessage::Idle(actions) => {
-            state.normal_summons.set(actions.get_normal_summons());
+            state.normal_summons.set(actions.get_normal_summons().to_owned());
             state.special_summons.set(actions.get_special_summons().to_owned());
             state
                 .activatable_effects

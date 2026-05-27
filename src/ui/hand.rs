@@ -27,7 +27,7 @@ pub fn Hand() -> Element {
             class: "fixed flex flex-row justify-center self-end place-self-center inset-0 translate-y-[27.5%] z-50",
             for (index, card) in cards().iter().copied().enumerate() {
                 {
-                    let normal_summon_index = normal_summons.get(&(index as u8)).copied().map(|v| v as u8);
+                    let normal_summon_index = normal_summons.iter().find(|card| card.sequence == index as u8).map(|card| card.action_index).flatten();
                     let is_normal_summonable = normal_summon_index.is_some();
 
                     let activatable_index = activatable_effects

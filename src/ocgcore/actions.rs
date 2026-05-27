@@ -22,11 +22,11 @@ pub struct CardData {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct AvailableActions {
     pub playerid: u8,
-    pub normal_summons: Vec<CardData>,   // Block 1: Summonable
-    pub special_summons: Vec<CardData>,  // Block 2: SpSummonable
-    pub battle_positions: Vec<CardData>, // Block 3: Repositionable
-    pub monster_sets: Vec<CardData>,     // Block 4: MSetable (Monster Set)
-    pub spell_trap_sets: Vec<CardData>,  // Block 5: Setable (S/T Set)
+    pub normal_summons: Vec<CardData>,      // Block 1: Summonable
+    pub special_summons: Vec<CardData>,     // Block 2: SpSummonable
+    pub battle_positions: Vec<CardData>,    // Block 3: Repositionable
+    pub monster_sets: Vec<CardData>,        // Block 4: MSetable (Monster Set)
+    pub spell_trap_sets: Vec<CardData>,     // Block 5: Setable (S/T Set)
     pub activatable_effects: Vec<CardData>, // Block 6: Activatable
     pub can_to_bp: bool,
     pub can_to_ep: bool,
@@ -34,12 +34,8 @@ pub struct AvailableActions {
 }
 
 impl AvailableActions {
-    pub fn get_normal_summons(&self) -> HashMap<u8, u16> {
-        self.normal_summons
-            .iter()
-            .enumerate()
-            .map(|(index, card)| (card.sequence, index as u16))
-            .collect()
+    pub fn get_normal_summons(&self) -> &Vec<CardData> {
+        &self.normal_summons
     }
 
     pub fn get_special_summons(&self) -> &Vec<CardData> {
@@ -176,18 +172,23 @@ impl TryFrom<&[u8]> for AvailableActions {
                 })
             })?;
 
-        let monster_sets = read_block_common(raw_bytes, &mut cursor, "monster_sets", |raw, c, idx| {
-            Ok(CardData {
-                card_code: read_u32(raw, c, "monster_sets.card_code")?,
-                controller: CardController::try_from(read_u8(raw, c, "monster_sets.controller")?)?,
-                location: CardLocation::try_from(read_u8(raw, c, "monster_sets.location")?)?,
-                position: None,
-                sequence: read_u32(raw, c, "monster_sets.index")? as u8,
-                action_index: Some(idx as u8),
-                description: None,
-                is_selected: false,
-            })
-        })?;
+        let monster_sets =
+            read_block_common(raw_bytes, &mut cursor, "monster_sets", |raw, c, idx| {
+                Ok(CardData {
+                    card_code: read_u32(raw, c, "monster_sets.card_code")?,
+                    controller: CardController::try_from(read_u8(
+                        raw,
+                        c,
+                        "monster_sets.controller",
+                    )?)?,
+                    location: CardLocation::try_from(read_u8(raw, c, "monster_sets.location")?)?,
+                    position: None,
+                    sequence: read_u32(raw, c, "monster_sets.index")? as u8,
+                    action_index: Some(idx as u8),
+                    description: None,
+                    is_selected: false,
+                })
+            })?;
 
         let spell_trap_sets =
             read_block_common(raw_bytes, &mut cursor, "spell_trap_sets", |raw, c, idx| {
@@ -207,8 +208,11 @@ impl TryFrom<&[u8]> for AvailableActions {
                 })
             })?;
 
-        let activatable_effects =
-            read_block_common(raw_bytes, &mut cursor, "activatable_effects", |raw, c, idx| {
+        let activatable_effects = read_block_common(
+            raw_bytes,
+            &mut cursor,
+            "activatable_effects",
+            |raw, c, idx| {
                 let card_code = read_u32(raw, c, "activatable_effects.card_code")?;
                 let controller = read_u8(raw, c, "activatable_effects.controller")?;
                 let location = read_u8(raw, c, "activatable_effects.location")?;
@@ -228,7 +232,8 @@ impl TryFrom<&[u8]> for AvailableActions {
                     description: Some(description_id),
                     is_selected: false,
                 })
-            })?;
+            },
+        )?;
 
         let can_to_bp = read_u8(raw_bytes, &mut cursor, "can_to_bp")? != 0;
         let can_to_ep = read_u8(raw_bytes, &mut cursor, "can_to_ep")? != 0;
