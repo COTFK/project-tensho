@@ -101,10 +101,10 @@ pub fn Hand() -> Element {
                                 code: card.unwrap().card_code,
                                 class: "w-[8vw]",
                                 is_selected,
-                                highlight_on_select: false,
+                                show_highlight_on_select: false,
                                 show_dotted_highlight: false,
-                                is_normal_summonable,
-                                is_activatable,
+                                show_blue_aura: is_normal_summonable,
+                                show_orange_aura: is_activatable,
                                 onclick: on_select,
                             }
                         }

@@ -5,25 +5,25 @@ pub fn Card(
     code: u32,
     class: String,
     is_selected: bool,
+    show_highlight_on_select: bool,
     show_dotted_highlight: bool,
-    highlight_on_select: bool,
-    is_normal_summonable: bool,
-    is_activatable: bool,
+    show_blue_aura: bool,
+    show_orange_aura: bool,
     onclick: EventHandler<MouseEvent>,
 ) -> Element {
     rsx! {
         div {
             class: "relative {class}",
-            class: if highlight_on_select {"border-2"},
+            class: if show_highlight_on_select {"border-2"},
             class: if show_dotted_highlight && !is_selected {"border-yellow-300 border-dashed"},
             class: if is_selected {"border-yellow-300"},
             class: if !is_selected && !show_dotted_highlight {"border-transparent"},
             onclick: onclick,
             div {
                 class: "absolute -inset-[5px] rounded-[4px] blur-[2px] mix-blend-screen pointer-events-none",
-                class: if is_activatable { "bg-yellow-400"},
-                class: if is_normal_summonable && !is_activatable {"bg-cyan-400"},
-                class: if !is_normal_summonable && !is_activatable {"hidden"}
+                class: if show_orange_aura { "bg-yellow-400"},
+                class: if show_blue_aura && !show_orange_aura {"bg-cyan-400"},
+                class: if !show_blue_aura && !show_orange_aura {"hidden"}
             }
             img {
                 class: "relative w-full",
@@ -33,9 +33,9 @@ pub fn Card(
             }
             div {
                 class: "absolute inset-0 border-5 blur-[2px] mix-blend-screen pointer-events-none animate-pulse",
-                class: if is_activatable { "border-yellow-300/50"},
-                class: if is_normal_summonable && !is_activatable {"border-cyan-300/50"},
-                class: if !is_normal_summonable && !is_activatable {"hidden"}
+                class: if show_orange_aura { "border-yellow-300/50"},
+                class: if show_blue_aura && !show_orange_aura {"border-cyan-300/50"},
+                class: if !show_blue_aura && !show_orange_aura {"hidden"}
             }
         }
     }

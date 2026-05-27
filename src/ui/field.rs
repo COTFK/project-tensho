@@ -168,10 +168,10 @@ pub fn FieldCard(index: u8, location: CardLocation, card: CardData) -> Element {
                 code: card.card_code,
                 class: if card.position == Some(BattlePosition::FaceDownDefense) || card.position == Some(BattlePosition::FaceUpDefense) { "-rotate-90" } else {""},
                 is_selected: is_selected || is_selected_for_extra_deck_summon,
-                highlight_on_select: true,
-                is_normal_summonable: false,
+                show_highlight_on_select: true,
+                show_blue_aura: false,
                 show_dotted_highlight: selectable_for_extra_deck_summon,
-                is_activatable: activatable || prompted,
+                show_orange_aura: activatable || prompted,
                 onclick: move |evt: MouseEvent| {
                     evt.stop_propagation();
 

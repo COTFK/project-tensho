@@ -69,10 +69,10 @@ pub fn GraveyardModal() -> Element {
                                     code: card.unwrap().card_code,
                                     class: "w-[12vw]",
                                     is_selected: selected_card() == Some(index),
-                                    highlight_on_select: true,
+                                    show_highlight_on_select: true,
                                     show_dotted_highlight: false,
-                                    is_normal_summonable: false,
-                                    is_activatable: prompted_card.is_some(),
+                                    show_blue_aura: false,
+                                    show_orange_aura: prompted_card.is_some(),
                                     onclick: move |_| selected_card.set(Some(index))
                                 }
                                 CardActionMenu {

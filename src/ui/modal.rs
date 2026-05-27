@@ -110,10 +110,10 @@ pub fn CardSelector() -> Element {
                         code: card.card_code,
                         class: "w-[12vw] max-h-[40vh] min-w-[12vw]",
                         is_selected: selected_card() == Some(index as u8),
-                        highlight_on_select: true,
+                        show_highlight_on_select: true,
                         show_dotted_highlight: false,
-                        is_normal_summonable: false,
-                        is_activatable: false,
+                        show_blue_aura: false,
+                        show_orange_aura: false,
                         onclick: move |_| selected_card.set(Some(index as u8))
                     }
                 }

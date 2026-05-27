@@ -72,10 +72,10 @@ pub fn ExtraDeckModal() -> Element {
                                     code: card.card_code,
                                     class: "w-[8vw]",
                                     is_selected: selected_card() == Some(index),
-                                    highlight_on_select: true,
+                                    show_highlight_on_select: true,
                                     show_dotted_highlight: false,
-                                    is_normal_summonable: false,
-                                    is_activatable: is_special_summonable,
+                                    show_blue_aura: false,
+                                    show_orange_aura: is_special_summonable,
                                     onclick: move |_| selected_card.set(Some(index))
                                 }
                                 CardActionMenu {
