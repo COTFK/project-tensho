@@ -1,5 +1,6 @@
 use anyhow::anyhow;
 use dioxus::prelude::*;
+use futures::future::join_all;
 use std::collections::HashMap;
 use std::collections::HashSet;
 
@@ -23,7 +24,7 @@ fn cache_label(id: String, data: CardLabel) {
 
 pub fn get_cached_label(id: u32) -> Option<CardLabel> {
     let padded_id = format!("{:08}", id);
-    LABEL_CACHE.with(|cache| cache.borrow().get(padded_id.as_str()).cloned())
+    LABEL_CACHE.with(|cache| cache.borrow().get(&padded_id).cloned())
 }
 
 async fn get_label_data(id: &str) -> anyhow::Result<CardLabel> {
@@ -36,38 +37,43 @@ async fn get_label_data(id: &str) -> anyhow::Result<CardLabel> {
 
     let name = json["name"]["en"]
         .as_str()
-        .ok_or_else(|| anyhow::anyhow!("Missing name.en in response"))?
+        .ok_or_else(|| anyhow!("Missing name.en in response"))?
         .to_string();
 
     let mut optional_strings = HashMap::new();
 
-    if id == "44455560" {
-        // Ulcanix
-        optional_strings.insert(
-            2,
-            String::from("Make this card's Level become that added monster's?"),
-        );
-    }
-    if id == "65305978" {
-        optional_strings.insert(
-            0,
-            String::from("Place 1 \"Fire King Island\" from your Deck face-up in your Field Zone?"),
-        );
-    }
-    if id == "57554544" {
-        optional_strings.insert(
-            0,
-            String::from(
-                "Destroy 1 monster in your hand/field, and search 1 \"Fire King\" monster",
-            ),
-        );
-        optional_strings.insert(
-            1,
-            String::from("Special Summon 1 FIRE Winged Beast from your hand"),
-        );
-    }
-    if id == "02526224" {
-        optional_strings.insert(2, String::from("Destroy 1 card on the field?"));
+    match id {
+        "44455560" => {
+            // Ulcanix
+            optional_strings.insert(
+                2,
+                "Make this card's Level become that added monster's?".to_string(),
+            );
+        }
+        "65305978" => {
+            optional_strings.insert(
+                0,
+                "Place 1 \"Fire King Island\" from your Deck face-up in your Field Zone?"
+                    .to_string(),
+            );
+        }
+        "57554544" => {
+            // Fire King Island
+            optional_strings.insert(
+                0,
+                "Destroy 1 monster in your hand/field, and search 1 \"Fire King\" monster"
+                    .to_string(),
+            );
+            optional_strings.insert(
+                1,
+                "Special Summon 1 FIRE Winged Beast from your hand".to_string(),
+            );
+        }
+        "02526224" => {
+            // Arvata
+            optional_strings.insert(2, "Destroy 1 card on the field?".to_string());
+        }
+        _ => {}
     }
 
     Ok(CardLabel {
@@ -78,13 +84,26 @@ async fn get_label_data(id: &str) -> anyhow::Result<CardLabel> {
 
 pub async fn cache_labels(deck_card_ids: &[u32]) {
     let mut seen = HashSet::new();
+    let mut tasks = Vec::new();
 
     for &id in deck_card_ids {
         if seen.insert(id) {
             let padded_id = format!("{:08}", id);
-            if let Ok(data) = get_label_data(&padded_id).await {
-                cache_label(padded_id, data);
-            }
+            tasks.push(async move {
+                match get_label_data(&padded_id).await {
+                    Ok(data) => Some((padded_id, data)),
+                    Err(_) => {
+                        warn!("Failed to fetch label data for card ID: {padded_id}");
+                        None
+                    }
+                }
+            });
         }
+    }
+
+    let results = join_all(tasks).await;
+
+    for item in results.into_iter().flatten() {
+        cache_label(item.0, item.1);
     }
 }

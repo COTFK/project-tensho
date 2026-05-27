@@ -1,5 +1,6 @@
 use anyhow::anyhow;
 use dioxus::prelude::*;
+use futures::future::join_all;
 use std::collections::HashMap;
 use std::collections::HashSet;
 
@@ -55,31 +56,44 @@ async fn get_script_data(name: &str) -> anyhow::Result<Vec<u8>> {
 }
 
 pub async fn cache_scripts(deck_card_ids: &[u32]) {
-    // Add helper scripts
+    let mut base_tasks = Vec::new();
     for script in BASE_SCRIPTS {
-        if let Ok(bytes) = get_script_data(script).await {
-            if bytes.is_empty() {
-                warn!("Failed to load {script} - got 0 bytes.");
-                continue;
+        base_tasks.push(async move {
+            match get_script_data(script).await {
+                Ok(bytes) if !bytes.is_empty() => Some((script.to_string(), bytes)),
+                _ => {
+                    warn!("Failed to load baseline script: {script}");
+                    None
+                }
             }
-            cache_script(script, bytes);
-        }
+        });
     }
 
-    // Batch fetch all individual card scripts based on the deck lists
-    // Preserve original deck order while removing duplicates
     let mut seen = HashSet::new();
+    let mut card_tasks = Vec::new();
 
     for &id in deck_card_ids {
         if seen.insert(id) {
             let script_name = format!("c{id}.lua");
-            if let Ok(bytes) = get_script_data(&script_name).await {
-                if bytes.is_empty() {
-                    warn!("Failed to load {script_name} - got 0 bytes.");
-                    continue;
+            card_tasks.push(async move {
+                match get_script_data(&script_name).await {
+                    Ok(bytes) if !bytes.is_empty() => Some((script_name, bytes)),
+                    _ => {
+                        warn!("Failed to load card script: {script_name}");
+                        None
+                    }
                 }
-                cache_script(&script_name, bytes);
-            }
+            });
         }
+    }
+
+    let (base_results, card_results) = futures::join!(join_all(base_tasks), join_all(card_tasks));
+
+    for item in base_results
+        .into_iter()
+        .flatten()
+        .chain(card_results.into_iter().flatten())
+    {
+        cache_script(&item.0, item.1);
     }
 }

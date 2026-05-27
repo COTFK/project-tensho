@@ -159,6 +159,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "dioxus",
+ "futures",
  "getrandom 0.4.2",
  "js-sys",
  "rand 0.10.1",
