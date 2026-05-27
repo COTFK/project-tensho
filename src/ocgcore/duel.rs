@@ -7,7 +7,7 @@ use super::OCGCore;
 use super::constants::CardLocation;
 use super::duel_status::DuelStatus;
 use super::memory::CorePointer;
-use crate::ocgcore::ActiveCard;
+use crate::ocgcore::CardData;
 use crate::ocgcore::CoreMessage;
 use crate::ocgcore::UserResponse;
 use crate::ocgcore::constants::BattlePosition;
@@ -140,7 +140,7 @@ impl Duel {
         Some(data_view.slice(0, actual_data_len))
     }
 
-    pub fn get_cards(&self, location: CardLocation) -> Vec<Option<ActiveCard>> {
+    pub fn get_cards(&self, location: CardLocation) -> Vec<Option<CardData>> {
         let orig_buf = match self.query_location(0xFFFFFFFF, CardOwner::Player, location) {
             Some(js_array) => js_array.to_vec(), // Fast block copy across WASM boundary
             None => return Vec::new(),
@@ -204,7 +204,7 @@ impl Duel {
                             position = BattlePosition::try_from(raw_position).ok();
                         }
                     0x8000_0000 => {
-                        cards.push(Some(ActiveCard {
+                        cards.push(Some(CardData {
                             card_code,
                             controller: CardController::Player,
                             location,

@@ -8,7 +8,7 @@ use crate::ocgcore::utility::read_u32;
 use crate::ocgcore::utility::read_u64;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ActiveCard {
+pub struct CardData {
     pub action_index: Option<u8>,
     pub card_code: u32,
     pub controller: CardController,
@@ -22,12 +22,12 @@ pub struct ActiveCard {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct AvailableActions {
     pub playerid: u8,
-    pub normal_summons: Vec<ActiveCard>,   // Block 1: Summonable
-    pub special_summons: Vec<ActiveCard>,  // Block 2: SpSummonable
-    pub battle_positions: Vec<ActiveCard>, // Block 3: Repositionable
-    pub monster_sets: Vec<ActiveCard>,     // Block 4: MSetable (Monster Set)
-    pub spell_trap_sets: Vec<ActiveCard>,  // Block 5: Setable (S/T Set)
-    pub activatable_effects: Vec<ActiveCard>, // Block 6: Activatable
+    pub normal_summons: Vec<CardData>,   // Block 1: Summonable
+    pub special_summons: Vec<CardData>,  // Block 2: SpSummonable
+    pub battle_positions: Vec<CardData>, // Block 3: Repositionable
+    pub monster_sets: Vec<CardData>,     // Block 4: MSetable (Monster Set)
+    pub spell_trap_sets: Vec<CardData>,  // Block 5: Setable (S/T Set)
+    pub activatable_effects: Vec<CardData>, // Block 6: Activatable
     pub can_to_bp: bool,
     pub can_to_ep: bool,
     pub can_shuffle: bool,
@@ -42,11 +42,11 @@ impl AvailableActions {
             .collect()
     }
 
-    pub fn get_special_summons(&self) -> Vec<ActiveCard> {
+    pub fn get_special_summons(&self) -> Vec<CardData> {
         self.special_summons.clone()
     }
 
-    pub fn get_activatable_effects(&self) -> HashMap<u16, ActiveCard> {
+    pub fn get_activatable_effects(&self) -> HashMap<u16, CardData> {
         self.activatable_effects
             .iter()
             .enumerate()
@@ -94,8 +94,8 @@ impl TryFrom<&[u8]> for AvailableActions {
             raw_bytes: &[u8],
             cursor: &mut usize,
             block_name: &'static str,
-            item_reader: impl Fn(&[u8], &mut usize) -> anyhow::Result<ActiveCard>,
-        ) -> anyhow::Result<Vec<ActiveCard>> {
+            item_reader: impl Fn(&[u8], &mut usize) -> anyhow::Result<CardData>,
+        ) -> anyhow::Result<Vec<CardData>> {
             let count = read_u32(raw_bytes, cursor, block_name)? as usize;
 
             if count > 50 {
@@ -120,7 +120,7 @@ impl TryFrom<&[u8]> for AvailableActions {
 
         let normal_summons =
             read_block_common(raw_bytes, &mut cursor, "normal_summons", |raw, c| {
-                Ok(ActiveCard {
+                Ok(CardData {
                     card_code: read_u32(raw, c, "normal_summons.card_code")?,
                     controller: CardController::try_from(read_u8(
                         raw,
@@ -138,7 +138,7 @@ impl TryFrom<&[u8]> for AvailableActions {
 
         let special_summons =
             read_block_common(raw_bytes, &mut cursor, "special_summons", |raw, c| {
-                Ok(ActiveCard {
+                Ok(CardData {
                     card_code: read_u32(raw, c, "special_summons.card_code")?,
                     controller: CardController::try_from(read_u8(
                         raw,
@@ -156,7 +156,7 @@ impl TryFrom<&[u8]> for AvailableActions {
 
         let battle_positions =
             read_block_common(raw_bytes, &mut cursor, "battle_positions", |raw, c| {
-                Ok(ActiveCard {
+                Ok(CardData {
                     card_code: read_u32(raw, c, "battle_positions.card_code")?,
                     controller: CardController::try_from(read_u8(
                         raw,
@@ -177,7 +177,7 @@ impl TryFrom<&[u8]> for AvailableActions {
             })?;
 
         let monster_sets = read_block_common(raw_bytes, &mut cursor, "monster_sets", |raw, c| {
-            Ok(ActiveCard {
+            Ok(CardData {
                 card_code: read_u32(raw, c, "monster_sets.card_code")?,
                 controller: CardController::try_from(read_u8(raw, c, "monster_sets.controller")?)?,
                 location: CardLocation::try_from(read_u8(raw, c, "monster_sets.location")?)?,
@@ -191,7 +191,7 @@ impl TryFrom<&[u8]> for AvailableActions {
 
         let spell_trap_sets =
             read_block_common(raw_bytes, &mut cursor, "spell_trap_sets", |raw, c| {
-                Ok(ActiveCard {
+                Ok(CardData {
                     card_code: read_u32(raw, c, "spell_trap_sets.card_code")?,
                     controller: CardController::try_from(read_u8(
                         raw,
@@ -218,7 +218,7 @@ impl TryFrom<&[u8]> for AvailableActions {
 
                 let description_id = (_description & 0xFFFFF) as u32;
 
-                Ok(ActiveCard {
+                Ok(CardData {
                     card_code,
                     controller: CardController::try_from(controller)?,
                     location: CardLocation::try_from(location)?,

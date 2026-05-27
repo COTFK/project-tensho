@@ -11,7 +11,7 @@ pub mod messages;
 mod user_response;
 mod utility;
 
-pub use actions::ActiveCard;
+pub use actions::CardData;
 pub use core::OCGCore;
 pub use data::OCGCardData;
 pub use duel::Duel;

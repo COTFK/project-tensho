@@ -3,7 +3,7 @@ use rand::seq::SliceRandom;
 use std::collections::HashMap;
 use std::future::pending;
 
-use crate::ocgcore::ActiveCard;
+use crate::ocgcore::CardData;
 use crate::ocgcore::CoreMessage;
 use crate::ocgcore::Duel;
 use crate::ocgcore::DuelStatus;
@@ -25,24 +25,24 @@ use crate::utility::get_cached_script;
 pub struct DuelState {
     pub duel: Signal<Duel>,
     pub main_deck_length: Signal<u32>,
-    pub extra_deck: Signal<Vec<Option<ActiveCard>>>,
-    pub hand_contents: Signal<Vec<Option<ActiveCard>>>,
-    pub selected_card: Signal<Option<ActiveCard>>,
+    pub extra_deck: Signal<Vec<Option<CardData>>>,
+    pub hand_contents: Signal<Vec<Option<CardData>>>,
+    pub selected_card: Signal<Option<CardData>>,
     pub normal_summons: Signal<HashMap<u8, u16>>,
-    pub special_summons: Signal<Vec<ActiveCard>>,
-    pub activatable_effects: Signal<HashMap<u16, ActiveCard>>,
+    pub special_summons: Signal<Vec<CardData>>,
+    pub activatable_effects: Signal<HashMap<u16, CardData>>,
     pub waiting_on_input: Signal<bool>,
-    pub monsters: Signal<Vec<Option<ActiveCard>>>,
-    pub spell_traps: Signal<Vec<Option<ActiveCard>>>,
-    pub graveyard: Signal<Vec<Option<ActiveCard>>>,
-    pub card_prompting_to_activate: Signal<Vec<ActiveCard>>,
-    pub selectables: Signal<Vec<ActiveCard>>,
+    pub monsters: Signal<Vec<Option<CardData>>>,
+    pub spell_traps: Signal<Vec<Option<CardData>>>,
+    pub graveyard: Signal<Vec<Option<CardData>>>,
+    pub card_prompting_to_activate: Signal<Vec<CardData>>,
+    pub selectables: Signal<Vec<CardData>>,
     pub yes_no_question: Signal<Option<String>>,
     pub available_zones: Signal<Vec<(CardLocation, u8)>>,
     pub positions_to_select: Signal<Vec<BattlePosition>>,
     pub show_graveyard: Signal<bool>,
     pub show_extra_deck: Signal<bool>,
-    pub effects_to_select_from: Signal<Vec<(u16, ActiveCard)>>,
+    pub effects_to_select_from: Signal<Vec<(u16, CardData)>>,
     pub cards_to_select_from: Signal<Option<SelectUnselectMessage>>,
 }
 

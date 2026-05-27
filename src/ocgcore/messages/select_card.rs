@@ -1,4 +1,4 @@
-use crate::ocgcore::ActiveCard;
+use crate::ocgcore::CardData;
 use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
 
@@ -6,7 +6,7 @@ use crate::ocgcore::constants::CardLocation;
 pub struct SelectCardMessage {
     pub min_select: u32,
     pub max_select: u32,
-    pub cards: Vec<ActiveCard>,
+    pub cards: Vec<CardData>,
 }
 
 impl TryFrom<&[u8]> for SelectCardMessage {
@@ -66,7 +66,7 @@ impl TryFrom<&[u8]> for SelectCardMessage {
             // 4. Sequence placement
             let sequence = raw_bytes[offset + 6];
 
-            cards.push(ActiveCard {
+            cards.push(CardData {
                 card_code: id,
                 controller,
                 location,

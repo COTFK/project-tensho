@@ -1,4 +1,4 @@
-use crate::ocgcore::ActiveCard;
+use crate::ocgcore::CardData;
 use crate::ocgcore::constants::BattlePosition;
 use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
@@ -12,12 +12,12 @@ pub struct SelectUnselectMessage {
     pub cancelable: bool,
     pub min_count: u32,
     pub max_count: u32,
-    pub select_cards: Vec<ActiveCard>,
-    pub unselect_cards: Vec<ActiveCard>,
+    pub select_cards: Vec<CardData>,
+    pub unselect_cards: Vec<CardData>,
 }
 
 impl SelectUnselectMessage {
-    pub fn response_index_for(&self, card: &ActiveCard) -> Option<u32> {
+    pub fn response_index_for(&self, card: &CardData) -> Option<u32> {
         if let Some(index) = self.unselect_cards.iter().position(|selectable_card| {
             selectable_card.location == card.location
                 && selectable_card.sequence == card.sequence
@@ -36,7 +36,7 @@ impl SelectUnselectMessage {
             .map(|index| index as u32)
     }
 
-    pub fn select_card_for(&self, location: CardLocation, index: u8) -> Option<ActiveCard> {
+    pub fn select_card_for(&self, location: CardLocation, index: u8) -> Option<CardData> {
         self.select_cards
             .iter()
             .chain(self.unselect_cards.iter())
@@ -89,7 +89,7 @@ impl TryFrom<&[u8]> for SelectUnselectMessage {
             let sequence = read_u32(raw_bytes, &mut cursor, "sequence")?;
             let position = read_u32(raw_bytes, &mut cursor, "position")?;
 
-            select_cards.push(ActiveCard {
+            select_cards.push(CardData {
                 card_code,
                 controller: CardController::try_from(controller)?,
                 location: CardLocation::try_from(location)?,
@@ -120,7 +120,7 @@ impl TryFrom<&[u8]> for SelectUnselectMessage {
             let sequence = read_u32(raw_bytes, &mut cursor, "unselect_cards.sequence")?;
             let position = read_u32(raw_bytes, &mut cursor, "unselect_cards.position")?;
 
-            unselect_cards.push(ActiveCard {
+            unselect_cards.push(CardData {
                 card_code,
                 controller: CardController::try_from(controller)?,
                 location: CardLocation::try_from(location)?,

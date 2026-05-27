@@ -4,7 +4,7 @@ use super::components::svg::SummonIcon;
 use super::extra_deck::ExtraDeck;
 use super::graveyard::Graveyard;
 use super::main_deck::MainDeck;
-use crate::ocgcore::ActiveCard;
+use crate::ocgcore::CardData;
 use crate::ocgcore::UserResponse;
 use crate::ocgcore::constants::BattlePosition;
 use crate::ocgcore::constants::CardController;
@@ -55,7 +55,7 @@ pub fn Field() -> Element {
 }
 
 #[component]
-fn Zone(index: u8, location: CardLocation, card: Option<ActiveCard>) -> Element {
+fn Zone(index: u8, location: CardLocation, card: Option<CardData>) -> Element {
     let state = use_context::<DuelState>();
 
     let placeable_on = (state.available_zones)()
@@ -87,14 +87,14 @@ fn Zone(index: u8, location: CardLocation, card: Option<ActiveCard>) -> Element 
 }
 
 #[component]
-pub fn FieldCard(index: u8, location: CardLocation, card: ActiveCard) -> Element {
+pub fn FieldCard(index: u8, location: CardLocation, card: CardData) -> Element {
     let mut state = use_context::<DuelState>();
 
     let mut selected_card = state.selected_card;
     let activatable_map = (state.activatable_effects)();
     let prompt_list = (state.card_prompting_to_activate)();
     let selected_snapshot = selected_card();
-    let effects_of_this_card: Vec<(u16, ActiveCard)> = activatable_map
+    let effects_of_this_card: Vec<(u16, CardData)> = activatable_map
         .iter()
         .filter(|(_eff_index, card)| card.location == location && card.sequence == index)
         .map(|(eff_index, card)| (*eff_index, *card))

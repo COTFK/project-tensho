@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 
-use super::actions::ActiveCard;
+use super::actions::CardData;
 use super::actions::AvailableActions;
 use super::constants::BattlePosition;
 use super::constants::CardController;
@@ -12,14 +12,14 @@ use super::messages::SelectUnselectMessage;
 pub enum CoreMessage {
     Retry,
     Idle(AvailableActions),
-    SelectEffectYN(ActiveCard),
+    SelectEffectYN(CardData),
     SelectYesNo {
         player: u8,
         card_code: u32,
         string_index: usize,
     },
     SelectCard(SelectCardMessage),
-    SelectChain(Vec<ActiveCard>),
+    SelectChain(Vec<CardData>),
     SelectPlace(Vec<(CardLocation, u8)>),
     SelectPosition(Vec<BattlePosition>),
     SelectUnselectCard(SelectUnselectMessage),
@@ -49,7 +49,7 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                 let location = CardLocation::try_from(messages[11]).unwrap();
                 let sequence = messages[12];
 
-                Ok(CoreMessage::SelectEffectYN(ActiveCard {
+                Ok(CoreMessage::SelectEffectYN(CardData {
                     card_code,
                     controller: CardController::Player,
                     location,
@@ -111,7 +111,7 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                         let controller = CardController::try_from(messages[offset + 4])?;
                         let location = CardLocation::try_from(*location_byte)?;
 
-                        chainables.push(ActiveCard {
+                        chainables.push(CardData {
                             card_code,
                             controller,
                             location,
