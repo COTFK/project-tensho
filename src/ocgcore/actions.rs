@@ -94,7 +94,7 @@ impl TryFrom<&[u8]> for AvailableActions {
             raw_bytes: &[u8],
             cursor: &mut usize,
             block_name: &'static str,
-            item_reader: impl Fn(&[u8], &mut usize) -> anyhow::Result<CardData>,
+            item_reader: impl Fn(&[u8], &mut usize, usize) -> anyhow::Result<CardData>,
         ) -> anyhow::Result<Vec<CardData>> {
             let count = read_u32(raw_bytes, cursor, block_name)? as usize;
 
@@ -108,8 +108,8 @@ impl TryFrom<&[u8]> for AvailableActions {
             }
 
             let mut items = Vec::with_capacity(count);
-            for _ in 0..count {
-                items.push(item_reader(raw_bytes, cursor)?);
+            for index in 0..count {
+                items.push(item_reader(raw_bytes, cursor, index)?);
             }
 
             Ok(items)
@@ -119,7 +119,7 @@ impl TryFrom<&[u8]> for AvailableActions {
         let playerid = read_u8(raw_bytes, &mut cursor, "playerid")?;
 
         let normal_summons =
-            read_block_common(raw_bytes, &mut cursor, "normal_summons", |raw, c| {
+            read_block_common(raw_bytes, &mut cursor, "normal_summons", |raw, c, idx| {
                 Ok(CardData {
                     card_code: read_u32(raw, c, "normal_summons.card_code")?,
                     controller: CardController::try_from(read_u8(
@@ -130,14 +130,14 @@ impl TryFrom<&[u8]> for AvailableActions {
                     position: None,
                     location: CardLocation::try_from(read_u8(raw, c, "normal_summons.location")?)?,
                     sequence: read_u32(raw, c, "normal_summons.index")? as u8,
-                    action_index: None,
+                    action_index: Some(idx as u8),
                     description: None,
                     is_selected: false,
                 })
             })?;
 
         let special_summons =
-            read_block_common(raw_bytes, &mut cursor, "special_summons", |raw, c| {
+            read_block_common(raw_bytes, &mut cursor, "special_summons", |raw, c, idx| {
                 Ok(CardData {
                     card_code: read_u32(raw, c, "special_summons.card_code")?,
                     controller: CardController::try_from(read_u8(
@@ -148,14 +148,14 @@ impl TryFrom<&[u8]> for AvailableActions {
                     position: None,
                     location: CardLocation::try_from(read_u8(raw, c, "special_summons.location")?)?,
                     sequence: read_u32(raw, c, "special_summons.index")? as u8,
-                    action_index: None,
+                    action_index: Some(idx as u8),
                     description: None,
                     is_selected: false,
                 })
             })?;
 
         let battle_positions =
-            read_block_common(raw_bytes, &mut cursor, "battle_positions", |raw, c| {
+            read_block_common(raw_bytes, &mut cursor, "battle_positions", |raw, c, idx| {
                 Ok(CardData {
                     card_code: read_u32(raw, c, "battle_positions.card_code")?,
                     controller: CardController::try_from(read_u8(
@@ -170,27 +170,27 @@ impl TryFrom<&[u8]> for AvailableActions {
                         "battle_positions.location",
                     )?)?,
                     sequence: read_u8(raw, c, "battle_positions.index")?,
-                    action_index: None,
+                    action_index: Some(idx as u8),
                     description: None,
                     is_selected: false,
                 })
             })?;
 
-        let monster_sets = read_block_common(raw_bytes, &mut cursor, "monster_sets", |raw, c| {
+        let monster_sets = read_block_common(raw_bytes, &mut cursor, "monster_sets", |raw, c, idx| {
             Ok(CardData {
                 card_code: read_u32(raw, c, "monster_sets.card_code")?,
                 controller: CardController::try_from(read_u8(raw, c, "monster_sets.controller")?)?,
                 location: CardLocation::try_from(read_u8(raw, c, "monster_sets.location")?)?,
                 position: None,
                 sequence: read_u32(raw, c, "monster_sets.index")? as u8,
-                action_index: None,
+                action_index: Some(idx as u8),
                 description: None,
                 is_selected: false,
             })
         })?;
 
         let spell_trap_sets =
-            read_block_common(raw_bytes, &mut cursor, "spell_trap_sets", |raw, c| {
+            read_block_common(raw_bytes, &mut cursor, "spell_trap_sets", |raw, c, idx| {
                 Ok(CardData {
                     card_code: read_u32(raw, c, "spell_trap_sets.card_code")?,
                     controller: CardController::try_from(read_u8(
@@ -201,14 +201,14 @@ impl TryFrom<&[u8]> for AvailableActions {
                     position: None,
                     location: CardLocation::try_from(read_u8(raw, c, "spell_trap_sets.location")?)?,
                     sequence: read_u32(raw, c, "spell_trap_sets.index")? as u8,
-                    action_index: None,
+                    action_index: Some(idx as u8),
                     description: None,
                     is_selected: false,
                 })
             })?;
 
         let activatable_effects =
-            read_block_common(raw_bytes, &mut cursor, "activatable_effects", |raw, c| {
+            read_block_common(raw_bytes, &mut cursor, "activatable_effects", |raw, c, idx| {
                 let card_code = read_u32(raw, c, "activatable_effects.card_code")?;
                 let controller = read_u8(raw, c, "activatable_effects.controller")?;
                 let location = read_u8(raw, c, "activatable_effects.location")?;
@@ -224,7 +224,7 @@ impl TryFrom<&[u8]> for AvailableActions {
                     location: CardLocation::try_from(location)?,
                     position: None,
                     sequence,
-                    action_index: None,
+                    action_index: Some(idx as u8),
                     description: Some(description_id),
                     is_selected: false,
                 })
