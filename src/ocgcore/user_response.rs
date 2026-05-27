@@ -22,6 +22,9 @@ pub enum UserResponse {
     NormalSummon {
         index: u8,
     },
+    SetSpellTrap {
+        index: u8,
+    },
     SelectCard {
         index: u8,
     },
@@ -45,9 +48,10 @@ impl UserResponse {
                 index,
             } => vec![*controller, *location, *index],
             Self::Chain { index } => vec![*index, 0, 0, 0],
-            Self::Activate { index } => vec![5, 0, *index, 0],
-            Self::SpecialSummon { index } => vec![1, 0, *index, 0],
             Self::NormalSummon { index } => vec![0, 0, *index, 0],
+            Self::SpecialSummon { index } => vec![1, 0, *index, 0],
+            Self::SetSpellTrap { index } => vec![4, 0, *index, 0],
+            Self::Activate { index } => vec![5, 0, *index, 0],
             Self::SelectCard { index } => vec![2, 0, 0, 0, 1, 0, 0, 0, *index],
             Self::SelectUnselectCard { index } => {
                 let index_bytes = index.to_le_bytes();

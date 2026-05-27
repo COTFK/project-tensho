@@ -173,6 +173,8 @@ pub fn FieldCard(index: u8, location: CardLocation, card: CardData) -> Element {
                 show_blue_aura: false,
                 show_dotted_highlight: selectable_for_extra_deck_summon,
                 show_orange_aura: activatable || prompted,
+                facedown: card.position == Some(BattlePosition::FaceDown) || card.position == Some(BattlePosition::FaceDownAttack) || card.position == Some(BattlePosition::FaceDownDefense),
+                use_extra_deck_back: false,
                 onclick: move |evt: MouseEvent| {
                     evt.stop_propagation();
 

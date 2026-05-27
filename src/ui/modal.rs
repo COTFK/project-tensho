@@ -114,6 +114,8 @@ pub fn CardSelector() -> Element {
                         show_dotted_highlight: false,
                         show_blue_aura: false,
                         show_orange_aura: false,
+                        facedown: false,
+                        use_extra_deck_back: false,
                         onclick: move |_| selected_card.set(Some(index as u8))
                     }
                 }

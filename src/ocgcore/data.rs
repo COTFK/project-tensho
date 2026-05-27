@@ -10,6 +10,7 @@ pub struct HandCard {
     pub activate_index: Option<u8>,
     pub chain_index: Option<u8>,
     pub normal_summon_index: Option<u8>,
+    pub set_spell_trap_index: Option<u8>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

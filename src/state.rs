@@ -252,10 +252,14 @@ pub fn handle_core_message() {
             let normal_summons = actions.normal_summons;
             let special_summons = actions.special_summons;
             let activatable_effects = actions.activatable_effects;
+            let spell_trap_sets = actions.spell_trap_sets;
 
-            if !normal_summons.is_empty() || !activatable_effects.is_empty() {
+            if !normal_summons.is_empty()
+                || !activatable_effects.is_empty()
+                || !spell_trap_sets.is_empty()
+            {
                 state.hand_contents.with_mut(|hand| {
-                    for summon in normal_summons {
+                    for summon in &normal_summons {
                         if summon.location != CardLocation::Hand {
                             continue;
                         }
@@ -266,7 +270,17 @@ pub fn handle_core_message() {
                         }
                     }
 
-                    for effect in activatable_effects {
+                    for set in &spell_trap_sets {
+                        if set.location != CardLocation::Hand {
+                            continue;
+                        }
+                        if let Some(hc) = hand.iter_mut().find(|hc| hc.index as u8 == set.sequence)
+                        {
+                            hc.set_spell_trap_index = set.action_index;
+                        }
+                    }
+
+                    for effect in &activatable_effects {
                         if effect.location != CardLocation::Hand {
                             continue;
                         }

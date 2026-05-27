@@ -73,6 +73,8 @@ pub fn GraveyardModal() -> Element {
                                     show_dotted_highlight: false,
                                     show_blue_aura: false,
                                     show_orange_aura: prompted_card.is_some(),
+                                    use_extra_deck_back: false,
+                                    facedown: false,
                                     onclick: move |_| selected_card.set(Some(index))
                                 }
                                 CardActionMenu {

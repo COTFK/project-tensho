@@ -1,5 +1,8 @@
 use dioxus::prelude::*;
 
+use crate::utility::CARD_BACK;
+use crate::utility::EXTRA_BACK;
+
 #[component]
 pub fn Card(
     code: u32,
@@ -9,6 +12,8 @@ pub fn Card(
     show_dotted_highlight: bool,
     show_blue_aura: bool,
     show_orange_aura: bool,
+    facedown: bool,
+    use_extra_deck_back: bool,
     onclick: EventHandler<MouseEvent>,
 ) -> Element {
     rsx! {
@@ -29,7 +34,15 @@ pub fn Card(
                 class: "relative w-full",
                 image_rendering: "smooth",
                 aspect_ratio: "59/86",
-                src: format!("https://images.ygoprodeck.com/images/cards/{}.jpg", code),
+                src: if !facedown {
+                    format!("https://images.ygoprodeck.com/images/cards/{}.jpg", code)
+                } else {
+                    if use_extra_deck_back {
+                        EXTRA_BACK.to_string()
+                    } else {
+                        CARD_BACK.to_string()
+                    }
+                },
             }
             div {
                 class: "absolute inset-0 border-5 blur-[2px] mix-blend-screen pointer-events-none animate-pulse",

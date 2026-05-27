@@ -153,6 +153,7 @@ impl Duel {
                 activate_index: None,
                 chain_index: None,
                 normal_summon_index: None,
+                set_spell_trap_index: None,
             });
         }
 
