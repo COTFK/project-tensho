@@ -153,7 +153,8 @@ impl Duel {
                 activate_index: None,
                 chain_index: None,
                 normal_summon_index: None,
-                set_spell_trap_index: None,
+                monster_set_index: None,
+                spell_trap_set_index: None,
             });
         }
 

@@ -37,7 +37,7 @@ pub fn Hand(
                             z_index: if is_selected { 100 } else { 0 },
                             CardActionMenu {
                                 class: "absolute -top-28 left-1/2 transform -translate-x-1/2 flex flex-row items-center justify-center",
-                                trigger: is_selected && (card.normal_summon_index.is_some() || card.is_activatable_or_chainable || card.set_spell_trap_index.is_some()),
+                                trigger: is_selected && (card.normal_summon_index.is_some() || card.is_activatable_or_chainable || card.spell_trap_set_index.is_some()),
                                 if card.normal_summon_index.is_some() {
                                     ActionButton {
                                         label: "Summon",
@@ -63,14 +63,15 @@ pub fn Hand(
                                         SummonIcon {}
                                     }
                                 }
-                                if card.set_spell_trap_index.is_some() {
+                                if card.spell_trap_set_index.is_some() || card.monster_set_index.is_some() {
                                     ActionButton {
                                         label: "Set",
                                         class: "border-orange-500 text-orange-400",
                                         onclick: move |evt: MouseEvent| {
                                             evt.stop_propagation();
                                             selected_card.set(None);
-                                            if let Some(index) = card.set_spell_trap_index { send_user_response(UserResponse::SetSpellTrap { index }); }
+                                            if let Some(index) = card.spell_trap_set_index { send_user_response(UserResponse::SetSpellTrap { index }); }
+                                            if let Some(index) = card.monster_set_index { send_user_response(UserResponse::SetMonster { index }); }
                                         },
                                         SummonIcon { }
                                     }
@@ -82,7 +83,7 @@ pub fn Hand(
                                 is_selected,
                                 show_highlight_on_select: false,
                                 show_dotted_highlight: false,
-                                show_blue_aura: card.normal_summon_index.is_some() || card.set_spell_trap_index.is_some(),
+                                show_blue_aura: card.normal_summon_index.is_some() || card.spell_trap_set_index.is_some() || card.monster_set_index.is_some(),
                                 show_orange_aura: card.is_activatable_or_chainable,
                                 facedown: false,
                                 use_extra_deck_back: false,

@@ -22,6 +22,9 @@ pub enum UserResponse {
     NormalSummon {
         index: u8,
     },
+    SetMonster {
+        index: u8,
+    },
     SetSpellTrap {
         index: u8,
     },
@@ -50,6 +53,7 @@ impl UserResponse {
             Self::Chain { index } => vec![*index, 0, 0, 0],
             Self::NormalSummon { index } => vec![0, 0, *index, 0],
             Self::SpecialSummon { index } => vec![1, 0, *index, 0],
+            Self::SetMonster { index } => vec![3, 0, *index, 0],
             Self::SetSpellTrap { index } => vec![4, 0, *index, 0],
             Self::Activate { index } => vec![5, 0, *index, 0],
             Self::SelectCard { index } => vec![2, 0, 0, 0, 1, 0, 0, 0, *index],

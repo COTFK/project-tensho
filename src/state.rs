@@ -252,6 +252,7 @@ pub fn handle_core_message() {
             let normal_summons = actions.normal_summons;
             let special_summons = actions.special_summons;
             let activatable_effects = actions.activatable_effects;
+            let monster_sets = actions.monster_sets;
             let spell_trap_sets = actions.spell_trap_sets;
 
             if !normal_summons.is_empty()
@@ -270,13 +271,23 @@ pub fn handle_core_message() {
                         }
                     }
 
+                    for set in &monster_sets {
+                        if set.location != CardLocation::Hand {
+                            continue;
+                        }
+                        if let Some(hc) = hand.iter_mut().find(|hc| hc.index as u8 == set.sequence)
+                        {
+                            hc.monster_set_index = set.action_index;
+                        }
+                    }
+
                     for set in &spell_trap_sets {
                         if set.location != CardLocation::Hand {
                             continue;
                         }
                         if let Some(hc) = hand.iter_mut().find(|hc| hc.index as u8 == set.sequence)
                         {
-                            hc.set_spell_trap_index = set.action_index;
+                            hc.spell_trap_set_index = set.action_index;
                         }
                     }
 
