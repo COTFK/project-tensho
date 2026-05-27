@@ -249,9 +249,9 @@ pub fn handle_core_message() {
             panic!("Received Retry - this shouldn't happen.");
         }
         CoreMessage::Idle(actions) => {
-            let normal_summons = actions.get_normal_summons();
-            let special_summons = actions.get_special_summons();
-            let activatable_effects = actions.get_activatable_effects();
+            let normal_summons = actions.normal_summons;
+            let special_summons = actions.special_summons;
+            let activatable_effects = actions.activatable_effects;
 
             if !normal_summons.is_empty() || !activatable_effects.is_empty() {
                 state.hand_contents.with_mut(|hand| {

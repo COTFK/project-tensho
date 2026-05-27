@@ -19,20 +19,6 @@ pub struct IdleMessageData {
     pub can_shuffle: bool,
 }
 
-impl IdleMessageData {
-    pub fn get_normal_summons(&self) -> &Vec<CardData> {
-        &self.normal_summons
-    }
-
-    pub fn get_special_summons(&self) -> &Vec<CardData> {
-        &self.special_summons
-    }
-
-    pub fn get_activatable_effects(&self) -> &Vec<CardData> {
-        &self.activatable_effects
-    }
-}
-
 impl TryFrom<&[u8]> for IdleMessageData {
     type Error = anyhow::Error;
 
