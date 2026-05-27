@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use super::constants::BattlePosition;
 use super::constants::CardController;
 use super::constants::CardLocation;
@@ -42,12 +40,8 @@ impl AvailableActions {
         &self.special_summons
     }
 
-    pub fn get_activatable_effects(&self) -> HashMap<u16, CardData> {
-        self.activatable_effects
-            .iter()
-            .enumerate()
-            .map(|(index, card)| (index as u16, *card))
-            .collect()
+    pub fn get_activatable_effects(&self) -> &Vec<CardData> {
+        &self.activatable_effects
     }
 }
 

@@ -18,7 +18,9 @@ pub fn ExtraDeck() -> Element {
     let mut state = use_context::<DuelState>();
     let available_special_summons = (state.special_summons)();
 
-    let has_summons = available_special_summons.iter().any(|card| card.location == CardLocation::ExtraDeck);
+    let has_summons = available_special_summons
+        .iter()
+        .any(|card| card.location == CardLocation::ExtraDeck);
     let has_cards = state.extra_deck.len() > 0;
 
     rsx!(

@@ -1,6 +1,5 @@
 use dioxus::prelude::*;
 use rand::seq::SliceRandom;
-use std::collections::HashMap;
 use std::future::pending;
 
 use crate::ocgcore::CardData;
@@ -30,7 +29,7 @@ pub struct DuelState {
     pub selected_card: Signal<Option<CardData>>,
     pub normal_summons: Signal<Vec<CardData>>,
     pub special_summons: Signal<Vec<CardData>>,
-    pub activatable_effects: Signal<HashMap<u16, CardData>>,
+    pub activatable_effects: Signal<Vec<CardData>>,
     pub waiting_on_input: Signal<bool>,
     pub monsters: Signal<Vec<Option<CardData>>>,
     pub spell_traps: Signal<Vec<Option<CardData>>>,
@@ -42,7 +41,7 @@ pub struct DuelState {
     pub positions_to_select: Signal<Vec<BattlePosition>>,
     pub show_graveyard: Signal<bool>,
     pub show_extra_deck: Signal<bool>,
-    pub effects_to_select_from: Signal<Vec<(u16, CardData)>>,
+    pub effects_to_select_from: Signal<Vec<CardData>>,
     pub cards_to_select_from: Signal<Option<SelectUnselectMessage>>,
 }
 
@@ -56,7 +55,7 @@ impl DuelState {
             selected_card: use_signal(|| None),
             normal_summons: use_signal(Vec::new),
             special_summons: use_signal(Vec::new),
-            activatable_effects: use_signal(HashMap::new),
+            activatable_effects: use_signal(Vec::new),
             waiting_on_input: use_signal(|| false),
             monsters: use_signal(Vec::new),
             spell_traps: use_signal(Vec::new),
@@ -252,11 +251,15 @@ pub fn handle_core_message() {
             panic!("Received Retry - this shouldn't happen.");
         }
         CoreMessage::Idle(actions) => {
-            state.normal_summons.set(actions.get_normal_summons().to_owned());
-            state.special_summons.set(actions.get_special_summons().to_owned());
+            state
+                .normal_summons
+                .set(actions.get_normal_summons().to_owned());
+            state
+                .special_summons
+                .set(actions.get_special_summons().to_owned());
             state
                 .activatable_effects
-                .set(actions.get_activatable_effects());
+                .set(actions.get_activatable_effects().to_owned());
             state.waiting_on_input.set(true);
         }
         CoreMessage::SelectPlace(zones) => {

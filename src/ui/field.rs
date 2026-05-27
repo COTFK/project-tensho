@@ -94,13 +94,16 @@ pub fn FieldCard(index: u8, location: CardLocation, card: CardData) -> Element {
     let activatable_map = (state.activatable_effects)();
     let prompt_list = (state.card_prompting_to_activate)();
     let selected_snapshot = selected_card();
-    let effects_of_this_card: Vec<(u16, CardData)> = activatable_map
+    let effects_of_this_card: Vec<CardData> = activatable_map
         .iter()
-        .filter(|(_eff_index, card)| card.location == location && card.sequence == index)
-        .map(|(eff_index, card)| (*eff_index, *card))
+        .filter(|card| card.location == location && card.sequence == index)
+        .copied()
         .collect();
 
-    let activatable_eff_index: Option<u16> = effects_of_this_card.first().map(|(i, _)| *i);
+    let activatable_eff_index = effects_of_this_card
+        .first()
+        .map(|card| card.action_index)
+        .flatten();
 
     let prompted_card = prompt_list
         .iter()
@@ -151,7 +154,7 @@ pub fn FieldCard(index: u8, location: CardLocation, card: CardData) -> Element {
 
                             if activatable {
                                 if effects_of_this_card.len() > 1 {
-                                    state.effects_to_select_from.set(effects_of_this_card.clone());
+                                    state.effects_to_select_from.set(effects_of_this_card.to_owned());
                                     state.selected_card.set(None);
                                 } else if let Some(idx) = activatable_eff_index {
                                     send_user_response(UserResponse::Activate { index: idx as u8 });
