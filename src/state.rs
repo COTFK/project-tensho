@@ -253,7 +253,7 @@ pub fn handle_core_message() {
         }
         CoreMessage::Idle(actions) => {
             state.normal_summons.set(actions.get_normal_summons());
-            state.special_summons.set(actions.get_special_summons());
+            state.special_summons.set(actions.get_special_summons().to_owned());
             state
                 .activatable_effects
                 .set(actions.get_activatable_effects());

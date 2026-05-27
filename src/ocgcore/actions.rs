@@ -42,8 +42,8 @@ impl AvailableActions {
             .collect()
     }
 
-    pub fn get_special_summons(&self) -> Vec<CardData> {
-        self.special_summons.clone()
+    pub fn get_special_summons(&self) -> &Vec<CardData> {
+        &self.special_summons
     }
 
     pub fn get_activatable_effects(&self) -> HashMap<u16, CardData> {
