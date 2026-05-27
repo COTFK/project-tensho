@@ -1,24 +1,8 @@
 [application]
 
 [web.app]
-
-# HTML title tag content
 title = "Burning Draw"
-
-# include `assets` in web platform
-[web.resource]
-
-# Additional CSS style files
-style = []
-
-# Additional JavaScript files
-script = []
 
 [web.watcher]
 index_on_404 = false
 
-[web.resource.dev]
-
-# Javascript code file
-# serve: [dev-server] only
-script = []
