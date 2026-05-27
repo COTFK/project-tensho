@@ -135,7 +135,7 @@ pub fn FieldCard(index: u8, location: CardLocation, card: CardData) -> Element {
         div {
             class: "relative h-full aspect-[59/86] mx-auto p-[clamp(1px,0.3vw,5px)]",
             CardActionMenu {
-                class: "absolute -top-28 left-1/2 transform -translate-x-1/2",
+                class: "absolute left-1/2 transform -translate-x-1/2 z-10",
                 trigger: is_selected && (prompted || activatable),
                 if prompted || activatable {
                     ActionButton {
