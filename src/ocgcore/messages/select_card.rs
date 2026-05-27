@@ -72,7 +72,7 @@ impl TryFrom<&[u8]> for SelectCardMessage {
                 location,
                 position: None,
                 sequence,
-                chain_option: None,
+                action_index: None,
                 description: None,
                 is_selected: false,
             });

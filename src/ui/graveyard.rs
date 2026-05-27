@@ -60,7 +60,7 @@ pub fn GraveyardModal() -> Element {
                             .iter()
                             .find(|card| card.location == CardLocation::Graveyard && card.sequence == index as u8)
                             .copied();
-                        let chain_option = prompted_card.and_then(|card| card.chain_option);
+                        let chain_option = prompted_card.and_then(|card| card.action_index);
 
                         rsx!(
                             div {

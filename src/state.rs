@@ -127,7 +127,7 @@ pub fn handle_right_click(evt: MouseEvent) {
     if !(state.card_prompting_to_activate)().is_empty() {
         if (state.card_prompting_to_activate)()
             .iter()
-            .any(|card| card.chain_option.is_some())
+            .any(|card| card.action_index.is_some())
         {
             send_user_response(UserResponse::PassPriority)
         } else {

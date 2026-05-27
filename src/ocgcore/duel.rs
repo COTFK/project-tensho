@@ -210,7 +210,7 @@ impl Duel {
                             location,
                             position,
                             sequence: current_sequence,
-                            chain_option: None,
+                            action_index: None,
                             description: None,
                             is_selected: false,
                         }));

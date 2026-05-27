@@ -9,12 +9,12 @@ use crate::ocgcore::utility::read_u64;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ActiveCard {
+    pub action_index: Option<u8>,
     pub card_code: u32,
     pub controller: CardController,
     pub location: CardLocation,
     pub position: Option<BattlePosition>,
     pub sequence: u8,
-    pub chain_option: Option<u8>,
     pub description: Option<u32>,
     pub is_selected: bool,
 }
@@ -130,7 +130,7 @@ impl TryFrom<&[u8]> for AvailableActions {
                     position: None,
                     location: CardLocation::try_from(read_u8(raw, c, "normal_summons.location")?)?,
                     sequence: read_u32(raw, c, "normal_summons.index")? as u8,
-                    chain_option: None,
+                    action_index: None,
                     description: None,
                     is_selected: false,
                 })
@@ -148,7 +148,7 @@ impl TryFrom<&[u8]> for AvailableActions {
                     position: None,
                     location: CardLocation::try_from(read_u8(raw, c, "special_summons.location")?)?,
                     sequence: read_u32(raw, c, "special_summons.index")? as u8,
-                    chain_option: None,
+                    action_index: None,
                     description: None,
                     is_selected: false,
                 })
@@ -170,7 +170,7 @@ impl TryFrom<&[u8]> for AvailableActions {
                         "battle_positions.location",
                     )?)?,
                     sequence: read_u8(raw, c, "battle_positions.index")?,
-                    chain_option: None,
+                    action_index: None,
                     description: None,
                     is_selected: false,
                 })
@@ -183,7 +183,7 @@ impl TryFrom<&[u8]> for AvailableActions {
                 location: CardLocation::try_from(read_u8(raw, c, "monster_sets.location")?)?,
                 position: None,
                 sequence: read_u32(raw, c, "monster_sets.index")? as u8,
-                chain_option: None,
+                action_index: None,
                 description: None,
                 is_selected: false,
             })
@@ -201,7 +201,7 @@ impl TryFrom<&[u8]> for AvailableActions {
                     position: None,
                     location: CardLocation::try_from(read_u8(raw, c, "spell_trap_sets.location")?)?,
                     sequence: read_u32(raw, c, "spell_trap_sets.index")? as u8,
-                    chain_option: None,
+                    action_index: None,
                     description: None,
                     is_selected: false,
                 })
@@ -224,7 +224,7 @@ impl TryFrom<&[u8]> for AvailableActions {
                     location: CardLocation::try_from(location)?,
                     position: None,
                     sequence,
-                    chain_option: None,
+                    action_index: None,
                     description: Some(description_id),
                     is_selected: false,
                 })

@@ -95,7 +95,7 @@ impl TryFrom<&[u8]> for SelectUnselectMessage {
                 location: CardLocation::try_from(location)?,
                 position: BattlePosition::try_from(position).ok(),
                 sequence: sequence as u8,
-                chain_option: None,
+                action_index: None,
                 description: None,
                 is_selected: false,
             });
@@ -126,7 +126,7 @@ impl TryFrom<&[u8]> for SelectUnselectMessage {
                 location: CardLocation::try_from(location)?,
                 position: BattlePosition::try_from(position).ok(),
                 sequence: sequence as u8,
-                chain_option: None,
+                action_index: None,
                 description: None,
                 is_selected: true,
             });

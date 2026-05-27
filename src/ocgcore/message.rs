@@ -55,7 +55,7 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                     location,
                     position: None,
                     sequence,
-                    chain_option: None,
+                    action_index: None,
                     description: None,
                     is_selected: false,
                 }))
@@ -117,7 +117,7 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                             location,
                             position: None,
                             sequence: *sequence,
-                            chain_option: Some(chain_option as u8),
+                            action_index: Some(chain_option as u8),
                             description: None,
                             is_selected: false,
                         })

@@ -18,7 +18,7 @@ pub fn ModalContainer() -> Element {
 
     rsx!(
         MessageModal {
-            trigger: state.card_prompting_to_activate.iter().any(|card| card.chain_option.is_some()),
+            trigger: state.card_prompting_to_activate.iter().any(|card| card.action_index.is_some()),
             title: "A card or effect can be activated. Activate?",
             OptionButton {
                 label: "No",
@@ -27,7 +27,7 @@ pub fn ModalContainer() -> Element {
             }
         }
         MessageModal {
-            trigger: !state.card_prompting_to_activate.iter().any(|card| card.chain_option.is_some()) && !state.card_prompting_to_activate.is_empty(),
+            trigger: !state.card_prompting_to_activate.iter().any(|card| card.action_index.is_some()) && !state.card_prompting_to_activate.is_empty(),
             title: "Activate trigger effect?",
             OptionButton {
                 label: "No",
