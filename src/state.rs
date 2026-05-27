@@ -206,7 +206,7 @@ pub async fn load_duel(cache_resource: Resource<anyhow::Result<OCGCore>>) -> any
             CardController::Player,
             CardLocation::ExtraDeck,
             0,
-            0,
+            10,
         );
     }
 
