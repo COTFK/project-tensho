@@ -108,7 +108,7 @@ pub fn FieldCard(index: u8, location: CardLocation, card: CardData) -> Element {
 
     let prompted = prompted_card.is_some();
     let activatable = !effects_of_this_card.is_empty();
-    let chain_option = prompted_card.and_then(|card| card.action_index);
+    let chain_index = prompted_card.and_then(|card| card.action_index);
 
     let is_selected =
         selected_snapshot.is_some_and(|card| card.location == location && card.sequence == index);
@@ -142,8 +142,8 @@ pub fn FieldCard(index: u8, location: CardLocation, card: CardData) -> Element {
                             evt.stop_propagation();
 
                             if prompted {
-                                if let Some(chain_option) = chain_option {
-                                    send_user_response(UserResponse::Chain { index: chain_option });
+                                if let Some(index) = chain_index {
+                                    send_user_response(UserResponse::Chain { index });
                                 } else {
                                     send_user_response(UserResponse::Yes);
                                 }

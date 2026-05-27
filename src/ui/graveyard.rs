@@ -60,7 +60,7 @@ pub fn GraveyardModal() -> Element {
                             .iter()
                             .find(|card| card.location == CardLocation::Graveyard && card.sequence == index as u8)
                             .copied();
-                        let chain_option = prompted_card.and_then(|card| card.action_index);
+                        let chain_index = prompted_card.and_then(|card| card.action_index);
 
                         rsx!(
                             div {
@@ -83,8 +83,8 @@ pub fn GraveyardModal() -> Element {
                                         class: "border-yellow-500 text-yellow-300",
                                         onclick: move |_| {
                                             if prompted_card.is_some() {
-                                                if let Some(chain_option) = chain_option {
-                                                    send_user_response(UserResponse::Chain { index: chain_option });
+                                                if let Some(index) = chain_index {
+                                                    send_user_response(UserResponse::Chain { index });
                                                 } else {
                                                     send_user_response(UserResponse::Yes);
                                                 }

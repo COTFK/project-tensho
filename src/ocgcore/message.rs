@@ -93,7 +93,7 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                 let mut chainables = Vec::new();
 
                 let mut offset = 20;
-                for chain_option in 0..count {
+                for index in 0..count {
                     if offset + 7 <= messages.len() {
                         let card_code = u32::from_le_bytes([
                             messages[offset],
@@ -117,7 +117,7 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                             location,
                             position: None,
                             sequence: *sequence,
-                            action_index: Some(chain_option as u8),
+                            action_index: Some(index as u8),
                             description: None,
                             is_selected: false,
                         })
