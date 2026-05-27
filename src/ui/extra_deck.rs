@@ -16,12 +16,15 @@ use crate::utility::EXTRA_BACK;
 #[component]
 pub fn ExtraDeck() -> Element {
     let mut state = use_context::<DuelState>();
+    let available_special_summons = (state.special_summons)();
 
+    let has_summons = available_special_summons.iter().any(|card| card.location == CardLocation::ExtraDeck);
     let has_cards = state.extra_deck.len() > 0;
 
     rsx!(
         div {
             class: "relative bg-slate-50/2 size-[9vw] aspect-square flex items-center justify-center border-0.5",
+            class: if has_summons {"outline-4 outline-yellow-300/50"},
             class: if has_cards {"hover:outline-4 hover:outline-yellow-300"},
             onclick: move |_| if has_cards { state.show_extra_deck.set(true) },
             CardStack {
