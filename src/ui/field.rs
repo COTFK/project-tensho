@@ -10,6 +10,7 @@ use crate::ocgcore::constants::BattlePosition;
 use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
 use crate::state::DuelState;
+use crate::state::SelectedCard;
 use crate::state::send_user_response;
 use crate::ui::components::ActionButton;
 use crate::ui::components::Card;
@@ -112,8 +113,8 @@ pub fn FieldCard(index: u8, location: CardLocation, card: CardData) -> Element {
     let activatable = !effects_of_this_card.is_empty();
     let chain_index = prompted_card.and_then(|card| card.action_index);
 
-    let is_selected =
-        selected_snapshot.is_some_and(|card| card.location == location && card.sequence == index);
+    let is_selected = selected_snapshot
+        .is_some_and(|card| card.location == location && card.index as u8 == index);
 
     let cards_to_select_from = (state.cards_to_select_from)();
     let card_in_select_list = cards_to_select_from
@@ -178,7 +179,10 @@ pub fn FieldCard(index: u8, location: CardLocation, card: CardData) -> Element {
                     if let Some(index) = select_unselect_index {
                         send_user_response(UserResponse::SelectUnselectCard { index });
                     } else {
-                        selected_card.set(Some(card));
+                        selected_card.set(Some(SelectedCard {
+                            location,
+                            index: index as usize
+                        }));
                     }
                 },
             }

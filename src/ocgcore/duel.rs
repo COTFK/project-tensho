@@ -12,6 +12,7 @@ use crate::ocgcore::CoreMessage;
 use crate::ocgcore::UserResponse;
 use crate::ocgcore::constants::BattlePosition;
 use crate::ocgcore::constants::{CardController, CardOwner};
+use crate::ocgcore::data::HandCard;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Duel {
@@ -138,6 +139,24 @@ impl Duel {
             Uint8Array::new_with_byte_offset_and_length(&buffer, data_ptr + 4, actual_data_len);
 
         Some(data_view.slice(0, actual_data_len))
+    }
+
+    pub fn get_raw_hand(&self) -> Vec<HandCard> {
+        let mut hand = Vec::new();
+        let raw_cards = self.get_cards(CardLocation::Hand);
+
+        for (index, card) in raw_cards.iter().enumerate() {
+            hand.push(HandCard {
+                index,
+                code: card.unwrap().card_code,
+                is_activatable_or_chainable: false,
+                activate_index: None,
+                chain_index: None,
+                normal_summon_index: None,
+            });
+        }
+
+        hand
     }
 
     pub fn get_cards(&self, location: CardLocation) -> Vec<Option<CardData>> {

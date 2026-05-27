@@ -2,6 +2,16 @@ use super::constants::BattlePosition;
 use super::constants::CardController;
 use super::constants::CardLocation;
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub struct HandCard {
+    pub index: usize,
+    pub code: u32,
+    pub is_activatable_or_chainable: bool,
+    pub activate_index: Option<u8>,
+    pub chain_index: Option<u8>,
+    pub normal_summon_index: Option<u8>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CardData {
     pub action_index: Option<u8>,

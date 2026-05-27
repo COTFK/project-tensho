@@ -7,7 +7,6 @@ use super::hand::Hand;
 use super::modal::ModalContainer;
 use crate::ocgcore::Duel;
 use crate::state::DuelState;
-use crate::state::handle_left_click;
 use crate::state::handle_right_click;
 use crate::state::run_game_loop;
 use crate::ui::components::svg::FullscreenIcon;
@@ -17,6 +16,7 @@ use crate::ui::components::svg::ResetIcon;
 pub fn DuelScreen(duel: Duel, resource_handle: Resource<anyhow::Result<Duel>>) -> Element {
     // Initialize duel state
     let mut state = DuelState::new(duel.clone());
+
     use_context_provider(move || state);
     use_effect(use_reactive((&duel,), move |(duel,)| {
         state.reset(duel.clone());
@@ -30,7 +30,12 @@ pub fn DuelScreen(duel: Duel, resource_handle: Resource<anyhow::Result<Duel>>) -
         main {
             class: "relative h-dvh w-dvw bg-gray-800 select-none",
             oncontextmenu: handle_right_click,
-            onclick: |_| handle_left_click(),
+            onclick: move |_| {
+                let mut state = use_context::<DuelState>();
+                if (state.selected_card)().is_some() {
+                    state.selected_card.set(None);
+                }
+            },
             UIButton {
                 class: "fixed top-3 left-3 z-50",
                 label: "Restart game",
@@ -56,7 +61,7 @@ pub fn DuelScreen(duel: Duel, resource_handle: Resource<anyhow::Result<Duel>>) -
             }
             ModalContainer {}
             Field {}
-            Hand {}
+            Hand { cards: state.hand_contents, selected_card: state.selected_card }
         }
     )
 }

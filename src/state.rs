@@ -6,6 +6,7 @@ use crate::ocgcore::CardData;
 use crate::ocgcore::CoreMessage;
 use crate::ocgcore::Duel;
 use crate::ocgcore::DuelStatus;
+use crate::ocgcore::HandCard;
 use crate::ocgcore::OCGCore;
 use crate::ocgcore::UserResponse;
 use crate::ocgcore::constants::BattlePosition;
@@ -20,14 +21,19 @@ use crate::utility::cache_scripts;
 use crate::utility::get_cached_label;
 use crate::utility::get_cached_script;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct SelectedCard {
+    pub location: CardLocation,
+    pub index: usize,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DuelState {
     pub duel: Signal<Duel>,
     pub main_deck_length: Signal<u32>,
     pub extra_deck: Signal<Vec<Option<CardData>>>,
-    pub hand_contents: Signal<Vec<Option<CardData>>>,
-    pub selected_card: Signal<Option<CardData>>,
-    pub normal_summons: Signal<Vec<CardData>>,
+    pub hand_contents: Signal<Vec<HandCard>>,
+    pub selected_card: Signal<Option<SelectedCard>>,
     pub special_summons: Signal<Vec<CardData>>,
     pub activatable_effects: Signal<Vec<CardData>>,
     pub waiting_on_input: Signal<bool>,
@@ -53,7 +59,6 @@ impl DuelState {
             extra_deck: use_signal(Vec::new),
             hand_contents: use_signal(Vec::new),
             selected_card: use_signal(|| None),
-            normal_summons: use_signal(Vec::new),
             special_summons: use_signal(Vec::new),
             activatable_effects: use_signal(Vec::new),
             waiting_on_input: use_signal(|| false),
@@ -84,7 +89,6 @@ impl DuelState {
         self.extra_deck.clear();
         self.hand_contents.clear();
         self.selected_card.set(None);
-        self.normal_summons.clear();
         self.special_summons.clear();
         self.activatable_effects.clear();
         self.waiting_on_input.set(false);
@@ -147,13 +151,6 @@ pub fn handle_right_click(evt: MouseEvent) {
     }
 
     evt.prevent_default();
-}
-
-pub fn handle_left_click() {
-    let mut state = use_context::<DuelState>();
-    if (state.selected_card)().is_some() {
-        state.selected_card.set(None);
-    }
 }
 
 pub async fn cache_dependencies() -> anyhow::Result<OCGCore> {
@@ -226,7 +223,6 @@ pub fn send_user_response(response: UserResponse) {
     // Clean up state and wait for new data
     state.hand_contents.clear();
     state.selected_card.set(None);
-    state.normal_summons.clear();
     state.special_summons.clear();
     state.activatable_effects.clear();
     state.waiting_on_input.set(false);
@@ -246,20 +242,48 @@ pub fn handle_core_message() {
     let mut state = use_context::<DuelState>();
     let duel = (state.duel)();
 
+    state.hand_contents.set(duel.get_raw_hand());
+
     match duel.parse_messages() {
         CoreMessage::Retry => {
             panic!("Received Retry - this shouldn't happen.");
         }
         CoreMessage::Idle(actions) => {
-            state
-                .normal_summons
-                .set(actions.get_normal_summons().to_owned());
-            state
-                .special_summons
-                .set(actions.get_special_summons().to_owned());
+            let normal_summons = actions.get_normal_summons();
+            let special_summons = actions.get_special_summons();
+            let activatable_effects = actions.get_activatable_effects();
+
+            if !normal_summons.is_empty() || !activatable_effects.is_empty() {
+                state.hand_contents.with_mut(|hand| {
+                    for summon in normal_summons {
+                        if summon.location != CardLocation::Hand {
+                            continue;
+                        }
+                        if let Some(hc) =
+                            hand.iter_mut().find(|hc| hc.index as u8 == summon.sequence)
+                        {
+                            hc.normal_summon_index = summon.action_index;
+                        }
+                    }
+
+                    for effect in activatable_effects {
+                        if effect.location != CardLocation::Hand {
+                            continue;
+                        }
+                        if let Some(hc) =
+                            hand.iter_mut().find(|hc| hc.index as u8 == effect.sequence)
+                        {
+                            hc.activate_index = effect.action_index;
+                            hc.is_activatable_or_chainable = true;
+                        }
+                    }
+                });
+            }
+
+            state.special_summons.set(special_summons.to_owned());
             state
                 .activatable_effects
-                .set(actions.get_activatable_effects().to_owned());
+                .set(activatable_effects.to_owned());
             state.waiting_on_input.set(true);
         }
         CoreMessage::SelectPlace(zones) => {
@@ -269,10 +293,25 @@ pub fn handle_core_message() {
         CoreMessage::SelectChain(effects) => {
             if effects.is_empty() {
                 send_user_response(UserResponse::PassPriority);
-            } else {
-                state.card_prompting_to_activate.set(effects);
-                state.waiting_on_input.set(true);
+                return;
             }
+
+            state.hand_contents.with_mut(|hand| {
+                for effect in &effects {
+                    if effect.location != CardLocation::Hand {
+                        continue;
+                    }
+                    if let Some(hand_card) =
+                        hand.iter_mut().find(|hc| hc.index as u8 == effect.sequence)
+                    {
+                        hand_card.chain_index = effect.action_index;
+                        hand_card.is_activatable_or_chainable = true;
+                    }
+                }
+            });
+
+            state.card_prompting_to_activate.set(effects);
+            state.waiting_on_input.set(true);
         }
         CoreMessage::SelectEffectYN(effect) => {
             state
@@ -320,6 +359,5 @@ pub fn handle_core_message() {
     state
         .spell_traps
         .set(duel.get_cards(CardLocation::SpellTrapZone));
-    state.hand_contents.set(duel.get_cards(CardLocation::Hand));
     state.graveyard.set(duel.get_cards(CardLocation::Graveyard));
 }

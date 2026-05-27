@@ -12,6 +12,7 @@ mod utility;
 
 pub use core::OCGCore;
 pub use data::CardData;
+pub use data::HandCard;
 pub use data::OCGCardData;
 pub use duel::Duel;
 pub use duel_status::DuelStatus;

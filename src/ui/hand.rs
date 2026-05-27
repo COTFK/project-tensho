@@ -3,22 +3,18 @@ use dioxus::prelude::*;
 use super::components::ActionButton;
 use super::components::Card;
 use super::components::CardActionMenu;
+use crate::ocgcore::HandCard;
 use crate::ocgcore::UserResponse;
 use crate::ocgcore::constants::CardLocation;
-use crate::state::DuelState;
+use crate::state::SelectedCard;
 use crate::state::send_user_response;
 use crate::ui::components::svg::SummonIcon;
 
 #[component]
-pub fn Hand() -> Element {
-    let state = use_context::<DuelState>();
-    let cards = state.hand_contents;
-
-    let normal_summons = (state.normal_summons)();
-    let activatable_effects = (state.activatable_effects)();
-    let chainables = state.card_prompting_to_activate;
-    let mut selected_card = state.selected_card;
-
+pub fn Hand(
+    cards: ReadSignal<Vec<HandCard>>,
+    selected_card: WriteSignal<Option<SelectedCard>>,
+) -> Element {
     let hand_size = cards().len() as i32;
     let center = hand_size - 1;
 
@@ -27,85 +23,59 @@ pub fn Hand() -> Element {
             class: "fixed flex flex-row justify-center self-end place-self-center inset-0 translate-y-[27.5%] z-50",
             for (index, card) in cards().iter().copied().enumerate() {
                 {
-                    let normal_summon_index = normal_summons.iter().find(|card| card.sequence == index as u8).and_then(|card| card.action_index);
-                    let is_normal_summonable = normal_summon_index.is_some();
-
-                    let activatable_index = activatable_effects
-                        .iter()
-                        .find(|c| c.location == CardLocation::Hand && c.sequence == index as u8)
-                        .and_then(|c| c.action_index);
-                    let chainable_index = chainables
-                        .iter()
-                        .find(|c| c.location == CardLocation::Hand && c.sequence == index as u8)
-                        .and_then(|c| c.action_index);
-                    let is_activatable = chainable_index.is_some() || activatable_index.is_some();
-
-                    let is_selected = match selected_card() {
-                        Some(sc) => sc.sequence == index as u8 && sc.location == CardLocation::Hand,
-                        None => false,
-                    };
-
+                    let is_selected = selected_card().is_some_and(|s| s.location == CardLocation::Hand && s.index == index);
                     let distance = (index as i32) * 2 - center;
-                    let abs_distance = distance.abs();
-                    let mut rotation = distance;
-                    let mut translate_y = (abs_distance * abs_distance * 4) / 16;
-                    if is_selected {
-                        translate_y = -25;
-                        rotation = 0;
-                    }
-
-                    let on_select = move |evt: MouseEvent| {
-                        evt.stop_propagation();
-                        selected_card.set(card);
-                    };
-
-                    let on_normal_summon = move |evt: MouseEvent| {
-                        evt.stop_propagation();
-                        if let Some(seq) = normal_summon_index { send_user_response(UserResponse::NormalSummon { index: seq }); }
-                    };
-
-                    let on_activate = move |evt: MouseEvent| {
-                        evt.stop_propagation();
-                        if let Some(seq) = chainable_index { send_user_response(UserResponse::Chain { index: seq }); }
-                        if let Some(seq) = activatable_index { send_user_response(UserResponse::Activate { index: seq }); }
-                    };
+                    let rotation = if is_selected { 0 } else { distance };
+                    let translate_y = if is_selected { -25 } else { (distance.abs() * distance.abs() * 4) / 16 };
 
                     rsx!(
                         div {
-                            key: "{card.unwrap().card_code}-{index}",
+                            key: "{card.code}-{index}",
                             id: index,
                             class: "transform-gpu transition duration-150 ease-in-out -mx-[1.1vw] relative group",
                             transform: "rotateZ({rotation}deg) translateY({translate_y}%)",
-                            z_index: if is_selected {100} else {0},
+                            z_index: if is_selected { 100 } else { 0 },
                             CardActionMenu {
                                 class: "absolute -top-28 left-1/2 transform -translate-x-1/2",
-                                trigger: is_selected && (is_normal_summonable || is_activatable),
-                                if is_normal_summonable {
+                                trigger: is_selected && (card.normal_summon_index.is_some() || card.is_activatable_or_chainable),
+                                if card.normal_summon_index.is_some() {
                                     ActionButton {
                                         label: "Summon",
                                         class: "border-cyan-500 text-cyan-300",
-                                        onclick: on_normal_summon,
+                                        onclick: move |evt: MouseEvent| {
+                                            evt.stop_propagation();
+                                            selected_card.set(None);
+                                            if let Some(index) = card.normal_summon_index { send_user_response(UserResponse::NormalSummon { index }); }
+                                        },
                                         SummonIcon { }
                                     }
                                 }
-                                if is_activatable {
+                                if card.is_activatable_or_chainable {
                                     ActionButton {
                                         label: "Activate",
                                         class: "border-yellow-500 text-yellow-300",
-                                        onclick: on_activate,
+                                        onclick: move |evt: MouseEvent| {
+                                            evt.stop_propagation();
+                                            selected_card.set(None);
+                                            if let Some(index) = card.chain_index { send_user_response(UserResponse::Chain { index }); }
+                                            if let Some(index) = card.activate_index { send_user_response(UserResponse::Activate { index }); }
+                                        },
                                         SummonIcon {}
                                     }
                                 }
                             }
                             Card {
-                                code: card.unwrap().card_code,
+                                code: card.code,
                                 class: "w-[8vw]",
                                 is_selected,
                                 show_highlight_on_select: false,
                                 show_dotted_highlight: false,
-                                show_blue_aura: is_normal_summonable,
-                                show_orange_aura: is_activatable,
-                                onclick: on_select,
+                                show_blue_aura: card.normal_summon_index.is_some(),
+                                show_orange_aura: card.is_activatable_or_chainable,
+                                onclick:  move |evt: MouseEvent| {
+                                    evt.stop_propagation();
+                                    selected_card.set(Some(SelectedCard { location: CardLocation::Hand, index }));
+                                },
                             }
                         }
                     )
