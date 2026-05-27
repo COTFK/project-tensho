@@ -1,13 +1,13 @@
 use dioxus::prelude::*;
 
-use super::components::ActionButton;
-use super::components::Card;
-use super::components::CardActionMenu;
 use crate::ocgcore::HandCard;
 use crate::ocgcore::UserResponse;
 use crate::ocgcore::constants::CardLocation;
 use crate::state::SelectedCard;
 use crate::state::send_user_response;
+use crate::ui::components::ActionButton;
+use crate::ui::components::Card;
+use crate::ui::components::CardActionMenu;
 use crate::ui::components::svg::SummonIcon;
 
 #[component]

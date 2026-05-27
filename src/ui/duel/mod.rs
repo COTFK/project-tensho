@@ -1,9 +1,12 @@
+mod hand;
+
+pub use hand::Hand;
+
 use dioxus::prelude::*;
 use web_sys::window;
 
 use super::components::UIButton;
 use super::field::Field;
-use super::hand::Hand;
 use super::modal::ModalContainer;
 use crate::ocgcore::Duel;
 use crate::state::DuelState;
