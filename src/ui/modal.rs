@@ -96,12 +96,18 @@ pub fn ModalContainer() -> Element {
 #[component]
 pub fn CardSelector() -> Element {
     let state = use_context::<DuelState>();
+    let selectables = state.selectables;
     let mut selected_card = use_signal(|| None);
+
+    if selectables.len() == 1 {
+        send_user_response(UserResponse::SelectCard { index: 0 });
+        selected_card.set(None);
+    }
 
     rsx!(
         PickerModal {
             title: "Select a card",
-            trigger: !state.selectables.is_empty(),
+            trigger: selectables.len() > 1,
             div {
                 class: "flex flex-row min-w-[40vw] w-full max-w-[77vw] h-max gap-0.5 px-2",
                 class: "overflow-x-auto scroll-smooth scrollbar-thin",
