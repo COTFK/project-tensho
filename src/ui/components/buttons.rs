@@ -26,7 +26,7 @@ pub fn OptionButton(
 ) -> Element {
     rsx!(
         button {
-            class: "w-fit px-8 py-1 h-min rounded-lg font-semibold text-white cursor-pointer {additional_classes}",
+            class: "w-fit px-8 py-1 h-min rounded-lg font-semibold text-white cursor-pointer md:text-lg {additional_classes}",
             disabled: disabled == Some(true),
             onclick: onclick,
             "{label}"
@@ -49,7 +49,7 @@ pub fn ActionButton(
                 "{label}"
             },
             button {
-                class: "bg-black size-12 p-1 rounded-full border-3 w-[6vw] h-[6vw] {class} cursor-pointer text-center",
+                class: "bg-black size-12 md:size-16 p-1 rounded-full border-3 md:border-4 w-[6vw] h-[6vw] {class} cursor-pointer text-center",
                 onclick: onclick,
                 {children}
             }

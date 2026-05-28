@@ -79,7 +79,7 @@ pub fn GraveyardModal() -> Element {
                                     onclick: move |_| selected_card.set(Some(index))
                                 }
                                 CardActionMenu {
-                                    class: "absolute left-1/2 bottom-1/2 -translate-x-[50%] translate-y-[50%] px-3 py-2",
+                                    class: "absolute left-1/2 bottom-1/2 -translate-x-[50%] translate-y-[50%] px-3 py-2 md:px-6",
                                     trigger: selected_card() == Some(index) && prompted_card.is_some(),
                                     ActionButton {
                                         label: "Activate",

@@ -88,7 +88,7 @@ pub fn ExtraDeckModal() -> Element {
                                     onclick: move |_| selected_card.set(Some(index))
                                 }
                                 CardActionMenu {
-                                    class: "absolute left-1/2 bottom-1/2 -translate-x-[50%] translate-y-[50%] px-3 py-2",
+                                    class: "absolute left-1/2 bottom-1/2 -translate-x-[50%] translate-y-[50%] px-3 py-2 md:px-6",
                                     trigger: selected_card() == Some(index) && is_special_summonable,
                                     ActionButton {
                                         label: "Summon",
