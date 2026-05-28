@@ -30,9 +30,16 @@ pub fn Graveyard() -> Element {
             class: if has_cards {"hover:outline-4 hover:outline-yellow-300"},
             onclick: move |_| if has_cards { state.show_graveyard.set(true) },
             if has_cards {
-                CardStack {
-                    length: state.graveyard.len(),
-                    image_url: format!("https://images.ygoprodeck.com/images/cards/{}.jpg", (state.graveyard)().last().unwrap().unwrap().card_code),
+                div {
+                    class: "relative h-full aspect-[59/86]",
+                    div {
+                        class: "absolute inset-[1px] my-0.5 ml-0.5 mb-1 rounded-[2px] blur-[1px] mix-blend-screen pointer-events-none",
+                        class: if has_trigger_effects { "bg-yellow-400" },
+                    }
+                    CardStack {
+                        length: state.graveyard.len(),
+                        image_url: format!("https://images.ygoprodeck.com/images/cards/{}.jpg", (state.graveyard)().last().unwrap().unwrap().card_code),
+                    }
                 }
             }
         }

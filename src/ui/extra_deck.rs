@@ -29,15 +29,17 @@ pub fn ExtraDeck() -> Element {
             class: "relative bg-slate-50/2 {ZONE_SIZE} aspect-square flex items-center justify-center border-0.5",
             class: if has_cards {"hover:outline-4 hover:outline-yellow-300"},
             onclick: move |_| if has_cards { state.show_extra_deck.set(true) },
-            div {
-                class: "relative h-full aspect-[59/86]",
+            if has_cards {
                 div {
-                    class: "absolute inset-[1px] my-0.5 ml-0.5 mb-1 rounded-[2px] blur-[1px] mix-blend-screen pointer-events-none",
-                    class: if has_summons { "bg-yellow-400" },
-                }
-                CardStack {
-                    length: state.extra_deck.len(),
-                    image_url: EXTRA_BACK,
+                    class: "relative h-full aspect-[59/86]",
+                    div {
+                        class: "absolute inset-[1px] my-0.5 ml-0.5 mb-1 rounded-[2px] blur-[1px] mix-blend-screen pointer-events-none",
+                        class: if has_summons { "bg-yellow-400" },
+                    }
+                    CardStack {
+                        length: state.extra_deck.len(),
+                        image_url: EXTRA_BACK,
+                    }
                 }
             }
         }
