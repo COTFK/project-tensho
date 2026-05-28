@@ -31,7 +31,7 @@ pub fn DuelScreen(duel: Duel, resource_handle: Resource<anyhow::Result<Duel>>) -
 
     rsx!(
         main {
-            class: "relative h-dvh w-dvw bg-gray-800 select-none",
+            class: "portrait:hidden relative h-dvh w-dvw bg-gray-800 select-none",
             oncontextmenu: handle_right_click,
             onclick: move |_| {
                 let mut state = use_context::<DuelState>();

@@ -9,6 +9,7 @@ use crate::state::cache_dependencies;
 use crate::state::load_duel;
 use crate::ui::DuelScreen;
 use crate::ui::LoadingScreen;
+use crate::ui::RotateDeviceOverlay;
 use crate::utility::BUILD_VERSION;
 use crate::utility::GIT_HASH;
 
@@ -24,6 +25,7 @@ pub fn AppContainer() -> Element {
 
     rsx!(
         document::Link { rel: "stylesheet", href: asset!("/assets/tailwind.css") }
+        RotateDeviceOverlay {}
         match &*core_resource.read() {
             Some(Ok(duel)) => rsx!(
                 DuelScreen {
