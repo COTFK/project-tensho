@@ -26,14 +26,13 @@ pub fn Graveyard() -> Element {
     rsx!(
         div {
             class: "relative bg-slate-50/2 {ZONE_SIZE} aspect-square flex items-center justify-center border-0.5",
-            class: if has_trigger_effects {"outline-4 outline-yellow-300/50"},
             class: if has_cards {"hover:outline-4 hover:outline-yellow-300"},
             onclick: move |_| if has_cards { state.show_graveyard.set(true) },
             if has_cards {
                 div {
                     class: "relative h-full aspect-[59/86]",
                     div {
-                        class: "absolute inset-[1px] my-0.5 ml-0.5 mb-1 rounded-[2px] blur-[1px] mix-blend-screen pointer-events-none",
+                        class: "absolute inset-[2px] md:inset-[4px] my-0.5 md:my-1 rounded-[2px] blur-[1px] mix-blend-screen pointer-events-none",
                         class: if has_trigger_effects { "bg-yellow-400" },
                     }
                     CardStack {

@@ -33,7 +33,7 @@ pub fn ExtraDeck() -> Element {
                 div {
                     class: "relative h-full aspect-[59/86]",
                     div {
-                        class: "absolute inset-[1px] my-0.5 ml-0.5 mb-1 rounded-[2px] blur-[1px] mix-blend-screen pointer-events-none",
+                        class: "absolute inset-[1px] my-0.5 ml-0.5 mb-1 md:inset-[2px] md:my-1 md:mb-2 md:ml-1 rounded-[2px] blur-[1px] mix-blend-screen pointer-events-none",
                         class: if has_summons { "bg-yellow-400" },
                     }
                     CardStack {
