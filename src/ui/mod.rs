@@ -1,4 +1,5 @@
 mod components;
+pub mod constants;
 mod duel;
 mod extra_deck;
 mod field;

@@ -43,13 +43,13 @@ pub fn ActionButton(
 ) -> Element {
     rsx!(
         div {
-            class: "flex flex-col items-center justify-center gap-2",
+            class: "flex flex-col items-center justify-center gap-1",
             p {
-                class: "text-white text-sm font-semibold shadow-md text-center",
+                class: "text-white font-semibold shadow-md text-center",
                 "{label}"
             },
             button {
-                class: "bg-black size-12 p-1 rounded-full border-3 {class} cursor-pointer text-center",
+                class: "bg-black size-12 p-1 rounded-full border-3 w-[6vw] h-[6vw] {class} cursor-pointer text-center",
                 onclick: onclick,
                 {children}
             }

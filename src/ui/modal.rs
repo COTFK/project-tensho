@@ -103,12 +103,12 @@ pub fn CardSelector() -> Element {
             title: "Select a card",
             trigger: !state.selectables.is_empty(),
             div {
-                class: "flex flex-row gap-2 py-2",
-                class: "overflow-x-auto scroll-smooth scrollbar-thin max-w-[80vw]",
+                class: "flex flex-row min-w-[40vw] w-full max-w-[77vw] h-max gap-0.5 px-2",
+                class: "overflow-x-auto scroll-smooth scrollbar-thin",
                 for (index, card) in (state.selectables)().iter().enumerate() {
                     Card {
                         code: card.card_code,
-                        class: "w-[12vw] max-h-[40vh] min-w-[12vw]",
+                        class: "w-[12vw] min-w-[12vw]",
                         is_selected: selected_card() == Some(index as u8),
                         show_highlight_on_select: true,
                         show_dotted_highlight: false,

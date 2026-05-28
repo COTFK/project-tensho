@@ -40,7 +40,7 @@ pub fn DuelScreen(duel: Duel, resource_handle: Resource<anyhow::Result<Duel>>) -
                 }
             },
             UIButton {
-                class: "fixed top-3 left-3 z-50",
+                class: "fixed top-3 left-3 z-50 w-max h-max p-2",
                 label: "Restart game",
                 onclick: move |_| {
                     resource_handle.clear();
@@ -50,7 +50,7 @@ pub fn DuelScreen(duel: Duel, resource_handle: Resource<anyhow::Result<Duel>>) -
             }
             UIButton {
                 label: "Toggle fullscreen",
-                class: "fixed top-3 right-3 z-50",
+                class: "fixed top-3 right-3 z-50 w-max h-max p-2",
                 onclick: move |_| {
                     if let Some(document) = window().and_then(|window| window.document()) {
                         if document.fullscreen_element().is_some() {

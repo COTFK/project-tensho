@@ -15,6 +15,7 @@ use crate::state::send_user_response;
 use crate::ui::components::ActionButton;
 use crate::ui::components::Card;
 use crate::ui::components::CardActionMenu;
+use crate::ui::constants::ZONE_SIZE;
 
 #[component]
 pub fn Field() -> Element {
@@ -24,7 +25,7 @@ pub fn Field() -> Element {
 
     rsx!(
         div {
-            class: "pt-[15vh] max-w-[70vw] w-fit mx-auto grid grid-cols-7 gap-0.5 justify-items-center",
+            class: "pt-[15vh] max-w-[90vw] w-fit mx-auto grid grid-cols-7 gap-0.5 justify-items-center",
 
             // Extra monster zones (row 1)
             div { class: "col-start-3 row-start-1", Zone { index: 5, card: monsters.get(5).copied().flatten(), location: CardLocation::MonsterZone } }
@@ -65,7 +66,7 @@ fn Zone(index: u8, location: CardLocation, card: Option<CardData>) -> Element {
 
     rsx!(
         div {
-            class: "bg-slate-50/2 size-[9vw] aspect-square flex items-center justify-center",
+            class: "bg-slate-50/2 {ZONE_SIZE} aspect-square flex items-center justify-center",
             class: if placeable_on {"border-2 border-yellow-300"} else {"border-0.5"},
             onclick: move |_| {
                 if placeable_on {
@@ -135,7 +136,7 @@ pub fn FieldCard(index: u8, location: CardLocation, card: CardData) -> Element {
         div {
             class: "relative h-full aspect-[59/86] mx-auto p-[clamp(1px,0.3vw,5px)]",
             CardActionMenu {
-                class: "absolute left-1/2 transform -translate-x-1/2 z-10",
+                class: "absolute left-1/2 bottom-1/2 -translate-x-[50%] translate-y-[50%] px-3 py-1 z-10",
                 trigger: is_selected && (prompted || activatable),
                 if prompted || activatable {
                     ActionButton {

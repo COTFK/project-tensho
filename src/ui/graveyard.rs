@@ -6,6 +6,7 @@ use super::components::CardActionMenu;
 use super::components::OptionButton;
 use super::components::PickerModal;
 use super::components::svg::SummonIcon;
+use super::constants::ZONE_SIZE;
 use crate::ocgcore::UserResponse;
 use crate::ocgcore::constants::CardLocation;
 use crate::state::DuelState;
@@ -24,7 +25,7 @@ pub fn Graveyard() -> Element {
 
     rsx!(
         div {
-            class: "relative bg-slate-50/2 size-[9vw] aspect-square flex items-center justify-center border-0.5",
+            class: "relative bg-slate-50/2 {ZONE_SIZE} aspect-square flex items-center justify-center border-0.5",
             class: if has_trigger_effects {"outline-4 outline-yellow-300/50"},
             class: if has_cards {"hover:outline-4 hover:outline-yellow-300"},
             onclick: move |_| if has_cards { state.show_graveyard.set(true) },
@@ -52,7 +53,7 @@ pub fn GraveyardModal() -> Element {
             title: "Graveyard",
             trigger: show_graveyard(),
             div {
-                class: "flex flex-row gap-2 min-w-[40vw] w-[40vw] max-w-[40vw]",
+                class: "flex flex-row min-w-[40vw] w-full max-w-[77vw] h-max gap-0.5 px-2",
                 class: "overflow-x-auto scroll-smooth scrollbar-thin",
                 for (index, card) in graveyard().iter().enumerate() {
                     {
@@ -64,7 +65,7 @@ pub fn GraveyardModal() -> Element {
 
                         rsx!(
                             div {
-                                class: "relative p-2",
+                                class: "relative py-2",
                                 Card {
                                     code: card.unwrap().card_code,
                                     class: "w-[12vw]",
@@ -78,7 +79,7 @@ pub fn GraveyardModal() -> Element {
                                     onclick: move |_| selected_card.set(Some(index))
                                 }
                                 CardActionMenu {
-                                    class: "absolute left-1/2 -translate-x-[50%] -translate-y-[96px]",
+                                    class: "absolute left-1/2 bottom-1/2 -translate-x-[50%] translate-y-[50%] px-3 py-2",
                                     trigger: selected_card() == Some(index) && prompted_card.is_some(),
                                     ActionButton {
                                         label: "Activate",

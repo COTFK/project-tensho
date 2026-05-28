@@ -1,0 +1,1 @@
+pub const ZONE_SIZE: &str = "size-[10vw]";

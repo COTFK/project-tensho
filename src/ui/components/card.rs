@@ -21,11 +21,11 @@ pub fn Card(
             class: "relative {class}",
             class: if show_highlight_on_select {"border-2"},
             class: if show_dotted_highlight && !is_selected {"border-yellow-300 border-dashed"},
-            class: if is_selected {"border-yellow-300"},
+            class: if is_selected && !(show_orange_aura || show_blue_aura) {"border-yellow-300"},
             class: if !is_selected && !show_dotted_highlight {"border-transparent"},
             onclick: onclick,
             div {
-                class: "absolute -inset-[5px] rounded-[4px] blur-[2px] mix-blend-screen pointer-events-none",
+                class: "absolute -inset-[2px] rounded-[2px] blur-[1px] mix-blend-screen pointer-events-none",
                 class: if show_orange_aura { "bg-yellow-400"},
                 class: if show_blue_aura && !show_orange_aura {"bg-cyan-400"},
                 class: if !show_blue_aura && !show_orange_aura {"hidden"}
@@ -45,7 +45,7 @@ pub fn Card(
                 },
             }
             div {
-                class: "absolute inset-0 border-5 blur-[2px] mix-blend-screen pointer-events-none animate-pulse",
+                class: "absolute inset-0 border-4 blur-[2px] mix-blend-screen pointer-events-none animate-pulse",
                 class: if show_orange_aura { "border-yellow-300/50"},
                 class: if show_blue_aura && !show_orange_aura {"border-cyan-300/50"},
                 class: if !show_blue_aura && !show_orange_aura {"hidden"}
@@ -58,7 +58,7 @@ pub fn Card(
 pub fn CardActionMenu(class: String, trigger: bool, children: Element) -> Element {
     rsx!(
         div {
-            class: "{class} flex flex-row gap-4 bg-black/60 items-center justify-center px-8 py-2",
+            class: "{class} flex flex-row gap-4 bg-black/60 items-center justify-center text-xs",
             class: if !trigger {"hidden"},
             class: "[mask-image:linear-gradient(to_right,transparent_0%,black_20%,black_80%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,transparent_0%,black_20%,black_80%,transparent_100%)]",
             {children}

@@ -6,6 +6,7 @@ use super::components::CardActionMenu;
 use super::components::CardStack;
 use super::components::OptionButton;
 use super::components::PickerModal;
+use super::constants::ZONE_SIZE;
 use crate::ocgcore::UserResponse;
 use crate::ocgcore::constants::CardLocation;
 use crate::state::DuelState;
@@ -25,13 +26,19 @@ pub fn ExtraDeck() -> Element {
 
     rsx!(
         div {
-            class: "relative bg-slate-50/2 size-[9vw] aspect-square flex items-center justify-center border-0.5",
-            class: if has_summons {"outline-4 outline-yellow-300/50"},
+            class: "relative bg-slate-50/2 {ZONE_SIZE} aspect-square flex items-center justify-center border-0.5",
             class: if has_cards {"hover:outline-4 hover:outline-yellow-300"},
             onclick: move |_| if has_cards { state.show_extra_deck.set(true) },
-            CardStack {
-                length: state.extra_deck.len(),
-                image_url: EXTRA_BACK,
+            div {
+                class: "relative h-full aspect-[59/86]",
+                div {
+                    class: "absolute inset-[1px] my-0.5 ml-0.5 mb-1 rounded-[2px] blur-[1px] mix-blend-screen pointer-events-none",
+                    class: if has_summons { "bg-yellow-400" },
+                }
+                CardStack {
+                    length: state.extra_deck.len(),
+                    image_url: EXTRA_BACK,
+                }
             }
         }
     )
@@ -51,7 +58,7 @@ pub fn ExtraDeckModal() -> Element {
             title: "Extra Deck",
             trigger: show_extra_deck(),
             div {
-                class: "flex flex-row min-w-[40vw] w-full max-w-[77vw]",
+                class: "flex flex-row min-w-[40vw] w-full max-w-[77vw] h-max gap-0.5 px-2",
                 class: "overflow-x-auto scroll-smooth scrollbar-thin",
                 for (index, card) in extra_deck().iter().enumerate() {
                     {
@@ -67,10 +74,10 @@ pub fn ExtraDeckModal() -> Element {
 
                         rsx!(
                             div {
-                                class: "relative p-[0.3vw]",
+                                class: "relative py-2",
                                 Card {
                                     code: card.card_code,
-                                    class: "w-[8vw]",
+                                    class: "w-[12vw]",
                                     is_selected: selected_card() == Some(index),
                                     show_highlight_on_select: true,
                                     show_dotted_highlight: false,
@@ -81,7 +88,7 @@ pub fn ExtraDeckModal() -> Element {
                                     onclick: move |_| selected_card.set(Some(index))
                                 }
                                 CardActionMenu {
-                                    class: "absolute left-1/2 -translate-x-[50%] -translate-y-[96px]",
+                                    class: "absolute left-1/2 bottom-1/2 -translate-x-[50%] translate-y-[50%] px-3 py-2",
                                     trigger: selected_card() == Some(index) && is_special_summonable,
                                     ActionButton {
                                         label: "Summon",
