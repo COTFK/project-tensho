@@ -62,7 +62,7 @@ fn Zone(index: u8, location: CardLocation, card: Option<CardData>) -> Element {
 
     let placeable_on = (state.available_zones)()
         .iter()
-        .any(|zone| zone.0 == location && zone.1 == index);
+        .any(|zone| zone.location == location && zone.sequence == index);
 
     rsx!(
         div {

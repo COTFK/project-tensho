@@ -3,7 +3,6 @@ use rand::seq::SliceRandom;
 use std::future::pending;
 
 use crate::ocgcore::CardData;
-use crate::ocgcore::CoreMessage;
 use crate::ocgcore::Duel;
 use crate::ocgcore::DuelStatus;
 use crate::ocgcore::HandCard;
@@ -14,11 +13,13 @@ use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
 use crate::ocgcore::constants::CardOwner;
 use crate::ocgcore::messages::AnnounceNumberMessageData;
+use crate::ocgcore::messages::CoreMessage;
 use crate::ocgcore::messages::SelectCardMessageData;
 use crate::ocgcore::messages::SelectOptionMessageData;
 use crate::ocgcore::messages::SelectTributeMessageData;
 use crate::ocgcore::messages::SelectUnselectMessageData;
 use crate::ocgcore::messages::SortCardMessageData;
+use crate::ocgcore::messages::Zone;
 use crate::utility::EXTRA_DECK_IDS;
 use crate::utility::MAIN_DECK_IDS;
 use crate::utility::cache_labels;
@@ -49,7 +50,7 @@ pub struct DuelState {
     pub selectables: Signal<Option<SelectCardMessageData>>,
     pub sort_cards_to_select_from: Signal<Option<SortCardMessageData>>,
     pub yes_no_question: Signal<Option<String>>,
-    pub available_zones: Signal<Vec<(CardLocation, u8)>>,
+    pub available_zones: Signal<Vec<Zone>>,
     pub positions_to_select: Signal<Vec<BattlePosition>>,
     pub show_graveyard: Signal<bool>,
     pub show_extra_deck: Signal<bool>,
@@ -337,18 +338,18 @@ pub fn handle_core_message() {
                 .set(activatable_effects.to_owned());
             state.waiting_on_input.set(true);
         }
-        CoreMessage::SelectPlace(zones) => {
-            state.available_zones.set(zones);
+        CoreMessage::SelectPlace(message) => {
+            state.available_zones.set(message.zones);
             state.waiting_on_input.set(true);
         }
-        CoreMessage::SelectChain(effects) => {
-            if effects.is_empty() {
+        CoreMessage::SelectChain(message) => {
+            if message.effects.is_empty() {
                 send_user_response(UserResponse::PassPriority);
                 return;
             }
 
             state.hand_contents.with_mut(|hand| {
-                for effect in &effects {
+                for effect in &message.effects {
                     if effect.location != CardLocation::Hand {
                         continue;
                     }
@@ -361,35 +362,40 @@ pub fn handle_core_message() {
                 }
             });
 
-            state.card_prompting_to_activate.set(effects);
+            state.card_prompting_to_activate.set(message.effects);
             state.waiting_on_input.set(true);
         }
-        CoreMessage::SelectEffectYN(effect) => {
-            state
-                .card_prompting_to_activate
-                .with_mut(|v| v.push(effect));
+        CoreMessage::SelectEffectYN(message) => {
+            state.card_prompting_to_activate.with_mut(|v| {
+                v.push(CardData {
+                    action_index: None,
+                    card_code: message.card_code,
+                    controller: message.controller,
+                    location: message.location,
+                    position: None,
+                    sequence: message.sequence,
+                    description: None,
+                    is_selected: false,
+                })
+            });
             state.waiting_on_input.set(true);
         }
         CoreMessage::SelectCard(received_selectables) => {
             state.selectables.set(Some(received_selectables));
             state.waiting_on_input.set(true);
         }
-        CoreMessage::SelectYesNo {
-            player: _,
-            card_code,
-            string_index,
-        } => {
-            let label = get_cached_label(card_code).unwrap();
+        CoreMessage::SelectYesNo(message) => {
+            let label = get_cached_label(message.card_code).unwrap();
             state.yes_no_question.set(Some(
                 label
                     .optional_strings
-                    .get(&string_index)
+                    .get(&message.string_index)
                     .unwrap_or(&String::from("undefined label"))
                     .to_owned(),
             ));
         }
-        CoreMessage::SelectPosition(positions) => {
-            state.positions_to_select.set(positions);
+        CoreMessage::SelectPosition(message) => {
+            state.positions_to_select.set(message.positions);
             state.waiting_on_input.set(true);
         }
         CoreMessage::SelectUnselectCard(message) => {

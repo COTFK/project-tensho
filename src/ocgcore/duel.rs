@@ -8,11 +8,11 @@ use super::constants::CardLocation;
 use super::duel_status::DuelStatus;
 use super::memory::CorePointer;
 use crate::ocgcore::CardData;
-use crate::ocgcore::CoreMessage;
 use crate::ocgcore::UserResponse;
 use crate::ocgcore::constants::BattlePosition;
 use crate::ocgcore::constants::{CardController, CardOwner};
 use crate::ocgcore::data::HandCard;
+use crate::ocgcore::messages::CoreMessage;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Duel {
@@ -66,7 +66,7 @@ impl Duel {
             .set_response(self.handle.0, buf_ptr.into(), buf_len);
     }
 
-    pub fn get_messages(&self) -> Vec<u8> {
+    pub fn parse_messages(&self) -> CoreMessage {
         let length_alloc = self.core.allocate_memory(4);
         let length_ptr = length_alloc.get_pointer();
 
@@ -79,12 +79,9 @@ impl Duel {
 
         let len = Uint32Array::new_with_byte_offset_and_length(&buffer, length_ptr.into(), 1)
             .get_index(0);
+        let messages = Uint8Array::new_with_byte_offset_and_length(&buffer, msg_ptr, len).to_vec();
 
-        Uint8Array::new_with_byte_offset_and_length(&buffer, msg_ptr, len).to_vec()
-    }
-
-    pub fn parse_messages(&self) -> CoreMessage {
-        CoreMessage::try_from(self.get_messages()).unwrap()
+        CoreMessage::try_from(messages.as_slice()).unwrap()
     }
 
     pub fn process(&self) -> DuelStatus {
