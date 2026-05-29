@@ -73,6 +73,11 @@ async fn get_label_data(id: &str) -> anyhow::Result<CardLabel> {
             // Arvata
             optional_strings.insert(2, "Destroy 1 card on the field?".to_string());
         }
+        "49238328" => {
+            // Extravagance
+            optional_strings.insert(0, "Banish 3 cards".to_string());
+            optional_strings.insert(1, "Banish 6 cards".to_string());
+        }
         _ => {}
     }
 
@@ -106,4 +111,10 @@ pub async fn cache_labels(deck_card_ids: &[u32]) {
     for item in results.into_iter().flatten() {
         cache_label(item.0, item.1);
     }
+}
+
+pub fn get_optional_string_label(card_code: u32, string_index: usize) -> String {
+    get_cached_label(card_code)
+        .and_then(|card_label| card_label.optional_strings.get(&string_index).cloned())
+        .unwrap_or_else(|| String::from("error"))
 }

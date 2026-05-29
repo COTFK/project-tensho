@@ -9,7 +9,7 @@ use super::graveyard::GraveyardModal;
 use crate::ocgcore::UserResponse;
 use crate::state::DuelState;
 use crate::state::send_user_response;
-use crate::utility::get_cached_label;
+use crate::utility::get_optional_string_label;
 
 #[component]
 pub fn ModalContainer() -> Element {
@@ -113,6 +113,7 @@ pub fn ModalContainer() -> Element {
         GraveyardModal {}
         ExtraDeckModal {}
         EffectSelector {}
+        OptionSelector {}
 
     )
 }
@@ -174,12 +175,9 @@ pub fn EffectSelector() -> Element {
             for effect in (state.effects_to_select_from)() {
                 OptionButton {
                     label: {
-                        get_cached_label(effect.card_code)
-                            .and_then(|card_label| {
-                                effect.description.and_then(|description| {
-                                    card_label.optional_strings.get(&(description as usize)).cloned()
-                                })
-                            })
+                        effect
+                            .description
+                            .map(|description| get_optional_string_label(effect.card_code, description as usize))
                             .unwrap_or_else(|| String::from("error"))
                     },
                     onclick: move |_| send_user_response(UserResponse::Activate { index: effect.action_index.unwrap() }),
@@ -192,6 +190,30 @@ pub fn EffectSelector() -> Element {
                 additional_classes: "bg-gray-600 text-white w-full",
             }
 
+        }
+    )
+}
+
+#[component]
+pub fn OptionSelector() -> Element {
+    let state = use_context::<DuelState>();
+    let options_message = (state.options_to_prompt)();
+
+    rsx!(
+        PickerModal {
+            title: "Choose an option",
+            trigger: options_message.as_ref().is_some_and(|message| !message.options.is_empty()),
+            if let Some(message) = options_message {
+                for (index, option) in message.options.iter().enumerate() {
+                    OptionButton {
+                        label: {
+                            get_optional_string_label(option.card_code.unwrap(), option.string_index.unwrap())
+                        },
+                        onclick: move |_| send_user_response(UserResponse::SelectOption { index: index as u8 }),
+                        additional_classes: "bg-gray-600 text-white w-full",
+                    }
+                }
+            }
         }
     )
 }

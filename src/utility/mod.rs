@@ -7,6 +7,7 @@ pub use deck::MAIN_DECK_IDS;
 pub use deck::STATIC_CARD_DATA;
 pub use labels::cache_labels;
 pub use labels::get_cached_label;
+pub use labels::get_optional_string_label;
 pub use script::cache_scripts;
 pub use script::get_cached_script;
 

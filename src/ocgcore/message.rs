@@ -1,5 +1,7 @@
 use anyhow::anyhow;
 
+use crate::ocgcore::messages::SelectOptionMessageData;
+
 use super::constants::BattlePosition;
 use super::constants::CardController;
 use super::constants::CardLocation;
@@ -25,6 +27,7 @@ pub enum CoreMessage {
     SelectPosition(Vec<BattlePosition>),
     SelectTribute(SelectTributeMessageData),
     SelectUnselectCard(SelectUnselectMessageData),
+    SelectOption(SelectOptionMessageData),
 }
 
 impl TryFrom<Vec<u8>> for CoreMessage {
@@ -37,9 +40,11 @@ impl TryFrom<Vec<u8>> for CoreMessage {
 
         tracing::debug!("Received message {msg_value:?} with bytes: {messages:?}");
 
+        let message_bytes = &messages[..];
+
         match msg_value {
             1 => Ok(CoreMessage::Retry),
-            11 => Ok(CoreMessage::Idle(IdleMessageData::try_from(&messages[..])?)),
+            11 => Ok(CoreMessage::Idle(IdleMessageData::try_from(message_bytes)?)),
             12 => {
                 let _player = messages[5];
                 let card_code =
@@ -81,8 +86,11 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                     string_index,
                 })
             }
+            14 => Ok(CoreMessage::SelectOption(
+                SelectOptionMessageData::try_from(message_bytes)?,
+            )),
             15 => Ok(CoreMessage::SelectCard(SelectCardMessageData::try_from(
-                &messages[..],
+                message_bytes,
             )?)),
             16 => {
                 let count =
@@ -189,10 +197,10 @@ impl TryFrom<Vec<u8>> for CoreMessage {
                 Ok(CoreMessage::SelectPosition(allowed_positions))
             }
             20 => Ok(CoreMessage::SelectTribute(
-                SelectTributeMessageData::try_from(&messages[..])?,
+                SelectTributeMessageData::try_from(message_bytes)?,
             )),
             26 => Ok(CoreMessage::SelectUnselectCard(
-                SelectUnselectMessageData::try_from(&messages[..])?,
+                SelectUnselectMessageData::try_from(message_bytes)?,
             )),
             _ => anyhow::bail!("Received wrong message: {msg_value}"),
         }

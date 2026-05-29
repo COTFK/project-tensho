@@ -40,6 +40,9 @@ pub enum UserResponse {
     SelectTributes {
         tributes: Vec<u8>,
     },
+    SelectOption {
+        index: u8,
+    },
 }
 
 impl UserResponse {
@@ -54,6 +57,7 @@ impl UserResponse {
                 index,
             } => vec![*controller, *location, *index],
             Self::Chain { index } => vec![*index, 0, 0, 0],
+            Self::SelectOption { index } => vec![*index, 0, 0, 0],
             Self::NormalSummon { index } => vec![0, 0, *index, 0],
             Self::SpecialSummon { index } => vec![1, 0, *index, 0],
             Self::SetMonster { index } => vec![3, 0, *index, 0],
