@@ -2,6 +2,7 @@ use anyhow::anyhow;
 
 use crate::ocgcore::messages::AnnounceNumberMessageData;
 use crate::ocgcore::messages::SelectOptionMessageData;
+use crate::ocgcore::messages::SortCardMessageData;
 
 use super::constants::BattlePosition;
 use super::constants::CardController;
@@ -30,6 +31,7 @@ pub enum CoreMessage {
     SelectUnselectCard(SelectUnselectMessageData),
     SelectOption(SelectOptionMessageData),
     AnnounceNumber(AnnounceNumberMessageData),
+    SortCard(SortCardMessageData),
 }
 
 impl TryFrom<Vec<u8>> for CoreMessage {
@@ -201,6 +203,9 @@ impl TryFrom<Vec<u8>> for CoreMessage {
             20 => Ok(CoreMessage::SelectTribute(
                 SelectTributeMessageData::try_from(message_bytes)?,
             )),
+            25 => Ok(CoreMessage::SortCard(SortCardMessageData::try_from(
+                message_bytes,
+            )?)),
             26 => Ok(CoreMessage::SelectUnselectCard(
                 SelectUnselectMessageData::try_from(message_bytes)?,
             )),

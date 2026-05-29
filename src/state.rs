@@ -18,6 +18,7 @@ use crate::ocgcore::messages::SelectCardMessageData;
 use crate::ocgcore::messages::SelectOptionMessageData;
 use crate::ocgcore::messages::SelectTributeMessageData;
 use crate::ocgcore::messages::SelectUnselectMessageData;
+use crate::ocgcore::messages::SortCardMessageData;
 use crate::utility::EXTRA_DECK_IDS;
 use crate::utility::MAIN_DECK_IDS;
 use crate::utility::cache_labels;
@@ -46,6 +47,7 @@ pub struct DuelState {
     pub graveyard: Signal<Vec<Option<CardData>>>,
     pub card_prompting_to_activate: Signal<Vec<CardData>>,
     pub selectables: Signal<Option<SelectCardMessageData>>,
+    pub sort_cards_to_select_from: Signal<Option<SortCardMessageData>>,
     pub yes_no_question: Signal<Option<String>>,
     pub available_zones: Signal<Vec<(CardLocation, u8)>>,
     pub positions_to_select: Signal<Vec<BattlePosition>>,
@@ -56,7 +58,7 @@ pub struct DuelState {
     pub tributes: Signal<Option<SelectTributeMessageData>>,
     pub selected_tributes: Signal<Vec<u8>>,
     pub options_to_prompt: Signal<Option<SelectOptionMessageData>>,
-    pub numbers_to_select_from: Signal<Option<AnnounceNumberMessageData>>
+    pub numbers_to_select_from: Signal<Option<AnnounceNumberMessageData>>,
 }
 
 impl DuelState {
@@ -75,6 +77,7 @@ impl DuelState {
             graveyard: use_signal(Vec::new),
             card_prompting_to_activate: use_signal(Vec::new),
             selectables: use_signal(|| None),
+            sort_cards_to_select_from: use_signal(|| None),
             yes_no_question: use_signal(|| None),
             available_zones: use_signal(Vec::new),
             positions_to_select: use_signal(Vec::new),
@@ -109,6 +112,7 @@ impl DuelState {
         self.graveyard.clear();
         self.card_prompting_to_activate.clear();
         self.selectables.set(None);
+        self.sort_cards_to_select_from.set(None);
         self.yes_no_question.set(None);
         self.available_zones.clear();
         self.positions_to_select.clear();
@@ -257,6 +261,7 @@ pub fn send_user_response(response: UserResponse) {
     state.selected_tributes.clear();
     state.options_to_prompt.set(None);
     state.numbers_to_select_from.set(None);
+    state.sort_cards_to_select_from.set(None);
 }
 
 pub fn handle_core_message() {
@@ -401,6 +406,10 @@ pub fn handle_core_message() {
         }
         CoreMessage::AnnounceNumber(message) => {
             state.numbers_to_select_from.set(Some(message));
+            state.waiting_on_input.set(true);
+        }
+        CoreMessage::SortCard(message) => {
+            state.sort_cards_to_select_from.set(Some(message));
             state.waiting_on_input.set(true);
         }
     }

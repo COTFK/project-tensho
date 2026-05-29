@@ -31,6 +31,9 @@ pub enum UserResponse {
     SelectCard {
         indices: Vec<u8>,
     },
+    SortCard {
+        indices: Vec<u8>,
+    },
     SelectUnselectCard {
         index: u32,
     },
@@ -66,6 +69,12 @@ impl UserResponse {
             Self::SelectCard { indices } => {
                 let mut response = vec![2, 0, 0, 0];
                 response.extend((indices.len() as u32).to_le_bytes());
+                response.extend(indices.iter().copied());
+
+                response
+            }
+            Self::SortCard { indices } => {
+                let mut response = Vec::new();
                 response.extend(indices.iter().copied());
 
                 response

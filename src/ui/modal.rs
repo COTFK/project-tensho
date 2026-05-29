@@ -110,6 +110,7 @@ pub fn ModalContainer() -> Element {
         }
 
         CardSelector { }
+        SortCardSelector { }
         GraveyardModal {}
         ExtraDeckModal {}
         EffectSelector {}
@@ -168,6 +169,73 @@ pub fn CardSelector() -> Element {
                     onclick: move |_| {
                         send_user_response(UserResponse::SelectCard { indices: selected_cards() });
                         selected_cards.set(Vec::new());
+                    },
+                    additional_classes: if can_confirm { "bg-green-700 cursor-pointer" } else { "bg-gray-600 cursor-not-allowed" },
+                }
+            }
+        }
+    )
+}
+
+#[component]
+pub fn SortCardSelector() -> Element {
+    let state = use_context::<DuelState>();
+    let sort_cards = (state.sort_cards_to_select_from)();
+    let cards = sort_cards
+        .as_ref()
+        .map(|message| message.cards.clone())
+        .unwrap_or_default();
+    let mut selected_cards = use_signal(Vec::new);
+
+    let selected_count = selected_cards().len();
+    let cards_len = cards.len();
+    let can_confirm = !cards.is_empty() && selected_count == cards_len;
+
+    rsx!(
+        PickerModal {
+            title: "Sort cards",
+            trigger: !cards.is_empty(),
+            if !cards.is_empty() {
+                div {
+                    class: "flex flex-row min-w-[40vw] w-full max-w-[77vw] h-max gap-0.5 px-2",
+                    class: "overflow-x-auto scroll-smooth scrollbar-thin",
+                    for (index, card) in cards.iter().enumerate() {
+                        div {
+                            class: "relative w-[12vw] min-w-[12vw]",
+                            Card {
+                                code: card.card_code,
+                                class: "w-full",
+                                is_selected: selected_cards().iter().position(|selected| *selected == index as u8).is_some(),
+                                show_highlight_on_select: true,
+                                show_dotted_highlight: false,
+                                show_blue_aura: false,
+                                show_orange_aura: false,
+                                facedown: false,
+                                use_extra_deck_back: false,
+                                onclick: move |_| {
+                                    selected_cards.with_mut(|indices| {
+                                        if let Some(position) = indices.iter().position(|selected| *selected == index as u8) {
+                                            indices.remove(position);
+                                        } else if indices.len() < cards_len {
+                                            indices.push(index as u8);
+                                        }
+                                    });
+                                },
+                            }
+                            if let Some(order) = selected_cards().iter().position(|selected| *selected == index as u8) {
+                                div {
+                                    class: "pointer-events-none absolute left-2 top-2 z-20 flex h-7 w-7 items-center justify-center rounded-full bg-black/80 text-sm font-bold text-white ring-2 ring-white/80",
+                                    "{order + 1}"
+                                }
+                            }
+                        }
+                    }
+                }
+                OptionButton {
+                    label: "Done",
+                    disabled: !can_confirm,
+                    onclick: move |_| {
+                        send_user_response(UserResponse::SortCard { indices: selected_cards() });
                     },
                     additional_classes: if can_confirm { "bg-green-700 cursor-pointer" } else { "bg-gray-600 cursor-not-allowed" },
                 }
