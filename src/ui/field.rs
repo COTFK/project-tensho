@@ -132,6 +132,22 @@ pub fn FieldCard(index: u8, location: CardLocation, card: CardData) -> Element {
         false
     };
 
+    let tributes = (state.tributes)();
+    let card_in_tribute_list = tributes.as_ref().and_then(|message| {
+        message
+            .candidates
+            .iter()
+            .find(|card| card.location == location && card.sequence == index)
+            .copied()
+    });
+    let tribute_action_index = card_in_tribute_list.and_then(|card| card.action_index);
+    let selected_tributes = (state.selected_tributes)();
+    let selected_for_tribute =
+        tribute_action_index.is_some_and(|action_index| selected_tributes.contains(&action_index));
+    let tribute_max_select = tributes
+        .as_ref()
+        .map_or(0, |message| message.max_select as usize);
+
     rsx!(
         div {
             class: "relative h-full aspect-[59/86] mx-auto p-[clamp(1px,0.3vw,5px)]",
@@ -169,23 +185,33 @@ pub fn FieldCard(index: u8, location: CardLocation, card: CardData) -> Element {
             Card {
                 code: card.card_code,
                 class: if card.position == Some(BattlePosition::FaceDownDefense) || card.position == Some(BattlePosition::FaceUpDefense) { "-rotate-90" } else {""},
-                is_selected: is_selected || is_selected_for_extra_deck_summon,
+                is_selected: is_selected || is_selected_for_extra_deck_summon || selected_for_tribute,
                 show_highlight_on_select: true,
                 show_blue_aura: false,
-                show_dotted_highlight: selectable_for_extra_deck_summon,
+                show_dotted_highlight: selectable_for_extra_deck_summon || card_in_tribute_list.is_some(),
                 show_orange_aura: activatable || prompted,
                 facedown: card.position == Some(BattlePosition::FaceDown) || card.position == Some(BattlePosition::FaceDownAttack) || card.position == Some(BattlePosition::FaceDownDefense),
                 use_extra_deck_back: false,
                 onclick: move |evt: MouseEvent| {
                     evt.stop_propagation();
 
-                    if let Some(index) = select_unselect_index {
-                        send_user_response(UserResponse::SelectUnselectCard { index });
+                    if let Some(action_index) = tribute_action_index {
+                        state.selected_tributes.with_mut(|selected_tributes| {
+                            if let Some(position) = selected_tributes.iter().position(|code| *code == action_index) {
+                                selected_tributes.remove(position);
+                            } else if selected_tributes.len() < tribute_max_select {
+                                selected_tributes.push(action_index);
+                            }
+                        });
                     } else {
-                        selected_card.set(Some(SelectedCard {
-                            location,
-                            index: index as usize
-                        }));
+                        if let Some(index) = select_unselect_index {
+                            send_user_response(UserResponse::SelectUnselectCard { index });
+                        } else {
+                            selected_card.set(Some(SelectedCard {
+                                location,
+                                index: index as usize
+                            }));
+                        }
                     }
                 },
             }

@@ -6,6 +6,7 @@ use super::constants::CardLocation;
 use super::data::CardData;
 use super::messages::IdleMessageData;
 use super::messages::SelectCardMessageData;
+use super::messages::SelectTributeMessageData;
 use super::messages::SelectUnselectMessageData;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -22,6 +23,7 @@ pub enum CoreMessage {
     SelectChain(Vec<CardData>),
     SelectPlace(Vec<(CardLocation, u8)>),
     SelectPosition(Vec<BattlePosition>),
+    SelectTribute(SelectTributeMessageData),
     SelectUnselectCard(SelectUnselectMessageData),
 }
 
@@ -186,6 +188,9 @@ impl TryFrom<Vec<u8>> for CoreMessage {
 
                 Ok(CoreMessage::SelectPosition(allowed_positions))
             }
+            20 => Ok(CoreMessage::SelectTribute(
+                SelectTributeMessageData::try_from(&messages[..])?,
+            )),
             26 => Ok(CoreMessage::SelectUnselectCard(
                 SelectUnselectMessageData::try_from(&messages[..])?,
             )),

@@ -15,6 +15,13 @@ use crate::utility::get_cached_label;
 pub fn ModalContainer() -> Element {
     let state = use_context::<DuelState>();
     let cards_to_select_from = (state.cards_to_select_from)();
+    let tributes = (state.tributes)();
+    let selected_tributes = (state.selected_tributes)();
+    let selected_tributes_len = selected_tributes.len();
+    let tribute_selection_is_valid = tributes.as_ref().is_some_and(|message| {
+        selected_tributes_len >= message.min_select as usize
+            && selected_tributes_len <= message.max_select as usize
+    });
 
     rsx!(
         MessageModal {
@@ -53,20 +60,37 @@ pub fn ModalContainer() -> Element {
             }
         }
         MessageModal {
-            trigger: cards_to_select_from.is_some(),
+            trigger: cards_to_select_from.is_some() || tributes.is_some(),
             title: "Select cards",
-            if let Some(selection_message) = cards_to_select_from {
+            if let Some(message) = cards_to_select_from {
                 div {
                     class: "flex flex-row gap-4",
                     OptionButton {
                         label: "Confirm",
-                        disabled: !selection_message.finishable,
+                        disabled: !message.finishable,
                         onclick: |_| send_user_response(UserResponse::PassPriority),
                         additional_classes: "bg-green-600/70",
                     }
                     OptionButton {
                         label: "Cancel",
-                        disabled: !selection_message.cancelable,
+                        disabled: !message.cancelable,
+                        onclick: |_| send_user_response(UserResponse::PassPriority),
+                        additional_classes: "bg-red-600/70",
+                    }
+                }
+            }
+            if let Some(message) = tributes {
+                div {
+                    class: "flex flex-row gap-4",
+                    OptionButton {
+                        label: "Confirm",
+                        disabled: !tribute_selection_is_valid,
+                        additional_classes: if tribute_selection_is_valid { "bg-green-700 cursor-pointer" } else { "bg-gray-600 cursor-not-allowed" },
+                        onclick: move |_| send_user_response(UserResponse::SelectTributes { tributes: selected_tributes.clone() }),
+                    }
+                    OptionButton {
+                        label: "Cancel",
+                        disabled: !message.is_cancelable,
                         onclick: |_| send_user_response(UserResponse::PassPriority),
                         additional_classes: "bg-red-600/70",
                     }

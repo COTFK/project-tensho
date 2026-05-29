@@ -13,6 +13,7 @@ use crate::ocgcore::constants::BattlePosition;
 use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
 use crate::ocgcore::constants::CardOwner;
+use crate::ocgcore::messages::SelectTributeMessageData;
 use crate::ocgcore::messages::SelectUnselectMessageData;
 use crate::utility::EXTRA_DECK_IDS;
 use crate::utility::MAIN_DECK_IDS;
@@ -49,6 +50,8 @@ pub struct DuelState {
     pub show_extra_deck: Signal<bool>,
     pub effects_to_select_from: Signal<Vec<CardData>>,
     pub cards_to_select_from: Signal<Option<SelectUnselectMessageData>>,
+    pub tributes: Signal<Option<SelectTributeMessageData>>,
+    pub selected_tributes: Signal<Vec<u8>>,
 }
 
 impl DuelState {
@@ -74,6 +77,8 @@ impl DuelState {
             show_extra_deck: use_signal(|| false),
             effects_to_select_from: use_signal(Vec::new),
             cards_to_select_from: use_signal(|| None),
+            tributes: use_signal(|| None),
+            selected_tributes: use_signal(Vec::new),
         }
     }
 
@@ -103,6 +108,8 @@ impl DuelState {
         self.show_graveyard.set(false);
         self.cards_to_select_from.set(None);
         self.effects_to_select_from.clear();
+        self.tributes.set(None);
+        self.selected_tributes.clear();
     }
 }
 
@@ -136,18 +143,19 @@ pub fn handle_right_click(evt: MouseEvent) {
         } else {
             send_user_response(UserResponse::No);
         }
-
-        state.card_prompting_to_activate.with_mut(|v| v.clear());
     }
 
     // Decline Yes/No questions
     if (state.yes_no_question)().is_some() {
         send_user_response(UserResponse::No);
-        state.yes_no_question.set(None);
     }
 
     if (state.show_graveyard)() {
         state.show_graveyard.set(false);
+    }
+
+    if (state.tributes)().is_some_and(|message| message.is_cancelable) {
+        send_user_response(UserResponse::PassPriority);
     }
 
     evt.prevent_default();
@@ -236,6 +244,8 @@ pub fn send_user_response(response: UserResponse) {
     state.show_graveyard.set(false);
     state.cards_to_select_from.set(None);
     state.effects_to_select_from.clear();
+    state.tributes.set(None);
+    state.selected_tributes.clear();
 }
 
 pub fn handle_core_message() {
@@ -368,6 +378,10 @@ pub fn handle_core_message() {
         }
         CoreMessage::SelectUnselectCard(message) => {
             state.cards_to_select_from.set(Some(message));
+            state.waiting_on_input.set(true);
+        }
+        CoreMessage::SelectTribute(message) => {
+            state.tributes.set(Some(message));
             state.waiting_on_input.set(true);
         }
     }

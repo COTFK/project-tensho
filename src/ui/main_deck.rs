@@ -1,9 +1,9 @@
 use dioxus::prelude::*;
 
 use super::components::CardStack;
+use super::constants::ZONE_SIZE;
 use crate::state::DuelState;
 use crate::utility::CARD_BACK;
-use super::constants::ZONE_SIZE;
 
 #[component]
 pub fn MainDeck() -> Element {

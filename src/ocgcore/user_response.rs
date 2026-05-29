@@ -1,6 +1,6 @@
 use super::constants::BattlePosition;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum UserResponse {
     Yes,
     No,
@@ -37,6 +37,9 @@ pub enum UserResponse {
     SelectPosition {
         position: BattlePosition,
     },
+    SelectTributes {
+        tributes: Vec<u8>,
+    },
 }
 
 impl UserResponse {
@@ -71,6 +74,13 @@ impl UserResponse {
                 ]
             }
             Self::SelectPosition { position } => vec![*position as u8, 0, 0, 0],
+            Self::SelectTributes { tributes } => {
+                let mut response = vec![2, 0, 0, 0];
+                response.extend((tributes.len() as u32).to_le_bytes());
+                response.extend(tributes.iter().copied());
+
+                response
+            }
         }
     }
 }
