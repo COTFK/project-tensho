@@ -29,7 +29,7 @@ pub enum UserResponse {
         index: u8,
     },
     SelectCard {
-        index: u8,
+        indices: Vec<u8>,
     },
     SelectUnselectCard {
         index: u32,
@@ -63,7 +63,13 @@ impl UserResponse {
             Self::SetMonster { index } => vec![3, 0, *index, 0],
             Self::SetSpellTrap { index } => vec![4, 0, *index, 0],
             Self::Activate { index } => vec![5, 0, *index, 0],
-            Self::SelectCard { index } => vec![2, 0, 0, 0, 1, 0, 0, 0, *index],
+            Self::SelectCard { indices } => {
+                let mut response = vec![2, 0, 0, 0];
+                response.extend((indices.len() as u32).to_le_bytes());
+                response.extend(indices.iter().copied());
+
+                response
+            }
             Self::SelectUnselectCard { index } => {
                 let index_bytes = index.to_le_bytes();
                 vec![

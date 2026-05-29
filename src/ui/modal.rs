@@ -122,44 +122,55 @@ pub fn ModalContainer() -> Element {
 #[component]
 pub fn CardSelector() -> Element {
     let state = use_context::<DuelState>();
-    let selectables = state.selectables;
-    let mut selected_card = use_signal(|| None);
+    let selectables = (state.selectables)();
+    let mut selected_cards = use_signal(Vec::new);
 
-    if selectables.len() == 1 {
-        send_user_response(UserResponse::SelectCard { index: 0 });
-        selected_card.set(None);
-    }
+    let selected_count = selected_cards().len();
+    let can_confirm = selectables.as_ref().is_some_and(|message| {
+        selected_count >= message.min_select as usize
+            && selected_count <= message.max_select as usize
+    });
 
     rsx!(
         PickerModal {
-            title: "Select a card",
-            trigger: selectables.len() > 1,
-            div {
-                class: "flex flex-row min-w-[40vw] w-full max-w-[77vw] h-max gap-0.5 px-2",
-                class: "overflow-x-auto scroll-smooth scrollbar-thin",
-                for (index, card) in (state.selectables)().iter().enumerate() {
-                    Card {
-                        code: card.card_code,
-                        class: "w-[12vw] min-w-[12vw]",
-                        is_selected: selected_card() == Some(index as u8),
-                        show_highlight_on_select: true,
-                        show_dotted_highlight: false,
-                        show_blue_aura: false,
-                        show_orange_aura: false,
-                        facedown: false,
-                        use_extra_deck_back: false,
-                        onclick: move |_| selected_card.set(Some(index as u8))
+            title: "Select cards",
+            trigger: selectables.as_ref().is_some_and(|message| !message.cards.is_empty()),
+            if let Some(message) = selectables {
+                div {
+                    class: "flex flex-row min-w-[40vw] w-full max-w-[77vw] h-max gap-0.5 px-2",
+                    class: "overflow-x-auto scroll-smooth scrollbar-thin",
+                    for (index, card) in message.cards.iter().enumerate() {
+                        Card {
+                            code: card.card_code,
+                            class: "w-[12vw] min-w-[12vw]",
+                            is_selected: selected_cards().contains(&(index as u8)),
+                            show_highlight_on_select: true,
+                            show_dotted_highlight: false,
+                            show_blue_aura: false,
+                            show_orange_aura: false,
+                            facedown: false,
+                            use_extra_deck_back: false,
+                            onclick: move |_| {
+                                selected_cards.with_mut(|indices| {
+                                    if let Some(position) = indices.iter().position(|selected| *selected == index as u8) {
+                                        indices.remove(position);
+                                    } else if indices.len() < message.max_select as usize {
+                                        indices.push(index as u8);
+                                    }
+                                });
+                            }
+                        }
                     }
                 }
-            }
-            OptionButton {
-                label: "Done",
-                disabled: selected_card().is_none(),
-                onclick: move |_| {
-                    send_user_response(UserResponse::SelectCard { index: selected_card.unwrap() });
-                    selected_card.set(None);
-                },
-                additional_classes: if selected_card().is_none() { "bg-gray-600 cursor-not-allowed" } else { "bg-green-700 cursor-pointer" },
+                OptionButton {
+                    label: "Done",
+                    disabled: !can_confirm,
+                    onclick: move |_| {
+                        send_user_response(UserResponse::SelectCard { indices: selected_cards() });
+                        selected_cards.set(Vec::new());
+                    },
+                    additional_classes: if can_confirm { "bg-green-700 cursor-pointer" } else { "bg-gray-600 cursor-not-allowed" },
+                }
             }
         }
     )

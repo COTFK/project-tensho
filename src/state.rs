@@ -14,6 +14,7 @@ use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
 use crate::ocgcore::constants::CardOwner;
 use crate::ocgcore::messages::AnnounceNumberMessageData;
+use crate::ocgcore::messages::SelectCardMessageData;
 use crate::ocgcore::messages::SelectOptionMessageData;
 use crate::ocgcore::messages::SelectTributeMessageData;
 use crate::ocgcore::messages::SelectUnselectMessageData;
@@ -44,7 +45,7 @@ pub struct DuelState {
     pub spell_traps: Signal<Vec<Option<CardData>>>,
     pub graveyard: Signal<Vec<Option<CardData>>>,
     pub card_prompting_to_activate: Signal<Vec<CardData>>,
-    pub selectables: Signal<Vec<CardData>>,
+    pub selectables: Signal<Option<SelectCardMessageData>>,
     pub yes_no_question: Signal<Option<String>>,
     pub available_zones: Signal<Vec<(CardLocation, u8)>>,
     pub positions_to_select: Signal<Vec<BattlePosition>>,
@@ -73,7 +74,7 @@ impl DuelState {
             spell_traps: use_signal(Vec::new),
             graveyard: use_signal(Vec::new),
             card_prompting_to_activate: use_signal(Vec::new),
-            selectables: use_signal(Vec::new),
+            selectables: use_signal(|| None),
             yes_no_question: use_signal(|| None),
             available_zones: use_signal(Vec::new),
             positions_to_select: use_signal(Vec::new),
@@ -107,7 +108,7 @@ impl DuelState {
         self.spell_traps.clear();
         self.graveyard.clear();
         self.card_prompting_to_activate.clear();
-        self.selectables.clear();
+        self.selectables.set(None);
         self.yes_no_question.set(None);
         self.available_zones.clear();
         self.positions_to_select.clear();
@@ -245,7 +246,7 @@ pub fn send_user_response(response: UserResponse) {
     state.monsters.clear();
     state.spell_traps.clear();
     state.card_prompting_to_activate.clear();
-    state.selectables.clear();
+    state.selectables.set(None);
     state.yes_no_question.set(None);
     state.available_zones.clear();
     state.positions_to_select.clear();
@@ -365,7 +366,7 @@ pub fn handle_core_message() {
             state.waiting_on_input.set(true);
         }
         CoreMessage::SelectCard(received_selectables) => {
-            state.selectables.set(received_selectables.cards);
+            state.selectables.set(Some(received_selectables));
             state.waiting_on_input.set(true);
         }
         CoreMessage::SelectYesNo {
