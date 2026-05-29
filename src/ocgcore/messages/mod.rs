@@ -18,7 +18,6 @@ pub use select_chain::SelectChainMessageData;
 pub use select_effect_yes_no::SelectEffectYNMessageData;
 pub use select_option::SelectOptionMessageData;
 pub use select_place::SelectPlaceMessageData;
-pub use select_place::Zone;
 pub use select_position::SelectPositionMessageData;
 pub use select_tribute::SelectTributeMessageData;
 pub use select_unselect_card::SelectUnselectMessageData;

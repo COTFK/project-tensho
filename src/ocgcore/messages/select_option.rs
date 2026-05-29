@@ -1,6 +1,5 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SelectOption {
-    pub raw: u64,
     pub card_code: Option<u32>,
     pub string_index: Option<usize>,
 }
@@ -45,7 +44,6 @@ impl TryFrom<&[u8]> for SelectOptionMessageData {
             };
 
             options.push(SelectOption {
-                raw,
                 card_code,
                 string_index,
             });

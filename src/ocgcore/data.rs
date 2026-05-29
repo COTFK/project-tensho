@@ -14,6 +14,12 @@ pub struct HandCard {
     pub spell_trap_set_index: Option<u8>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Zone {
+    pub location: CardLocation,
+    pub sequence: u8,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CardData {
     pub action_index: Option<u8>,

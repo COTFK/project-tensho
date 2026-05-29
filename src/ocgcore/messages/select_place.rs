@@ -1,10 +1,5 @@
 use crate::ocgcore::constants::CardLocation;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Zone {
-    pub location: CardLocation,
-    pub sequence: u8,
-}
+use crate::ocgcore::data::Zone;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SelectPlaceMessageData {
