@@ -13,6 +13,7 @@ use crate::ocgcore::constants::BattlePosition;
 use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
 use crate::ocgcore::constants::CardOwner;
+use crate::ocgcore::messages::AnnounceNumberMessageData;
 use crate::ocgcore::messages::SelectOptionMessageData;
 use crate::ocgcore::messages::SelectTributeMessageData;
 use crate::ocgcore::messages::SelectUnselectMessageData;
@@ -54,6 +55,7 @@ pub struct DuelState {
     pub tributes: Signal<Option<SelectTributeMessageData>>,
     pub selected_tributes: Signal<Vec<u8>>,
     pub options_to_prompt: Signal<Option<SelectOptionMessageData>>,
+    pub numbers_to_select_from: Signal<Option<AnnounceNumberMessageData>>
 }
 
 impl DuelState {
@@ -82,6 +84,7 @@ impl DuelState {
             tributes: use_signal(|| None),
             selected_tributes: use_signal(Vec::new),
             options_to_prompt: use_signal(|| None),
+            numbers_to_select_from: use_signal(|| None),
         }
     }
 
@@ -114,6 +117,7 @@ impl DuelState {
         self.tributes.set(None);
         self.selected_tributes.clear();
         self.options_to_prompt.set(None);
+        self.numbers_to_select_from.set(None);
     }
 }
 
@@ -251,6 +255,7 @@ pub fn send_user_response(response: UserResponse) {
     state.tributes.set(None);
     state.selected_tributes.clear();
     state.options_to_prompt.set(None);
+    state.numbers_to_select_from.set(None);
 }
 
 pub fn handle_core_message() {
@@ -391,6 +396,10 @@ pub fn handle_core_message() {
         }
         CoreMessage::SelectOption(message) => {
             state.options_to_prompt.set(Some(message));
+            state.waiting_on_input.set(true);
+        }
+        CoreMessage::AnnounceNumber(message) => {
+            state.numbers_to_select_from.set(Some(message));
             state.waiting_on_input.set(true);
         }
     }

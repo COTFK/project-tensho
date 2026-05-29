@@ -114,6 +114,7 @@ pub fn ModalContainer() -> Element {
         ExtraDeckModal {}
         EffectSelector {}
         OptionSelector {}
+        NumberSelector {}
 
     )
 }
@@ -209,6 +210,28 @@ pub fn OptionSelector() -> Element {
                         label: {
                             get_optional_string_label(option.card_code.unwrap(), option.string_index.unwrap())
                         },
+                        onclick: move |_| send_user_response(UserResponse::SelectOption { index: index as u8 }),
+                        additional_classes: "bg-gray-600 text-white w-full",
+                    }
+                }
+            }
+        }
+    )
+}
+
+#[component]
+pub fn NumberSelector() -> Element {
+    let state = use_context::<DuelState>();
+    let numbers = (state.numbers_to_select_from)();
+
+    rsx!(
+        PickerModal {
+            title: "Choose an option",
+            trigger: numbers.is_some(),
+            if let Some(message) = numbers {
+                for (index, number) in message.numbers.iter().enumerate() {
+                    OptionButton {
+                        label: "{number}",
                         onclick: move |_| send_user_response(UserResponse::SelectOption { index: index as u8 }),
                         additional_classes: "bg-gray-600 text-white w-full",
                     }

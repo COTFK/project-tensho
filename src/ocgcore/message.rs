@@ -1,5 +1,6 @@
 use anyhow::anyhow;
 
+use crate::ocgcore::messages::AnnounceNumberMessageData;
 use crate::ocgcore::messages::SelectOptionMessageData;
 
 use super::constants::BattlePosition;
@@ -28,6 +29,7 @@ pub enum CoreMessage {
     SelectTribute(SelectTributeMessageData),
     SelectUnselectCard(SelectUnselectMessageData),
     SelectOption(SelectOptionMessageData),
+    AnnounceNumber(AnnounceNumberMessageData),
 }
 
 impl TryFrom<Vec<u8>> for CoreMessage {
@@ -201,6 +203,9 @@ impl TryFrom<Vec<u8>> for CoreMessage {
             )),
             26 => Ok(CoreMessage::SelectUnselectCard(
                 SelectUnselectMessageData::try_from(message_bytes)?,
+            )),
+            143 => Ok(CoreMessage::AnnounceNumber(
+                AnnounceNumberMessageData::try_from(message_bytes)?,
             )),
             _ => anyhow::bail!("Received wrong message: {msg_value}"),
         }
