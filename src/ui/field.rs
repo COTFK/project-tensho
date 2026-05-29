@@ -5,13 +5,13 @@ use super::extra_deck::ExtraDeck;
 use super::graveyard::Graveyard;
 use super::main_deck::MainDeck;
 use crate::ocgcore::CardData;
-use crate::ocgcore::UserResponse;
+use crate::ocgcore::Response;
 use crate::ocgcore::constants::BattlePosition;
 use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
 use crate::state::DuelState;
 use crate::state::SelectedCard;
-use crate::state::send_user_response;
+use crate::state::send_response;
 use crate::ui::components::ActionButton;
 use crate::ui::components::Card;
 use crate::ui::components::CardActionMenu;
@@ -70,7 +70,7 @@ fn Zone(index: u8, location: CardLocation, card: Option<CardData>) -> Element {
             class: if placeable_on {"border-2 border-yellow-300"} else {"border-0.5"},
             onclick: move |_| {
                 if placeable_on {
-                    send_user_response(UserResponse::Place {
+                    send_response(Response::Place {
                         controller: CardController::Player as u8,
                         location: location as u8,
                         index: index as u8,
@@ -163,9 +163,9 @@ pub fn FieldCard(index: u8, location: CardLocation, card: CardData) -> Element {
 
                             if prompted {
                                 if let Some(index) = chain_index {
-                                    send_user_response(UserResponse::Chain { index });
+                                    send_response(Response::Chain { index });
                                 } else {
-                                    send_user_response(UserResponse::Yes);
+                                    send_response(Response::Yes);
                                 }
                             }
 
@@ -174,7 +174,7 @@ pub fn FieldCard(index: u8, location: CardLocation, card: CardData) -> Element {
                                     state.effects_to_select_from.set(effects_of_this_card.to_owned());
                                     state.selected_card.set(None);
                                 } else if let Some(idx) = activatable_eff_index {
-                                    send_user_response(UserResponse::Activate { index: idx });
+                                    send_response(Response::Activate { index: idx });
                                 }
                             }
                         },
@@ -205,7 +205,7 @@ pub fn FieldCard(index: u8, location: CardLocation, card: CardData) -> Element {
                         });
                     } else {
                         if let Some(index) = select_unselect_index {
-                            send_user_response(UserResponse::SelectUnselectCard { index });
+                            send_response(Response::SelectUnselectCard { index });
                         } else {
                             selected_card.set(Some(SelectedCard {
                                 location,

@@ -4,15 +4,15 @@ use std::future::pending;
 
 use crate::ocgcore::CardData;
 use crate::ocgcore::Duel;
-use crate::ocgcore::DuelStatus;
 use crate::ocgcore::HandCard;
 use crate::ocgcore::OCGCore;
-use crate::ocgcore::UserResponse;
+use crate::ocgcore::Response;
 use crate::ocgcore::Zone;
 use crate::ocgcore::constants::BattlePosition;
 use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
 use crate::ocgcore::constants::CardOwner;
+use crate::ocgcore::constants::DuelStatus;
 use crate::ocgcore::messages::AnnounceNumberMessageData;
 use crate::ocgcore::messages::CoreMessage;
 use crate::ocgcore::messages::SelectCardMessageData;
@@ -153,15 +153,15 @@ pub fn handle_right_click(evt: MouseEvent) {
             .iter()
             .any(|card| card.action_index.is_some())
         {
-            send_user_response(UserResponse::PassPriority)
+            send_response(Response::PassPriority)
         } else {
-            send_user_response(UserResponse::No);
+            send_response(Response::No);
         }
     }
 
     // Decline Yes/No questions
     if (state.yes_no_question)().is_some() {
-        send_user_response(UserResponse::No);
+        send_response(Response::No);
     }
 
     if (state.show_graveyard)() {
@@ -169,7 +169,7 @@ pub fn handle_right_click(evt: MouseEvent) {
     }
 
     if (state.tributes)().is_some_and(|message| message.is_cancelable) {
-        send_user_response(UserResponse::PassPriority);
+        send_response(Response::PassPriority);
     }
 
     evt.prevent_default();
@@ -237,7 +237,7 @@ pub async fn load_duel(cache_resource: Resource<anyhow::Result<OCGCore>>) -> any
     Ok(duel)
 }
 
-pub fn send_user_response(response: UserResponse) {
+pub fn send_response(response: Response) {
     let mut state = use_context::<DuelState>();
 
     state.duel.read().set_response(response);
@@ -344,7 +344,7 @@ pub fn handle_core_message() {
         }
         CoreMessage::SelectChain(message) => {
             if message.effects.is_empty() {
-                send_user_response(UserResponse::PassPriority);
+                send_response(Response::PassPriority);
                 return;
             }
 

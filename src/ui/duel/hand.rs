@@ -1,10 +1,10 @@
 use dioxus::prelude::*;
 
 use crate::ocgcore::HandCard;
-use crate::ocgcore::UserResponse;
+use crate::ocgcore::Response;
 use crate::ocgcore::constants::CardLocation;
 use crate::state::SelectedCard;
-use crate::state::send_user_response;
+use crate::state::send_response;
 use crate::ui::components::ActionButton;
 use crate::ui::components::Card;
 use crate::ui::components::CardActionMenu;
@@ -45,7 +45,7 @@ pub fn Hand(
                                         onclick: move |evt: MouseEvent| {
                                             evt.stop_propagation();
                                             selected_card.set(None);
-                                            if let Some(index) = card.normal_summon_index { send_user_response(UserResponse::NormalSummon { index }); }
+                                            if let Some(index) = card.normal_summon_index { send_response(Response::NormalSummon { index }); }
                                         },
                                         SummonIcon { }
                                     }
@@ -57,8 +57,8 @@ pub fn Hand(
                                         onclick: move |evt: MouseEvent| {
                                             evt.stop_propagation();
                                             selected_card.set(None);
-                                            if let Some(index) = card.chain_index { send_user_response(UserResponse::Chain { index }); }
-                                            if let Some(index) = card.activate_index { send_user_response(UserResponse::Activate { index }); }
+                                            if let Some(index) = card.chain_index { send_response(Response::Chain { index }); }
+                                            if let Some(index) = card.activate_index { send_response(Response::Activate { index }); }
                                         },
                                         SummonIcon {}
                                     }
@@ -70,8 +70,8 @@ pub fn Hand(
                                         onclick: move |evt: MouseEvent| {
                                             evt.stop_propagation();
                                             selected_card.set(None);
-                                            if let Some(index) = card.spell_trap_set_index { send_user_response(UserResponse::SetSpellTrap { index }); }
-                                            if let Some(index) = card.monster_set_index { send_user_response(UserResponse::SetMonster { index }); }
+                                            if let Some(index) = card.spell_trap_set_index { send_response(Response::SetSpellTrap { index }); }
+                                            if let Some(index) = card.monster_set_index { send_response(Response::SetMonster { index }); }
                                         },
                                         SummonIcon { }
                                     }

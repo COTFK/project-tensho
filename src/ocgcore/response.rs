@@ -1,7 +1,7 @@
 use super::constants::BattlePosition;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum UserResponse {
+pub enum Response {
     Yes,
     No,
     PassPriority,
@@ -48,7 +48,7 @@ pub enum UserResponse {
     },
 }
 
-impl UserResponse {
+impl Response {
     pub fn get_response_bytes(&self) -> Vec<u8> {
         match self {
             Self::Yes => vec![1, 0, 0, 0],

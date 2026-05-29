@@ -1,8 +1,8 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum DuelStatus {
-    End,
-    Awaiting,
-    Continue,
+    End = 0,
+    Awaiting = 1,
+    Continue = 2,
 }
 
 impl TryFrom<u32> for DuelStatus {

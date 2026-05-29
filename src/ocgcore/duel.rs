@@ -5,10 +5,10 @@ use wasm_bindgen::JsCast;
 
 use super::OCGCore;
 use super::constants::CardLocation;
-use super::duel_status::DuelStatus;
+use super::constants::DuelStatus;
 use super::memory::CorePointer;
 use crate::ocgcore::CardData;
-use crate::ocgcore::UserResponse;
+use crate::ocgcore::Response;
 use crate::ocgcore::constants::BattlePosition;
 use crate::ocgcore::constants::{CardController, CardOwner};
 use crate::ocgcore::data::HandCard;
@@ -44,7 +44,7 @@ impl Duel {
         self.core.instance.start_duel(self.handle.0);
     }
 
-    pub fn set_response(&self, response: UserResponse) {
+    pub fn set_response(&self, response: Response) {
         let bytes = response.get_response_bytes();
         let buffer = bytes.as_slice();
         let buf_len = buffer.len() as u32;

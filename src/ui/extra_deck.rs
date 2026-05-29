@@ -7,10 +7,10 @@ use super::components::CardStack;
 use super::components::OptionButton;
 use super::components::PickerModal;
 use super::constants::ZONE_SIZE;
-use crate::ocgcore::UserResponse;
+use crate::ocgcore::Response;
 use crate::ocgcore::constants::CardLocation;
 use crate::state::DuelState;
-use crate::state::send_user_response;
+use crate::state::send_response;
 use crate::ui::components::svg::SummonIcon;
 use crate::utility::EXTRA_BACK;
 
@@ -97,7 +97,7 @@ pub fn ExtraDeckModal() -> Element {
                                         class: "border-yellow-500 text-yellow-300",
                                         onclick: move |_| {
                                             if let Some(special_summon_index) = special_summon_index {
-                                                send_user_response(UserResponse::SpecialSummon { index: special_summon_index });
+                                                send_response(Response::SpecialSummon { index: special_summon_index });
                                             }
                                             selected_card.set(None);
                                             show_extra_deck.set(false);

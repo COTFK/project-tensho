@@ -7,10 +7,10 @@ use super::components::OptionButton;
 use super::components::PickerModal;
 use super::components::svg::SummonIcon;
 use super::constants::ZONE_SIZE;
-use crate::ocgcore::UserResponse;
+use crate::ocgcore::Response;
 use crate::ocgcore::constants::CardLocation;
 use crate::state::DuelState;
-use crate::state::send_user_response;
+use crate::state::send_response;
 use crate::ui::components::CardStack;
 
 #[component]
@@ -93,9 +93,9 @@ pub fn GraveyardModal() -> Element {
                                         onclick: move |_| {
                                             if prompted_card.is_some() {
                                                 if let Some(index) = chain_index {
-                                                    send_user_response(UserResponse::Chain { index });
+                                                    send_response(Response::Chain { index });
                                                 } else {
-                                                    send_user_response(UserResponse::Yes);
+                                                    send_response(Response::Yes);
                                                 }
 
                                                 // if activatable {

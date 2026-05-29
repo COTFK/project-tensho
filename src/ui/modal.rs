@@ -6,9 +6,9 @@ use super::components::OptionButton;
 use super::components::PickerModal;
 use super::extra_deck::ExtraDeckModal;
 use super::graveyard::GraveyardModal;
-use crate::ocgcore::UserResponse;
+use crate::ocgcore::Response;
 use crate::state::DuelState;
-use crate::state::send_user_response;
+use crate::state::send_response;
 use crate::utility::get_optional_string_label;
 
 #[component]
@@ -29,7 +29,7 @@ pub fn ModalContainer() -> Element {
             title: "A card or effect can be activated. Activate?",
             OptionButton {
                 label: "No",
-                onclick: |_| send_user_response(UserResponse::PassPriority),
+                onclick: |_| send_response(Response::PassPriority),
                 additional_classes: "bg-red-600/70",
             }
         }
@@ -38,7 +38,7 @@ pub fn ModalContainer() -> Element {
             title: "Activate trigger effect?",
             OptionButton {
                 label: "No",
-                onclick: |_| send_user_response(UserResponse::No),
+                onclick: |_| send_response(Response::No),
                 additional_classes: "bg-red-600/70",
             }
         }
@@ -49,12 +49,12 @@ pub fn ModalContainer() -> Element {
                 class: "flex flex-row gap-4",
                 OptionButton {
                     label: "Yes",
-                    onclick: |_| send_user_response(UserResponse::Yes),
+                    onclick: |_| send_response(Response::Yes),
                     additional_classes: "bg-green-600/70",
                 }
                 OptionButton {
                     label: "No",
-                    onclick: |_| send_user_response(UserResponse::No),
+                    onclick: |_| send_response(Response::No),
                     additional_classes: "bg-red-600/70",
                 }
             }
@@ -68,13 +68,13 @@ pub fn ModalContainer() -> Element {
                     OptionButton {
                         label: "Confirm",
                         disabled: !message.finishable,
-                        onclick: |_| send_user_response(UserResponse::PassPriority),
+                        onclick: |_| send_response(Response::PassPriority),
                         additional_classes: "bg-green-600/70",
                     }
                     OptionButton {
                         label: "Cancel",
                         disabled: !message.cancelable,
-                        onclick: |_| send_user_response(UserResponse::PassPriority),
+                        onclick: |_| send_response(Response::PassPriority),
                         additional_classes: "bg-red-600/70",
                     }
                 }
@@ -86,12 +86,12 @@ pub fn ModalContainer() -> Element {
                         label: "Confirm",
                         disabled: !tribute_selection_is_valid,
                         additional_classes: if tribute_selection_is_valid { "bg-green-700 cursor-pointer" } else { "bg-gray-600 cursor-not-allowed" },
-                        onclick: move |_| send_user_response(UserResponse::SelectTributes { tributes: selected_tributes.clone() }),
+                        onclick: move |_| send_response(Response::SelectTributes { tributes: selected_tributes.clone() }),
                     }
                     OptionButton {
                         label: "Cancel",
                         disabled: !message.is_cancelable,
-                        onclick: |_| send_user_response(UserResponse::PassPriority),
+                        onclick: |_| send_response(Response::PassPriority),
                         additional_classes: "bg-red-600/70",
                     }
                 }
@@ -103,7 +103,7 @@ pub fn ModalContainer() -> Element {
             for position in (state.positions_to_select)() {
                 OptionButton {
                     label: position,
-                    onclick: move |_| send_user_response(UserResponse::SelectPosition { position }),
+                    onclick: move |_| send_response(Response::SelectPosition { position }),
                     additional_classes: "bg-gray-600 text-white",
                 }
             }
@@ -167,7 +167,7 @@ pub fn CardSelector() -> Element {
                     label: "Done",
                     disabled: !can_confirm,
                     onclick: move |_| {
-                        send_user_response(UserResponse::SelectCard { indices: selected_cards() });
+                        send_response(Response::SelectCard { indices: selected_cards() });
                         selected_cards.set(Vec::new());
                     },
                     additional_classes: if can_confirm { "bg-green-700 cursor-pointer" } else { "bg-gray-600 cursor-not-allowed" },
@@ -235,7 +235,7 @@ pub fn SortCardSelector() -> Element {
                     label: "Done",
                     disabled: !can_confirm,
                     onclick: move |_| {
-                        send_user_response(UserResponse::SortCard { indices: selected_cards() });
+                        send_response(Response::SortCard { indices: selected_cards() });
                     },
                     additional_classes: if can_confirm { "bg-green-700 cursor-pointer" } else { "bg-gray-600 cursor-not-allowed" },
                 }
@@ -260,7 +260,7 @@ pub fn EffectSelector() -> Element {
                             .map(|description| get_optional_string_label(effect.card_code, description as usize))
                             .unwrap_or_else(|| String::from("error"))
                     },
-                    onclick: move |_| send_user_response(UserResponse::Activate { index: effect.action_index.unwrap() }),
+                    onclick: move |_| send_response(Response::Activate { index: effect.action_index.unwrap() }),
                     additional_classes: "bg-gray-600 text-white w-full",
                 }
             }
@@ -289,7 +289,7 @@ pub fn OptionSelector() -> Element {
                         label: {
                             get_optional_string_label(option.card_code.unwrap(), option.string_index.unwrap())
                         },
-                        onclick: move |_| send_user_response(UserResponse::SelectOption { index: index as u8 }),
+                        onclick: move |_| send_response(Response::SelectOption { index: index as u8 }),
                         additional_classes: "bg-gray-600 text-white w-full",
                     }
                 }
@@ -311,7 +311,7 @@ pub fn NumberSelector() -> Element {
                 for (index, number) in message.numbers.iter().enumerate() {
                     OptionButton {
                         label: "{number}",
-                        onclick: move |_| send_user_response(UserResponse::SelectOption { index: index as u8 }),
+                        onclick: move |_| send_response(Response::SelectOption { index: index as u8 }),
                         additional_classes: "bg-gray-600 text-white w-full",
                     }
                 }
