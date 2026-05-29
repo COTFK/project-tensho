@@ -508,3 +508,12 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
         },
     ),
 ];
+
+pub fn get_card_data(code: u32) -> OCGCardData {
+    STATIC_CARD_DATA
+        .iter()
+        .find(|(id, _)| *id == code)
+        .map(|(_, card_data)| card_data)
+        .copied()
+        .unwrap_or_else(|| OCGCardData::with_code(code))
+}

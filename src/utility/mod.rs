@@ -4,7 +4,7 @@ mod script;
 
 pub use deck::EXTRA_DECK_IDS;
 pub use deck::MAIN_DECK_IDS;
-pub use deck::STATIC_CARD_DATA;
+pub use deck::get_card_data;
 pub use labels::cache_labels;
 pub use labels::get_cached_label;
 pub use labels::get_optional_string_label;

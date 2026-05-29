@@ -3,6 +3,7 @@ use rand::seq::SliceRandom;
 use std::future::pending;
 
 use crate::ocgcore::CardData;
+use crate::ocgcore::CoreCallbacks;
 use crate::ocgcore::Duel;
 use crate::ocgcore::HandCard;
 use crate::ocgcore::OCGCore;
@@ -26,6 +27,7 @@ use crate::utility::cache_labels;
 use crate::utility::cache_scripts;
 use crate::utility::get_cached_label;
 use crate::utility::get_cached_script;
+use crate::utility::get_card_data;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SelectedCard {
@@ -184,7 +186,13 @@ pub async fn cache_dependencies() -> anyhow::Result<OCGCore> {
     cache_scripts(&all_cards).await;
     cache_labels(&all_cards).await;
 
-    OCGCore::load().await
+    fn log(text: String) {
+        tracing::info!(text);
+    }
+
+    let callbacks = CoreCallbacks::new(get_card_data, get_cached_script, log);
+
+    OCGCore::load(callbacks).await
 }
 
 pub async fn load_duel(cache_resource: Resource<anyhow::Result<OCGCore>>) -> anyhow::Result<Duel> {

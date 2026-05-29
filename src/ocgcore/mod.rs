@@ -1,3 +1,4 @@
+mod callbacks;
 pub mod constants;
 mod core;
 mod data;
@@ -8,6 +9,7 @@ pub mod messages;
 mod response;
 mod utility;
 
+pub use callbacks::CoreCallbacks;
 pub use core::OCGCore;
 pub use data::CardData;
 pub use data::HandCard;
