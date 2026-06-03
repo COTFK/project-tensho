@@ -37,7 +37,7 @@ pub fn Hand(
                             transform: "rotateZ({rotation}deg) translateY({translate_y}%)",
                             z_index: if is_selected { 100 } else { 0 },
                             CardActionMenu {
-                                class: "absolute -top-28 left-1/2 transform -translate-x-1/2 flex flex-row items-center justify-center px-6 py-1 md:px-8",
+                                class: "absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-[110%] flex flex-row items-center justify-center px-6 py-1 md:px-8",
                                 trigger: is_selected && (card.normal_summon_index.is_some() || card.is_activatable_or_chainable || card.spell_trap_set_index.is_some()) && !suppress_actions(),
                                 if card.normal_summon_index.is_some() {
                                     ActionButton {
