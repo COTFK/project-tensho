@@ -131,10 +131,19 @@ pub fn CardSelector() -> Element {
         selected_count >= message.min_select as usize
             && selected_count <= message.max_select as usize
     });
+    let title = selectables.as_ref().and_then(|message| {
+        if message.max_select == 1 {
+            Some(String::from("Select a card"))
+        } else if message.min_select == message.max_select {
+            Some(format!("Select {} cards", message.min_select))
+        } else {
+            Some(format!("Select up to {} cards", message.max_select))
+        }
+    });
 
     rsx!(
         PickerModal {
-            title: "Select cards",
+            title: title.unwrap_or("Select cards".to_string()),
             trigger: selectables.as_ref().is_some_and(|message| !message.cards.is_empty()),
             if let Some(message) = selectables {
                 div {
