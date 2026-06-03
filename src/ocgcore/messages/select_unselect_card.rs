@@ -2,6 +2,7 @@ use crate::ocgcore::CardData;
 use crate::ocgcore::constants::BattlePosition;
 use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
+use crate::ocgcore::data::CardType;
 use crate::ocgcore::utility::read_u8;
 use crate::ocgcore::utility::read_u32;
 
@@ -98,6 +99,9 @@ impl TryFrom<&[u8]> for SelectUnselectMessageData {
                 action_index: None,
                 description: None,
                 is_selected: false,
+                attack: None,
+                defense: None,
+                card_type: CardType::empty(),
             });
         }
 
@@ -129,6 +133,9 @@ impl TryFrom<&[u8]> for SelectUnselectMessageData {
                 action_index: None,
                 description: None,
                 is_selected: true,
+                attack: None,
+                defense: None,
+                card_type: CardType::empty(),
             });
         }
 

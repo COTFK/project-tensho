@@ -12,6 +12,7 @@ mod utility;
 pub use callbacks::CoreCallbacks;
 pub use core::OCGCore;
 pub use data::CardData;
+pub use data::CardType;
 pub use data::HandCard;
 pub use data::OCGCardData;
 pub use data::Zone;

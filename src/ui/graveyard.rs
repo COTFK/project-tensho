@@ -79,7 +79,7 @@ pub fn GraveyardModal() -> Element {
                             div {
                                 class: "relative py-2",
                                 Card {
-                                    code: card.unwrap().card_code,
+                                    card: card.unwrap(),
                                     class: "w-[12vw]",
                                     is_selected: selected_card() == Some(index),
                                     show_stats: false,

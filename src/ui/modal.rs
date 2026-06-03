@@ -151,7 +151,7 @@ pub fn CardSelector() -> Element {
                     class: "overflow-x-auto scroll-smooth scrollbar-thin",
                     for (index, card) in message.cards.iter().enumerate() {
                         Card {
-                            code: card.card_code,
+                            card: *card,
                             class: "w-[12vw] min-w-[12vw]",
                             is_selected: selected_cards().contains(&(index as u8)),
                             show_stats: false,
@@ -218,7 +218,7 @@ pub fn SortCardSelector() -> Element {
                         div {
                             class: "relative w-[12vw] min-w-[12vw]",
                             Card {
-                                code: card.card_code,
+                                card: *card,
                                 class: "w-full",
                                 is_selected: selected_cards().iter().position(|selected| *selected == index as u8).is_some(),
                                 show_stats: false,

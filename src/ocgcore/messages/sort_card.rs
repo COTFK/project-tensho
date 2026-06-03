@@ -1,6 +1,7 @@
 use crate::ocgcore::CardData;
 use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
+use crate::ocgcore::data::CardType;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SortCardMessageData {
@@ -37,6 +38,9 @@ impl TryFrom<&[u8]> for SortCardMessageData {
                 sequence,
                 description: None,
                 is_selected: false,
+                attack: None,
+                defense: None,
+                card_type: CardType::empty(),
             });
         }
 

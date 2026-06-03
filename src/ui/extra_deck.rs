@@ -76,7 +76,7 @@ pub fn ExtraDeckModal() -> Element {
                             })
                             .map(|index| index as u8);
                         let is_special_summonable = special_summon_index.is_some();
-                        
+
                         // Disable if effect selection modal is active
                         let suppress_actions = !state.effects_to_select_from.is_empty();
 
@@ -84,7 +84,7 @@ pub fn ExtraDeckModal() -> Element {
                             div {
                                 class: "relative py-2",
                                 Card {
-                                    code: card.card_code,
+                                    card,
                                     class: "w-[12vw]",
                                     is_selected: selected_card() == Some(index),
                                     show_stats: false,

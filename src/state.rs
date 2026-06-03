@@ -3,6 +3,7 @@ use rand::seq::SliceRandom;
 use std::future::pending;
 
 use crate::ocgcore::CardData;
+use crate::ocgcore::CardType;
 use crate::ocgcore::CoreCallbacks;
 use crate::ocgcore::Duel;
 use crate::ocgcore::HandCard;
@@ -384,6 +385,9 @@ pub fn handle_core_message() {
                     sequence: message.sequence,
                     description: None,
                     is_selected: false,
+                    attack: None,
+                    defense: None,
+                    card_type: CardType::empty(),
                 })
             });
             state.waiting_on_input.set(true);

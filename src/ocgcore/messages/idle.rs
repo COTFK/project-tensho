@@ -1,6 +1,7 @@
 use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
 use crate::ocgcore::data::CardData;
+use crate::ocgcore::data::CardType;
 use crate::ocgcore::utility::read_u8;
 use crate::ocgcore::utility::read_u32;
 use crate::ocgcore::utility::read_u64;
@@ -97,6 +98,9 @@ impl TryFrom<&[u8]> for IdleMessageData {
                     action_index: Some(idx as u8),
                     description: None,
                     is_selected: false,
+                    attack: None,
+                    defense: None,
+                    card_type: CardType::empty(),
                 })
             })?;
 
@@ -115,6 +119,9 @@ impl TryFrom<&[u8]> for IdleMessageData {
                     action_index: Some(idx as u8),
                     description: None,
                     is_selected: false,
+                    attack: None,
+                    defense: None,
+                    card_type: CardType::empty(),
                 })
             })?;
 
@@ -137,6 +144,9 @@ impl TryFrom<&[u8]> for IdleMessageData {
                     action_index: Some(idx as u8),
                     description: None,
                     is_selected: false,
+                    attack: None,
+                    defense: None,
+                    card_type: CardType::empty(),
                 })
             })?;
 
@@ -155,6 +165,9 @@ impl TryFrom<&[u8]> for IdleMessageData {
                     action_index: Some(idx as u8),
                     description: None,
                     is_selected: false,
+                    attack: None,
+                    defense: None,
+                    card_type: CardType::empty(),
                 })
             })?;
 
@@ -173,6 +186,9 @@ impl TryFrom<&[u8]> for IdleMessageData {
                     action_index: Some(idx as u8),
                     description: None,
                     is_selected: false,
+                    attack: None,
+                    defense: None,
+                    card_type: CardType::empty(),
                 })
             })?;
 
@@ -199,6 +215,9 @@ impl TryFrom<&[u8]> for IdleMessageData {
                     action_index: Some(idx as u8),
                     description: Some(description_id),
                     is_selected: false,
+                    attack: None,
+                    defense: None,
+                    card_type: CardType::empty(),
                 })
             },
         )?;

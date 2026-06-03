@@ -1,11 +1,13 @@
 use dioxus::prelude::*;
 
+use crate::ocgcore::CardData;
+use crate::ocgcore::CardType;
 use crate::utility::CARD_BACK;
 use crate::utility::EXTRA_BACK;
 
 #[component]
 pub fn Card(
-    code: u32,
+    card: CardData,
     class: String,
     is_selected: bool,
     show_highlight_on_select: bool,
@@ -31,12 +33,17 @@ pub fn Card(
                 class: if show_blue_aura && !show_orange_aura {"bg-cyan-400"},
                 class: if !show_blue_aura && !show_orange_aura {"hidden"}
             }
+            div {
+                class: "absolute bottom-0 right-0 text-white text-xs z-5 bg-black pt-1 px-1 rounded-tl-xl",
+                class: if !show_stats || !card.card_type.contains(CardType::MONSTER) {"hidden"},
+                {format!("{}/{}", card.attack.unwrap_or(0), card.defense.unwrap_or(0))}
+            }
             img {
                 class: "relative w-full",
                 image_rendering: "smooth",
                 aspect_ratio: "59/86",
                 src: if !facedown {
-                    format!("https://images.ygoprodeck.com/images/cards/{}.jpg", code)
+                    format!("https://images.ygoprodeck.com/images/cards/{}.jpg", card.card_code)
                 } else {
                     if use_extra_deck_back {
                         EXTRA_BACK.to_string()

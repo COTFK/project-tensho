@@ -1,6 +1,7 @@
 use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
 use crate::ocgcore::data::CardData;
+use crate::ocgcore::data::CardType;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SelectChainMessageData {
@@ -39,6 +40,9 @@ impl TryFrom<&[u8]> for SelectChainMessageData {
                     sequence,
                     description: None,
                     is_selected: false,
+                    attack: None,
+                    defense: None,
+                    card_type: CardType::empty(),
                 })
             }
 
