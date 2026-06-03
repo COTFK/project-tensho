@@ -12,6 +12,7 @@ pub fn Card(
     show_dotted_highlight: bool,
     show_blue_aura: bool,
     show_orange_aura: bool,
+    show_stats: bool,
     facedown: bool,
     use_extra_deck_back: bool,
     onclick: EventHandler<MouseEvent>,

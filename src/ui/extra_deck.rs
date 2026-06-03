@@ -87,6 +87,7 @@ pub fn ExtraDeckModal() -> Element {
                                     code: card.card_code,
                                     class: "w-[12vw]",
                                     is_selected: selected_card() == Some(index),
+                                    show_stats: false,
                                     show_highlight_on_select: true,
                                     show_dotted_highlight: false,
                                     show_blue_aura: false,

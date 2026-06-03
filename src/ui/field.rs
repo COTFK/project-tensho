@@ -189,6 +189,7 @@ pub fn FieldCard(index: u8, location: CardLocation, card: CardData) -> Element {
                 code: card.card_code,
                 class: if card.position == Some(BattlePosition::FaceDownDefense) || card.position == Some(BattlePosition::FaceUpDefense) { "-rotate-90" } else {""},
                 is_selected: is_selected || is_selected_for_extra_deck_summon || selected_for_tribute,
+                show_stats: true,
                 show_highlight_on_select: true,
                 show_blue_aura: false,
                 show_dotted_highlight: selectable_for_extra_deck_summon || card_in_tribute_list.is_some(),
