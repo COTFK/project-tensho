@@ -112,8 +112,8 @@ pub fn ModalContainer() -> Element {
         CardSelector { }
         SortCardSelector { }
         GraveyardModal {}
-        ExtraDeckModal {}
         EffectSelector {}
+        ExtraDeckModal {}
         OptionSelector {}
         NumberSelector {}
 

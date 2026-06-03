@@ -24,6 +24,9 @@ pub fn ExtraDeck() -> Element {
         .any(|card| card.location == CardLocation::ExtraDeck);
     let has_cards = state.extra_deck.len() > 0;
 
+    // Disable if effect selection modal is active
+    let suppress_actions = !state.effects_to_select_from.is_empty();
+
     rsx!(
         div {
             class: "relative bg-slate-50/2 {ZONE_SIZE} aspect-square flex items-center justify-center border-0.5",
@@ -34,7 +37,7 @@ pub fn ExtraDeck() -> Element {
                     class: "relative h-full aspect-[59/86]",
                     div {
                         class: "absolute inset-[1px] my-0.5 ml-0.5 mb-1 md:inset-[2px] md:my-1 md:mb-2 md:ml-1 rounded-[2px] blur-[1px] mix-blend-screen pointer-events-none",
-                        class: if has_summons { "bg-yellow-400" },
+                        class: if has_summons && !suppress_actions { "bg-yellow-400" },
                     }
                     CardStack {
                         length: state.extra_deck.len(),
@@ -73,6 +76,9 @@ pub fn ExtraDeckModal() -> Element {
                             })
                             .map(|index| index as u8);
                         let is_special_summonable = special_summon_index.is_some();
+                        
+                        // Disable if effect selection modal is active
+                        let suppress_actions = !state.effects_to_select_from.is_empty();
 
                         rsx!(
                             div {
@@ -84,14 +90,14 @@ pub fn ExtraDeckModal() -> Element {
                                     show_highlight_on_select: true,
                                     show_dotted_highlight: false,
                                     show_blue_aura: false,
-                                    show_orange_aura: is_special_summonable,
+                                    show_orange_aura: is_special_summonable && !suppress_actions,
                                     facedown: false,
                                     use_extra_deck_back: false,
                                     onclick: move |_| selected_card.set(Some(index))
                                 }
                                 CardActionMenu {
                                     class: "absolute left-1/2 bottom-1/2 -translate-x-[50%] translate-y-[50%] px-3 py-2 md:px-6",
-                                    trigger: selected_card() == Some(index) && is_special_summonable,
+                                    trigger: selected_card() == Some(index) && is_special_summonable && !suppress_actions,
                                     ActionButton {
                                         label: "Summon",
                                         class: "border-yellow-500 text-yellow-300",

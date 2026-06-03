@@ -23,6 +23,9 @@ pub fn Graveyard() -> Element {
         .iter()
         .any(|card| card.location == CardLocation::Graveyard);
 
+    // Disable if effect selection modal is active
+    let suppress_actions = !state.effects_to_select_from.is_empty();
+
     rsx!(
         div {
             class: "relative bg-slate-50/2 {ZONE_SIZE} aspect-square flex items-center justify-center border-0.5",
@@ -33,7 +36,7 @@ pub fn Graveyard() -> Element {
                     class: "relative h-full aspect-[59/86]",
                     div {
                         class: "absolute inset-[2px] md:inset-[4px] my-0.5 md:my-1 rounded-[2px] blur-[1px] mix-blend-screen pointer-events-none",
-                        class: if has_trigger_effects { "bg-yellow-400" },
+                        class: if has_trigger_effects && !suppress_actions { "bg-yellow-400" },
                     }
                     CardStack {
                         length: state.graveyard.len(),
@@ -69,6 +72,9 @@ pub fn GraveyardModal() -> Element {
                             .copied();
                         let chain_index = prompted_card.and_then(|card| card.action_index);
 
+                        // Disable if effect selection modal is active
+                        let suppress_actions = !state.effects_to_select_from.is_empty();
+
                         rsx!(
                             div {
                                 class: "relative py-2",
@@ -79,19 +85,19 @@ pub fn GraveyardModal() -> Element {
                                     show_highlight_on_select: true,
                                     show_dotted_highlight: false,
                                     show_blue_aura: false,
-                                    show_orange_aura: prompted_card.is_some(),
+                                    show_orange_aura: prompted_card.is_some() && !suppress_actions,
                                     use_extra_deck_back: false,
                                     facedown: false,
                                     onclick: move |_| selected_card.set(Some(index))
                                 }
                                 CardActionMenu {
                                     class: "absolute left-1/2 bottom-1/2 -translate-x-[50%] translate-y-[50%] px-3 py-2 md:px-6",
-                                    trigger: selected_card() == Some(index) && prompted_card.is_some(),
+                                    trigger: selected_card() == Some(index) && prompted_card.is_some() && !suppress_actions,
                                     ActionButton {
                                         label: "Activate",
                                         class: "border-yellow-500 text-yellow-300",
                                         onclick: move |_| {
-                                            if prompted_card.is_some() {
+                                            if prompted_card.is_some() && !suppress_actions {
                                                 if let Some(index) = chain_index {
                                                     send_response(Response::Chain { index });
                                                 } else {

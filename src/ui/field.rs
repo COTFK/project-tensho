@@ -148,12 +148,15 @@ pub fn FieldCard(index: u8, location: CardLocation, card: CardData) -> Element {
         .as_ref()
         .map_or(0, |message| message.max_select as usize);
 
+    // Disable if effect selection modal is active
+    let suppress_actions = !state.effects_to_select_from.is_empty();
+
     rsx!(
         div {
             class: "relative h-full aspect-[59/86] mx-auto p-[clamp(1px,0.3vw,5px)]",
             CardActionMenu {
                 class: "absolute left-1/2 bottom-1/2 -translate-x-[50%] translate-y-[50%] px-3 py-1 z-10",
-                trigger: is_selected && (prompted || activatable),
+                trigger: is_selected && (prompted || activatable) && !suppress_actions,
                 if prompted || activatable {
                     ActionButton {
                         label: "Activate",
@@ -189,7 +192,7 @@ pub fn FieldCard(index: u8, location: CardLocation, card: CardData) -> Element {
                 show_highlight_on_select: true,
                 show_blue_aura: false,
                 show_dotted_highlight: selectable_for_extra_deck_summon || card_in_tribute_list.is_some(),
-                show_orange_aura: activatable || prompted,
+                show_orange_aura: (activatable || prompted) && !suppress_actions,
                 facedown: card.position == Some(BattlePosition::FaceDown) || card.position == Some(BattlePosition::FaceDownAttack) || card.position == Some(BattlePosition::FaceDownDefense),
                 use_extra_deck_back: false,
                 onclick: move |evt: MouseEvent| {

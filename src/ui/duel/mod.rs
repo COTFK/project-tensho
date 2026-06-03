@@ -64,7 +64,7 @@ pub fn DuelScreen(duel: Duel, resource_handle: Resource<anyhow::Result<Duel>>) -
             }
             ModalContainer {}
             Field {}
-            Hand { cards: state.hand_contents, selected_card: state.selected_card }
+            Hand { cards: state.hand_contents, selected_card: state.selected_card, suppress_actions: !state.effects_to_select_from.is_empty() }
         }
     )
 }
