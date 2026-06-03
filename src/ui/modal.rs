@@ -153,6 +153,11 @@ pub fn CardSelector() -> Element {
                             use_extra_deck_back: false,
                             onclick: move |_| {
                                 selected_cards.with_mut(|indices| {
+                                    if message.max_select == 1 {
+                                        *indices = vec![index as u8];
+                                        return;
+                                    }
+
                                     if let Some(position) = indices.iter().position(|selected| *selected == index as u8) {
                                         indices.remove(position);
                                     } else if indices.len() < message.max_select as usize {
