@@ -37,8 +37,7 @@ pub fn AppContainer() -> Element {
             None => rsx!(LoadingScreen {}),
         }
         div {
-            class: "fixed bottom-3 left-3 z-50 rounded-md bg-gray-950/70 px-2 py-1 font-mono text-gray-200 shadow-lg ring-1 ring-white/10 backdrop-blur-sm pointer-events-none",
-            style: "font-size: 12px",
+            class: "fixed bottom-3 left-3 z-50 rounded-md bg-gray-950/70 px-2 py-1 font-mono text-gray-200 text-[8px] md:text-xs lg:text-base shadow-lg ring-1 ring-white/10 backdrop-blur-sm pointer-events-none",
             title: "Build version and commit hash",
             {format!("burning_draw v{BUILD_VERSION} · {GIT_HASH}")}
         }
