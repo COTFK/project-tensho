@@ -76,6 +76,7 @@ impl TryFrom<&[u8]> for SelectCardMessageData {
                 action_index: None,
                 description: None,
                 is_selected: false,
+                level: None,
                 attack: None,
                 defense: None,
                 card_type: CardType::empty(),

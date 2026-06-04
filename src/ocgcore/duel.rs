@@ -189,6 +189,7 @@ impl Duel {
             let mut position = None;
             let mut attack = None;
             let mut defense = None;
+            let mut level = None;
 
             loop {
                 let length = u16::from_le_bytes([orig_buf[cursor], orig_buf[cursor + 1]]) as usize;
@@ -233,6 +234,14 @@ impl Duel {
 
                         card_type = CardType::from_bits_truncate(raw_card_type);
                     }
+                    0x0000_0010 if cursor + 10 <= orig_buf.len() => {
+                        level = Some(u32::from_le_bytes([
+                            orig_buf[cursor + 6],
+                            orig_buf[cursor + 7],
+                            orig_buf[cursor + 8],
+                            orig_buf[cursor + 9],
+                        ]));
+                    }
                     0x0000_0100 if cursor + 10 <= orig_buf.len() => {
                         attack = Some(u32::from_le_bytes([
                             orig_buf[cursor + 6],
@@ -259,6 +268,7 @@ impl Duel {
                             action_index: None,
                             description: None,
                             is_selected: false,
+                            level,
                             attack,
                             defense,
                             card_type,

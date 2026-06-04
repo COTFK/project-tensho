@@ -40,6 +40,7 @@ impl TryFrom<&[u8]> for SelectChainMessageData {
                     sequence,
                     description: None,
                     is_selected: false,
+                    level: None,
                     attack: None,
                     defense: None,
                     card_type: CardType::empty(),

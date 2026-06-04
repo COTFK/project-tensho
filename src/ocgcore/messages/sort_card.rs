@@ -38,6 +38,7 @@ impl TryFrom<&[u8]> for SortCardMessageData {
                 sequence,
                 description: None,
                 is_selected: false,
+                level: None,
                 attack: None,
                 defense: None,
                 card_type: CardType::empty(),

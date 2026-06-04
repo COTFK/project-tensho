@@ -91,6 +91,7 @@ pub fn Hand(
                                     sequence: 0,
                                     description: None,
                                     is_selected: false,
+                                    level: None,
                                     attack: None,
                                     defense: None,
                                     card_type: CardType::empty()

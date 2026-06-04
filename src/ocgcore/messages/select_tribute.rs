@@ -53,6 +53,7 @@ impl TryFrom<&[u8]> for SelectTributeMessageData {
                 is_selected: false,
                 sequence,
                 action_index: Some(index as u8),
+                level: None,
                 attack: None,
                 defense: None,
                 card_type: CardType::empty(),
