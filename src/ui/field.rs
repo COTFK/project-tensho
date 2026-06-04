@@ -85,9 +85,9 @@ fn Zone(index: u8, location: CardLocation, card: Option<CardData>) -> Element {
                     card
                 }
                 div {
-                    class: "absolute bottom-0 right-0 text-white text-[6px] md:text-sm font-bold md:font-semibold z-5 bg-black pt-1 pl-1 pr-0.5 rounded-tl-xl",
+                    class: "absolute bottom-0 right-0 text-white text-[8px] md:text-sm font-semibold z-5 bg-gray-900/75 pr-0.5 pl-1 pt-0.5 rounded-tl-lg",
                     class: if !card.card_type.contains(CardType::MONSTER) {"hidden"},
-                    {format!("{}/{}", card.attack.unwrap_or(0), card.defense.unwrap_or(0))}
+                    {format!("{} / {}", card.attack.unwrap_or(0), card.defense.unwrap_or(0))}
                 }
             }
         }
