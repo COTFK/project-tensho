@@ -5,6 +5,7 @@ use super::extra_deck::ExtraDeck;
 use super::graveyard::Graveyard;
 use super::main_deck::MainDeck;
 use crate::ocgcore::CardData;
+use crate::ocgcore::CardType;
 use crate::ocgcore::Response;
 use crate::ocgcore::constants::BattlePosition;
 use crate::ocgcore::constants::CardController;
@@ -66,7 +67,7 @@ fn Zone(index: u8, location: CardLocation, card: Option<CardData>) -> Element {
 
     rsx!(
         div {
-            class: "bg-slate-50/2 {ZONE_SIZE} aspect-square flex items-center justify-center",
+            class: "relative bg-slate-50/2 {ZONE_SIZE} aspect-square flex items-center justify-center",
             class: if placeable_on {"border-2 border-yellow-300"} else {"border-0.5"},
             onclick: move |_| {
                 if placeable_on {
@@ -82,6 +83,11 @@ fn Zone(index: u8, location: CardLocation, card: Option<CardData>) -> Element {
                     index: index,
                     location: location,
                     card
+                }
+                div {
+                    class: "absolute bottom-0 right-0 text-white text-[6px] md:text-sm font-bold md:font-semibold z-5 bg-black pt-1 pl-1 pr-0.5 rounded-tl-xl",
+                    class: if !card.card_type.contains(CardType::MONSTER) {"hidden"},
+                    {format!("{}/{}", card.attack.unwrap_or(0), card.defense.unwrap_or(0))}
                 }
             }
         }
@@ -189,7 +195,6 @@ pub fn FieldCard(index: u8, location: CardLocation, card: CardData) -> Element {
                 card,
                 class: if card.position == Some(BattlePosition::FaceDownDefense) || card.position == Some(BattlePosition::FaceUpDefense) { "-rotate-90" } else {""},
                 is_selected: is_selected || is_selected_for_extra_deck_summon || selected_for_tribute,
-                show_stats: true,
                 show_highlight_on_select: true,
                 show_blue_aura: false,
                 show_dotted_highlight: selectable_for_extra_deck_summon || card_in_tribute_list.is_some(),

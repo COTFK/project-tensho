@@ -97,7 +97,6 @@ pub fn Hand(
                                 },
                                 class: "w-[10vw]",
                                 is_selected,
-                                show_stats: false,
                                 show_highlight_on_select: false,
                                 show_dotted_highlight: false,
                                 show_blue_aura: (card.normal_summon_index.is_some() || card.spell_trap_set_index.is_some() || card.monster_set_index.is_some()) && !suppress_actions(),

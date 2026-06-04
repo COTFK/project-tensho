@@ -1,7 +1,6 @@
 use dioxus::prelude::*;
 
 use crate::ocgcore::CardData;
-use crate::ocgcore::CardType;
 use crate::utility::CARD_BACK;
 use crate::utility::EXTRA_BACK;
 
@@ -14,7 +13,6 @@ pub fn Card(
     show_dotted_highlight: bool,
     show_blue_aura: bool,
     show_orange_aura: bool,
-    show_stats: bool,
     facedown: bool,
     use_extra_deck_back: bool,
     onclick: EventHandler<MouseEvent>,
@@ -32,11 +30,6 @@ pub fn Card(
                 class: if show_orange_aura { "bg-yellow-400"},
                 class: if show_blue_aura && !show_orange_aura {"bg-cyan-400"},
                 class: if !show_blue_aura && !show_orange_aura {"hidden"}
-            }
-            div {
-                class: "absolute bottom-0 right-0 text-white text-[6px] md:text-sm font-bold md:font-semibold z-5 bg-black pt-1 pl-1 pr-0.5 rounded-tl-xl",
-                class: if !show_stats || !card.card_type.contains(CardType::MONSTER) {"hidden"},
-                {format!("{}/{}", card.attack.unwrap_or(0), card.defense.unwrap_or(0))}
             }
             img {
                 class: "relative w-full",
