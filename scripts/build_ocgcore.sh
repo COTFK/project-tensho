@@ -37,14 +37,20 @@ fi
 mkdir -p "$assets_dir"
 
 "$empp" \
+    -Os \
+    -g0 \
+    -flto \
+    --closure 2 \
     -std=c++17 \
-    -O2 \
     -fexceptions \
+    -fno-rtti \
     -sMODULARIZE=1 \
     -sEXPORT_ES6=1 \
+    -sWASM=0 \
+    -sFILESYSTEM=0 \
     -sEXPORT_NAME=ocgcore \
     -sEXPORTED_FUNCTIONS=['_OCG_GetVersion','_OCG_CreateDuel','_OCG_DestroyDuel','_OCG_DuelNewCard','_OCG_StartDuel','_OCG_DuelProcess','_OCG_DuelGetMessage','_OCG_DuelSetResponse','_OCG_LoadScript','_OCG_DuelQueryCount','_OCG_DuelQuery','_OCG_DuelQueryLocation','_malloc','_free'] \
-    -sEXPORTED_RUNTIME_METHODS=['getValue','setValue','ccall','cwrap','wasmMemory','addFunction'] \
+    -sEXPORTED_RUNTIME_METHODS=['wasmMemory','addFunction'] \
     -sALLOW_MEMORY_GROWTH=1 \
     -sALLOW_TABLE_GROWTH=1 \
     -sENVIRONMENT=web \
