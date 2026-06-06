@@ -42,22 +42,11 @@ jobs:
       - name: Add Cargo bin to PATH
         run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
-      - name: Cache ocgcore artifacts
-        id: ocgcore-cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            public/ocgcore.js
-            public/ocgcore.wasm
-          key: ${{ runner.os }}-ocgcore-${{ hashFiles('scripts/build_ocgcore.sh', 'ocgcore/**/*') }}
-
       - name: Install EMSDK
-        if: steps.ocgcore-cache.outputs.cache-hit != 'true'
         run: bash scripts/install-emsdk.sh
 
-      - name: Build ocgcore
-        if: steps.ocgcore-cache.outputs.cache-hit != 'true'
-        run: scripts/build_ocgcore.sh
+      - name: Initialize EMSDK env
+        run: source tools/emsdk/emsdk_env.sh
 
       - name: Bundle web app
         run: dx bundle --platform web --release --debug-symbols=false --out-dir bundle

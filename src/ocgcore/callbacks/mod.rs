@@ -4,7 +4,7 @@ mod log_handler;
 mod script_reader;
 
 use crate::ocgcore::OCGCardData;
-use crate::ocgcore::ffi::OCGCoreInstance;
+use ocgcore_ffi::OCGCore;
 use card_reader::CardReader;
 use card_reader_done::CardReaderDone;
 use log_handler::LogHandler;
@@ -47,7 +47,7 @@ impl<CardReaderFn, ScriptReaderFn, LogHandlerFn>
         }
     }
 
-    pub fn register(self, instance: OCGCoreInstance) -> CallbackHandles
+    pub fn register(self, instance: OCGCore) -> CallbackHandles
     where
         CardReaderFn: FnMut(u32) -> OCGCardData + 'static,
         ScriptReaderFn: FnMut(&str) -> Option<Vec<u8>> + 'static,

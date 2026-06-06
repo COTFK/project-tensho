@@ -1,13 +1,11 @@
 use anyhow::anyhow;
-use js_sys::Reflect;
 use js_sys::Uint8Array;
 use js_sys::Uint32Array;
 use js_sys::futures::JsFuture;
 use wasm_bindgen::JsCast;
-use wasm_bindgen::prelude::*;
+use ocgcore_ffi::OCGCore as RawCore;
 
 use super::callbacks::CoreCallbacks;
-use super::ffi::{OCGCoreInstance, init_core};
 use crate::ocgcore::OCGCardData;
 use crate::ocgcore::callbacks::CallbackHandles;
 use crate::ocgcore::data::OCGDuelOptions;
@@ -18,7 +16,7 @@ use crate::ocgcore::memory::CorePointer;
 /// Wraps `OCGCore` WASM instance with persistent callback state.
 #[derive(Debug, Clone, PartialEq)]
 pub struct OCGCore {
-    pub(super) instance: OCGCoreInstance,
+    pub(super) instance: RawCore,
     callbacks: CallbackHandles,
 }
 
@@ -31,33 +29,7 @@ impl OCGCore {
         ScriptReaderFn: FnMut(&str) -> Option<Vec<u8>> + 'static,
         LogHandlerFn: FnMut(String) + 'static,
     {
-        let module = js_sys::Object::new();
-        let locate_file = Closure::wrap(Box::new(|path: JsValue, _prefix: JsValue| -> JsValue {
-            let file_name = path.as_string().unwrap_or_default();
-
-            if file_name == "ocgcore.wasm" {
-                JsValue::from_str("/ocgcore.wasm")
-            } else {
-                JsValue::from_str(&format!("/{file_name}"))
-            }
-        }) as Box<dyn FnMut(JsValue, JsValue) -> JsValue>);
-
-        Reflect::set(
-            &module,
-            &JsValue::from_str("locateFile"),
-            locate_file.as_ref(),
-        )
-        .map_err(|e| anyhow!("Failed to configure ocgcore locateFile: {e:?}"))?;
-
-        let promise = init_core(&module.into());
-
-        let ocgcore = JsFuture::from(promise)
-            .await
-            .map_err(|e| anyhow!("Core initialization failed: {e:?}"))?;
-
-        drop(locate_file);
-
-        let instance: OCGCoreInstance = ocgcore.unchecked_into();
+        let instance = RawCore::new().await;
 
         let callbacks = callbacks.register(instance.clone());
 

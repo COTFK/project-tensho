@@ -3,12 +3,12 @@ use wasm_bindgen::JsValue;
 use wasm_bindgen::prelude::*;
 
 use crate::ocgcore::data::OCGCardData;
-use crate::ocgcore::ffi::OCGCoreInstance;
+use ocgcore_ffi::OCGCore;
 
 pub struct CardReader(pub JsValue);
 
 impl CardReader {
-    pub fn new<CardReaderFn>(instance: OCGCoreInstance, mut card_reader_fn: CardReaderFn) -> Self
+    pub fn new<CardReaderFn>(instance: OCGCore, mut card_reader_fn: CardReaderFn) -> Self
     where
         CardReaderFn: FnMut(u32) -> OCGCardData + 'static,
     {

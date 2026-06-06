@@ -2,12 +2,12 @@ use js_sys::Uint32Array;
 use wasm_bindgen::JsValue;
 use wasm_bindgen::prelude::*;
 
-use crate::ocgcore::ffi::OCGCoreInstance;
+use ocgcore_ffi::OCGCore;
 
 pub struct CardReaderDone(pub JsValue);
 
 impl CardReaderDone {
-    pub fn new(instance: OCGCoreInstance) -> Self {
+    pub fn new(instance: OCGCore) -> Self {
         let done = Closure::wrap(Box::new(move |_: u32, data_ptr: u32| {
             if data_ptr == 0 {
                 return;

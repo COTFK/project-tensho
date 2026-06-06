@@ -3,7 +3,6 @@ pub mod constants;
 mod core;
 mod data;
 mod duel;
-mod ffi;
 mod memory;
 pub mod messages;
 mod response;

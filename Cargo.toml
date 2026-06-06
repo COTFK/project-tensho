@@ -20,3 +20,4 @@ serde_json = "1.0"
 tracing = "0.1.44"
 wasm-bindgen = "0.2.121"
 web-sys = { version = "0.3.98", features = ["Window", "Response", "Document", "Element"] }
+ocgcore-ffi = { git = "https://github.com/arqalite/ocgcore-ffi.git" }

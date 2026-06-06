@@ -1,13 +1,12 @@
 use js_sys::Uint8Array;
 use wasm_bindgen::JsValue;
 use wasm_bindgen::prelude::*;
-
-use crate::ocgcore::ffi::OCGCoreInstance;
+use ocgcore_ffi::OCGCore;
 
 pub struct LogHandler(pub JsValue);
 
 impl LogHandler {
-    pub fn new<LogHandlerFn>(instance: OCGCoreInstance, mut log_handler_fn: LogHandlerFn) -> Self
+    pub fn new<LogHandlerFn>(instance: OCGCore, mut log_handler_fn: LogHandlerFn) -> Self
     where
         LogHandlerFn: FnMut(String) + 'static,
     {

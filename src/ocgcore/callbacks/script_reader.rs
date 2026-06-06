@@ -2,13 +2,13 @@ use js_sys::Uint8Array;
 use wasm_bindgen::JsValue;
 use wasm_bindgen::prelude::*;
 
-use crate::ocgcore::ffi::OCGCoreInstance;
+use ocgcore_ffi::OCGCore;
 
 pub struct ScriptReader(pub JsValue);
 
 impl ScriptReader {
     pub fn new<ScriptReaderFn>(
-        instance: OCGCoreInstance,
+        instance: OCGCore,
         mut script_reader_fn: ScriptReaderFn,
     ) -> Self
     where
