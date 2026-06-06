@@ -12,6 +12,10 @@ concurrency:
   group: vercel-production
   cancel-in-progress: true
 
+env:
+  EM_VERSION: 5.0.1
+  EM_CACHE_FOLDER: 'emsdk-cache'
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -42,11 +46,18 @@ jobs:
       - name: Add Cargo bin to PATH
         run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
-      - name: Install EMSDK
-        run: bash scripts/install-emsdk.sh
-
-      - name: Initialize EMSDK env
-        run: source tools/emsdk/emsdk_env.sh
+      - name: Setup cache
+        id: cache-system-libraries
+        uses: actions/cache@v5
+        with:
+          path: ${{env.EM_CACHE_FOLDER}}
+          key: ${{env.EM_VERSION}}-${{ runner.os }}
+      
+      - name: Install Emscripten SDK
+        uses: emscripten-core/setup-emsdk@v15
+        with:
+          version: ${{env.EM_VERSION}}
+          actions-cache-folder: ${{env.EM_CACHE_FOLDER}}
 
       - name: Bundle web app
         run: dx bundle --platform web --release --debug-symbols=false --out-dir bundle
