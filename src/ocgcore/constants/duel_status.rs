@@ -5,10 +5,10 @@ pub enum DuelStatus {
     Continue = 2,
 }
 
-impl TryFrom<u32> for DuelStatus {
+impl TryFrom<i32> for DuelStatus {
     type Error = anyhow::Error;
 
-    fn try_from(value: u32) -> anyhow::Result<Self, Self::Error> {
+    fn try_from(value: i32) -> anyhow::Result<Self, Self::Error> {
         match value {
             0 => Ok(Self::End),
             1 => Ok(Self::Awaiting),

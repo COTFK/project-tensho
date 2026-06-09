@@ -4,7 +4,6 @@ use std::future::pending;
 
 use crate::ocgcore::CardData;
 use crate::ocgcore::CardType;
-use crate::ocgcore::CoreCallbacks;
 use crate::ocgcore::Duel;
 use crate::ocgcore::HandCard;
 use crate::ocgcore::OCGCore;
@@ -191,9 +190,7 @@ pub async fn cache_dependencies() -> anyhow::Result<OCGCore> {
         tracing::info!(text);
     }
 
-    let callbacks = CoreCallbacks::new(get_card_data, get_cached_script, log);
-
-    OCGCore::load(callbacks).await
+    OCGCore::load(get_card_data, get_cached_script, log).await
 }
 
 pub async fn load_duel(cache_resource: Resource<anyhow::Result<OCGCore>>) -> anyhow::Result<Duel> {
@@ -213,8 +210,16 @@ pub async fn load_duel(cache_resource: Resource<anyhow::Result<OCGCore>>) -> any
 
     let duel = core.create_duel()?;
 
-    duel.load_script(get_cached_script("constant.lua").unwrap(), "constant.lua");
-    duel.load_script(get_cached_script("utility.lua").unwrap(), "utility.lua");
+    core.load_script(
+        &duel,
+        get_cached_script("constant.lua").unwrap(),
+        "constant.lua",
+    );
+    core.load_script(
+        &duel,
+        get_cached_script("utility.lua").unwrap(),
+        "utility.lua",
+    );
 
     let mut main_deck = MAIN_DECK_IDS;
     main_deck.shuffle(&mut rand::rng());

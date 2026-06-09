@@ -1,4 +1,24 @@
-use crate::ocgcore::OCGCardData;
+use ocgcore_ffi::types::OCG_CardData;
+
+// 1. Define a thread-safe, static-friendly clone of the card data.
+#[derive(Debug, Clone, Copy)]
+pub struct StaticCardData {
+    pub code: u32,
+    pub alias: u32,
+    pub setcodes: [u16; 4], // Using a fixed array size to mimic setcodes allocation
+    pub r#type: u32,
+    pub level: u32,
+    pub attribute: u32,
+    pub race: u64,
+    pub attack: i32,
+    pub defense: i32,
+    pub lscale: u32,
+    pub rscale: u32,
+    pub link_marker: u32,
+}
+
+// A helper layout to make static initialization look cleaner
+const EMPTY_SET: [u16; 4] = [0, 0, 0, 0];
 
 pub static MAIN_DECK_IDS: [u32; 40] = [
     66431519, 66431519, 66431519, 23015896, 44455560, 44455560, 44455560, 90681088, 90681088,
@@ -13,11 +33,21 @@ pub static EXTRA_DECK_IDS: [u32; 15] = [
     29301450, 93039339, 64182380, 64182380, 64182380,
 ];
 
-pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
+pub const fn unpack_setcode(packed: u64) -> [u16; 4] {
+    [
+        (packed & 0xFFFF) as u16,          // Block 1 (Lowest)
+        ((packed >> 16) & 0xFFFF) as u16,   // Block 2
+        ((packed >> 32) & 0xFFFF) as u16,   // Block 3
+        ((packed >> 48) & 0xFFFF) as u16,   // Block 4 (Highest)
+    ]
+}
+
+// 2. Change the static map to use our thread-safe version
+pub static STATIC_CARD_DATA: &[(u32, StaticCardData)] = &[
     (
         2526224,
-        OCGCardData {
-            type_: 33,
+        StaticCardData {
+            r#type: 33,
             attack: 2400,
             defense: 200,
             level: 8,
@@ -25,7 +55,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             attribute: 4,
             code: 2526224,
             alias: 0,
-            setcodes: 129,
+            setcodes: [129, 0, 0, 0], // Put the setcode value inside the array
             lscale: 0,
             rscale: 0,
             link_marker: 0,
@@ -33,8 +63,8 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
     ),
     (
         2772337,
-        OCGCardData {
-            type_: 67108897,
+        StaticCardData {
+            r#type: 67108897,
             attack: 2700,
             defense: 42,
             level: 3,
@@ -42,7 +72,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             attribute: 4,
             code: 2772337,
             alias: 0,
-            setcodes: 0,
+            setcodes: EMPTY_SET,
             lscale: 0,
             rscale: 0,
             link_marker: 42,
@@ -50,8 +80,8 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
     ),
     (
         6637331,
-        OCGCardData {
-            type_: 33,
+        StaticCardData {
+            r#type: 33,
             attack: 2500,
             defense: 2000,
             level: 6,
@@ -59,7 +89,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             attribute: 32,
             code: 6637331,
             alias: 0,
-            setcodes: 393,
+            setcodes: [393, 0, 0, 0],
             lscale: 0,
             rscale: 0,
             link_marker: 0,
@@ -67,8 +97,8 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
     ),
     (
         8264361,
-        OCGCardData {
-            type_: 67108897,
+        StaticCardData {
+            r#type: 67108897,
             attack: 1850,
             defense: 5,
             level: 2,
@@ -76,7 +106,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             attribute: 32,
             code: 8264361,
             alias: 0,
-            setcodes: 281018559,
+            setcodes: unpack_setcode(281018559),
             lscale: 0,
             rscale: 0,
             link_marker: 5,
@@ -84,8 +114,8 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
     ),
     (
         10045474,
-        OCGCardData {
-            type_: 4,
+        StaticCardData {
+            r#type: 4,
             attack: 0,
             defense: 0,
             level: 0,
@@ -93,7 +123,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             attribute: 0,
             code: 10045474,
             alias: 0,
-            setcodes: 0,
+            setcodes: EMPTY_SET,
             lscale: 0,
             rscale: 0,
             link_marker: 0,
@@ -101,8 +131,8 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
     ),
     (
         14558127,
-        OCGCardData {
-            type_: 4129,
+        StaticCardData {
+            r#type: 4129,
             attack: 0,
             defense: 1800,
             level: 3,
@@ -110,7 +140,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             attribute: 4,
             code: 14558127,
             alias: 0,
-            setcodes: 0,
+            setcodes: EMPTY_SET,
             lscale: 0,
             rscale: 0,
             link_marker: 0,
@@ -118,8 +148,8 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
     ),
     (
         18621798,
-        OCGCardData {
-            type_: 33,
+        StaticCardData {
+            r#type: 33,
             attack: 1800,
             defense: 200,
             level: 4,
@@ -127,7 +157,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             attribute: 4,
             code: 18621798,
             alias: 0,
-            setcodes: 4225,
+            setcodes: [4225, 0, 0, 0],
             lscale: 0,
             rscale: 0,
             link_marker: 0,
@@ -135,8 +165,8 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
     ),
     (
         23015896,
-        OCGCardData {
-            type_: 33,
+        StaticCardData {
+            r#type: 33,
             attack: 2700,
             defense: 1700,
             level: 8,
@@ -144,7 +174,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             attribute: 4,
             code: 23015896,
             alias: 0,
-            setcodes: 129,
+            setcodes: [129, 0, 0, 0],
             lscale: 0,
             rscale: 0,
             link_marker: 0,
@@ -152,8 +182,8 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
     ),
     (
         24224830,
-        OCGCardData {
-            type_: 65538,
+        StaticCardData {
+            r#type: 65538,
             attack: 0,
             defense: 0,
             level: 0,
@@ -161,7 +191,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             attribute: 0,
             code: 24224830,
             alias: 0,
-            setcodes: 0,
+            setcodes: EMPTY_SET,
             lscale: 0,
             rscale: 0,
             link_marker: 0,
@@ -169,8 +199,8 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
     ),
     (
         24508238,
-        OCGCardData {
-            type_: 33,
+        StaticCardData {
+            r#type: 33,
             attack: 100,
             defense: 100,
             level: 1,
@@ -178,7 +208,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             attribute: 32,
             code: 24508238,
             alias: 0,
-            setcodes: 0,
+            setcodes: EMPTY_SET,
             lscale: 0,
             rscale: 0,
             link_marker: 0,
@@ -186,8 +216,8 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
     ),
     (
         28332833,
-        OCGCardData {
-            type_: 33,
+        StaticCardData {
+            r#type: 33,
             attack: 200,
             defense: 200,
             level: 1,
@@ -195,7 +225,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             attribute: 4,
             code: 28332833,
             alias: 0,
-            setcodes: 0,
+            setcodes: EMPTY_SET,
             lscale: 0,
             rscale: 0,
             link_marker: 0,
@@ -203,8 +233,8 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
     ),
     (
         29301450,
-        OCGCardData {
-            type_: 67108897,
+        StaticCardData {
+            r#type: 67108897,
             attack: 1600,
             defense: 40,
             level: 2,
@@ -212,7 +242,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             attribute: 32,
             code: 29301450,
             alias: 0,
-            setcodes: 0,
+            setcodes: EMPTY_SET,
             lscale: 0,
             rscale: 0,
             link_marker: 40,
@@ -220,8 +250,8 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
     ),
     (
         33854624,
-        OCGCardData {
-            type_: 33,
+        StaticCardData {
+            r#type: 33,
             attack: 2500,
             defense: 2000,
             level: 6,
@@ -229,7 +259,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             attribute: 32,
             code: 33854624,
             alias: 0,
-            setcodes: 393,
+            setcodes: [393, 0, 0, 0],
             lscale: 0,
             rscale: 0,
             link_marker: 0,
@@ -237,8 +267,8 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
     ),
     (
         40366667,
-        OCGCardData {
-            type_: 4,
+        StaticCardData {
+            r#type: 4,
             attack: 0,
             defense: 0,
             level: 0,
@@ -246,7 +276,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             attribute: 0,
             code: 40366667,
             alias: 0,
-            setcodes: 447,
+            setcodes: [447, 0, 0, 0],
             lscale: 0,
             rscale: 0,
             link_marker: 0,
@@ -254,8 +284,8 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
     ),
     (
         44455560,
-        OCGCardData {
-            type_: 33,
+        StaticCardData {
+            r#type: 33,
             attack: 800,
             defense: 2000,
             level: 4,
@@ -263,7 +293,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             attribute: 4,
             code: 44455560,
             alias: 0,
-            setcodes: 129,
+            setcodes: [129, 0, 0, 0],
             lscale: 0,
             rscale: 0,
             link_marker: 0,
@@ -271,8 +301,8 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
     ),
     (
         48815792,
-        OCGCardData {
-            type_: 67108897,
+        StaticCardData {
+            r#type: 67108897,
             attack: 1850,
             defense: 5,
             level: 2,
@@ -280,7 +310,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             attribute: 4,
             code: 48815792,
             alias: 0,
-            setcodes: 281018559,
+            setcodes: unpack_setcode(281018559),
             lscale: 0,
             rscale: 0,
             link_marker: 5,
@@ -288,8 +318,8 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
     ),
     (
         49238328,
-        OCGCardData {
-            type_: 2,
+        StaticCardData {
+            r#type: 2,
             attack: 0,
             defense: 0,
             level: 0,
@@ -297,7 +327,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             attribute: 0,
             code: 49238328,
             alias: 0,
-            setcodes: 0,
+            setcodes: EMPTY_SET,
             lscale: 0,
             rscale: 0,
             link_marker: 0,
@@ -305,8 +335,8 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
     ),
     (
         57554544,
-        OCGCardData {
-            type_: 524290,
+        StaticCardData {
+            r#type: 524290,
             attack: 0,
             defense: 0,
             level: 0,
@@ -314,7 +344,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             attribute: 0,
             code: 57554544,
             alias: 0,
-            setcodes: 129,
+            setcodes: [129, 0, 0, 0],
             lscale: 0,
             rscale: 0,
             link_marker: 0,
@@ -322,8 +352,8 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
     ),
     (
         60303245,
-        OCGCardData {
-            type_: 67108897,
+        StaticCardData {
+            r#type: 67108897,
             attack: 0,
             defense: 4,
             level: 1,
@@ -331,7 +361,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             attribute: 4,
             code: 60303245,
             alias: 0,
-            setcodes: 281,
+            setcodes: [281, 0, 0, 0],
             lscale: 0,
             rscale: 0,
             link_marker: 4,
@@ -339,8 +369,8 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
     ),
     (
         64182380,
-        OCGCardData {
-            type_: 8388641,
+        StaticCardData {
+            r#type: 8388641,
             attack: 3000,
             defense: 2000,
             level: 8,
@@ -348,7 +378,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             attribute: 4,
             code: 64182380,
             alias: 0,
-            setcodes: 129,
+            setcodes: [129, 0, 0, 0],
             lscale: 0,
             rscale: 0,
             link_marker: 0,
@@ -356,8 +386,8 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
     ),
     (
         65305978,
-        OCGCardData {
-            type_: 131074,
+        StaticCardData {
+            r#type: 131074,
             attack: 0,
             defense: 0,
             level: 0,
@@ -365,7 +395,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             attribute: 0,
             code: 65305978,
             alias: 0,
-            setcodes: 129,
+            setcodes: [129, 0, 0, 0],
             lscale: 0,
             rscale: 0,
             link_marker: 0,
@@ -373,8 +403,8 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
     ),
     (
         66431519,
-        OCGCardData {
-            type_: 33,
+        StaticCardData {
+            r#type: 33,
             attack: 2700,
             defense: 1700,
             level: 8,
@@ -382,7 +412,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             attribute: 4,
             code: 66431519,
             alias: 0,
-            setcodes: 129,
+            setcodes: [129, 0, 0, 0],
             lscale: 0,
             rscale: 0,
             link_marker: 0,
@@ -390,8 +420,8 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
     ),
     (
         84211599,
-        OCGCardData {
-            type_: 2,
+        StaticCardData {
+            r#type: 2,
             attack: 0,
             defense: 0,
             level: 0,
@@ -399,7 +429,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             attribute: 0,
             code: 84211599,
             alias: 0,
-            setcodes: 0,
+            setcodes: EMPTY_SET,
             lscale: 0,
             rscale: 0,
             link_marker: 0,
@@ -407,8 +437,8 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
     ),
     (
         87871125,
-        OCGCardData {
-            type_: 67108897,
+        StaticCardData {
+            r#type: 67108897,
             attack: 1800,
             defense: 130,
             level: 2,
@@ -416,7 +446,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             attribute: 4,
             code: 87871125,
             alias: 0,
-            setcodes: 281,
+            setcodes: [281, 0, 0, 0],
             lscale: 0,
             rscale: 0,
             link_marker: 130,
@@ -424,8 +454,8 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
     ),
     (
         90681088,
-        OCGCardData {
-            type_: 33,
+        StaticCardData {
+            r#type: 33,
             attack: 500,
             defense: 200,
             level: 1,
@@ -433,7 +463,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             attribute: 4,
             code: 90681088,
             alias: 0,
-            setcodes: 129,
+            setcodes: [129, 0, 0, 0],
             lscale: 0,
             rscale: 0,
             link_marker: 0,
@@ -441,8 +471,8 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
     ),
     (
         91703676,
-        OCGCardData {
-            type_: 65538,
+        StaticCardData {
+            r#type: 65538,
             attack: 0,
             defense: 0,
             level: 0,
@@ -450,7 +480,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             attribute: 0,
             code: 91703676,
             alias: 0,
-            setcodes: 129,
+            setcodes: [129, 0, 0, 0],
             lscale: 0,
             rscale: 0,
             link_marker: 0,
@@ -458,8 +488,8 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
     ),
     (
         93039339,
-        OCGCardData {
-            type_: 8388641,
+        StaticCardData {
+            r#type: 8388641,
             attack: 2900,
             defense: 2900,
             level: 12,
@@ -467,7 +497,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             attribute: 32,
             code: 93039339,
             alias: 0,
-            setcodes: 0,
+            setcodes: EMPTY_SET,
             lscale: 0,
             rscale: 0,
             link_marker: 0,
@@ -475,8 +505,8 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
     ),
     (
         94259633,
-        OCGCardData {
-            type_: 67108897,
+        StaticCardData {
+            r#type: 67108897,
             attack: 0,
             defense: 128,
             level: 1,
@@ -484,7 +514,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             attribute: 32,
             code: 94259633,
             alias: 0,
-            setcodes: 272,
+            setcodes: [272, 0, 0, 0],
             lscale: 0,
             rscale: 0,
             link_marker: 128,
@@ -492,8 +522,8 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
     ),
     (
         97268402,
-        OCGCardData {
-            type_: 4129,
+        StaticCardData {
+            r#type: 4129,
             attack: 0,
             defense: 0,
             level: 1,
@@ -501,7 +531,7 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
             attribute: 16,
             code: 97268402,
             alias: 0,
-            setcodes: 0,
+            setcodes: EMPTY_SET,
             lscale: 0,
             rscale: 0,
             link_marker: 0,
@@ -509,11 +539,46 @@ pub static STATIC_CARD_DATA: &[(u32, OCGCardData)] = &[
     ),
 ];
 
-pub fn get_card_data(code: u32) -> OCGCardData {
-    STATIC_CARD_DATA
+// 3. Assemble the raw FFI struct on-the-fly when requested
+pub fn get_card_data(code: u32) -> OCG_CardData {
+    let static_data = STATIC_CARD_DATA
         .iter()
         .find(|(id, _)| *id == code)
-        .map(|(_, card_data)| card_data)
-        .copied()
-        .unwrap_or_else(|| OCGCardData::with_code(code))
+        .map(|(_, card_data)| *card_data)
+        .unwrap_or_else(|| {
+            // Fallback object matching OCG_CardData::with_code layout
+            StaticCardData {
+                code,
+                alias: 0,
+                setcodes: EMPTY_SET,
+                r#type: 0,
+                level: 0,
+                attribute: 0,
+                race: 0,
+                attack: 0,
+                defense: 0,
+                lscale: 0,
+                rscale: 0,
+                link_marker: 0,
+            }
+        });
+
+    // Box the array onto the heap so it can safely live as a pointer outside this stack frame
+    // WARNING: See memory note below regarding raw pointer ownership!
+    let leaked_setcodes = Box::into_raw(Box::new(static_data.setcodes)) as *mut u16;
+
+    OCG_CardData {
+        code: static_data.code,
+        alias: static_data.alias,
+        setcodes: leaked_setcodes,
+        r#type: static_data.r#type,
+        level: static_data.level,
+        attribute: static_data.attribute,
+        race: static_data.race,
+        attack: static_data.attack,
+        defense: static_data.defense,
+        lscale: static_data.lscale,
+        rscale: static_data.rscale,
+        link_marker: static_data.link_marker,
+    }
 }
