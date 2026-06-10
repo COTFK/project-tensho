@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 #[derive(Hash, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum CardLocation {
     Deck = 1,
@@ -21,5 +23,20 @@ impl TryFrom<u8> for CardLocation {
             64 => Ok(CardLocation::ExtraDeck),
             _ => anyhow::bail!("Received wrong location value: {value}"),
         }
+    }
+}
+
+impl Display for CardLocation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let text = match self {
+            CardLocation::Deck => "Deck",
+            CardLocation::Hand => "Hand",
+            CardLocation::ExtraDeck => "Extra Deck",
+            CardLocation::Graveyard => "GY",
+            CardLocation::MonsterZone => "Monster Zone",
+            CardLocation::SpellTrapZone => "Spell/Trap Zone",
+        };
+
+        write!(f, "{}", text)
     }
 }

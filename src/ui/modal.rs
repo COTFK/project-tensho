@@ -147,32 +147,39 @@ pub fn CardSelector() -> Element {
             trigger: selectables.as_ref().is_some_and(|message| !message.cards.is_empty()),
             if let Some(message) = selectables {
                 div {
-                    class: "flex flex-row min-w-[40vw] w-full max-w-[77vw] h-max gap-0.5 px-2",
+                    class: "flex flex-row min-w-[40vw] w-full max-w-[77vw] h-max gap-0.5 px-2 pb-2",
                     class: "overflow-x-auto scroll-smooth scrollbar-thin",
                     for (index, card) in message.cards.iter().enumerate() {
-                        Card {
-                            card: *card,
-                            class: "w-[12vw] min-w-[12vw]",
-                            is_selected: selected_cards().contains(&(index as u8)),
-                            show_highlight_on_select: true,
-                            show_dotted_highlight: false,
-                            show_blue_aura: false,
-                            show_orange_aura: false,
-                            facedown: false,
-                            use_extra_deck_back: false,
-                            onclick: move |_| {
-                                selected_cards.with_mut(|indices| {
-                                    if message.max_select == 1 {
-                                        *indices = vec![index as u8];
-                                        return;
-                                    }
+                        div {
+                            class: "relative",
+                            Card {
+                                card: *card,
+                                class: "w-[12vw] min-w-[12vw]",
+                                is_selected: selected_cards().contains(&(index as u8)),
+                                show_highlight_on_select: true,
+                                show_dotted_highlight: false,
+                                show_blue_aura: false,
+                                show_orange_aura: false,
+                                facedown: false,
+                                use_extra_deck_back: false,
+                                onclick: move |_| {
+                                    selected_cards.with_mut(|indices| {
+                                        if message.max_select == 1 {
+                                            *indices = vec![index as u8];
+                                            return;
+                                        }
 
-                                    if let Some(position) = indices.iter().position(|selected| *selected == index as u8) {
-                                        indices.remove(position);
-                                    } else if indices.len() < message.max_select as usize {
-                                        indices.push(index as u8);
-                                    }
-                                });
+                                        if let Some(position) = indices.iter().position(|selected| *selected == index as u8) {
+                                            indices.remove(position);
+                                        } else if indices.len() < message.max_select as usize {
+                                            indices.push(index as u8);
+                                        }
+                                    });
+                                }
+                            }
+                            div {
+                                class: "absolute bottom-0 right-0 text-white text-[8px] md:text-xs xl:text-base font-semibold z-5 bg-gray-900/75 pl-1 pr-0.5 pt-0.5 rounded-tl-lg",
+                                {format!("{} [{}]", card.location, card.sequence)}
                             }
                         }
                     }
