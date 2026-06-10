@@ -3507,9 +3507,9 @@ dependencies = [
 
 [[package]]
 name = "ocgcore-ffi"
-version = "0.1.0"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aedbe9791fde30475943b8699d413dd8780de0a2ba613344b01604ea1cfacc08"
+checksum = "2f0c7d2f5db5d929cb0fbba6b5994717c161549fef7d7fd7175130f2ed98c7f5"
 dependencies = [
  "cc",
  "js-sys",
