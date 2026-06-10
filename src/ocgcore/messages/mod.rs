@@ -24,7 +24,7 @@ pub use select_unselect_card::SelectUnselectMessageData;
 pub use select_yes_no::SelectYesNoMessageData;
 pub use sort_card::SortCardMessageData;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Hash, Debug, Clone, PartialEq, Eq)]
 pub enum CoreMessage {
     Retry,
     Idle(IdleMessageData),

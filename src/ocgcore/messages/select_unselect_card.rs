@@ -6,7 +6,7 @@ use crate::ocgcore::data::CardType;
 use crate::ocgcore::utility::read_u8;
 use crate::ocgcore::utility::read_u32;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Hash, Debug, Clone, PartialEq, Eq)]
 pub struct SelectUnselectMessageData {
     pub playerid: u8,
     pub finishable: bool,

@@ -3,7 +3,7 @@ use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
 use crate::ocgcore::data::CardType;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Hash, Debug, Clone, PartialEq, Eq)]
 pub struct SelectCardMessageData {
     pub min_select: u32,
     pub max_select: u32,

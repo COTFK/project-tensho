@@ -1,10 +1,10 @@
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Hash, Debug, Clone, PartialEq, Eq)]
 pub struct SelectOption {
     pub card_code: Option<u32>,
     pub string_index: Option<usize>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Hash, Debug, Clone, PartialEq, Eq)]
 pub struct SelectOptionMessageData {
     pub player: u8,
     pub options: Vec<SelectOption>,

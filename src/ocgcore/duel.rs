@@ -15,7 +15,7 @@ use crate::ocgcore::data::CardType;
 use crate::ocgcore::data::HandCard;
 use crate::ocgcore::messages::CoreMessage;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Hash, Debug, Clone, PartialEq)]
 pub struct Duel {
     pub(super) handle: OCG_Duel,
     core: OCGCore,

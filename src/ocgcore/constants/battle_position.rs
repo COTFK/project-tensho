@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone, PartialOrd, Ord)]
+#[derive(Hash, Debug, PartialEq, Eq, Copy, Clone, PartialOrd, Ord)]
 pub enum BattlePosition {
     FaceUpAttack = 1,
     FaceDownAttack = 2,

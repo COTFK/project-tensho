@@ -17,7 +17,7 @@ pub use super::duel::Duel;
 
 /// The internal structure that our FFI `payload` will point to.
 /// This groups everything the trampolines need to do their job.
-#[derive(Debug, PartialEq)]
+#[derive(Hash, Debug, PartialEq)]
 #[allow(unpredictable_function_pointer_comparisons)]
 pub(super) struct DuelContext {
     pub script_reader: ScriptReaderFn,
@@ -25,7 +25,7 @@ pub(super) struct DuelContext {
     pub log_handler: LogHandlerFn,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Hash, Debug, Clone, PartialEq)]
 pub struct OCGCore {
     _context: Rc<DuelContext>,
 }

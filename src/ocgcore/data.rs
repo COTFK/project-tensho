@@ -4,7 +4,7 @@ use super::constants::BattlePosition;
 use super::constants::CardController;
 use super::constants::CardLocation;
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Hash, Debug, PartialEq, Eq, Clone, Copy)]
 pub struct HandCard {
     pub index: usize,
     pub code: u32,
@@ -16,13 +16,13 @@ pub struct HandCard {
     pub spell_trap_set_index: Option<u8>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Hash, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Zone {
     pub location: CardLocation,
     pub sequence: u8,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Hash, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CardData {
     pub action_index: Option<u8>,
     pub card_code: u32,

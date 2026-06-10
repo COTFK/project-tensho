@@ -6,7 +6,7 @@ use crate::ocgcore::utility::read_u8;
 use crate::ocgcore::utility::read_u32;
 use crate::ocgcore::utility::read_u64;
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Hash, Debug, Clone, PartialEq, Eq, Default)]
 pub struct IdleMessageData {
     pub playerid: u8,
     pub normal_summons: Vec<CardData>,

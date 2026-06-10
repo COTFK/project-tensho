@@ -1,6 +1,6 @@
 use crate::ocgcore::constants::BattlePosition;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Hash, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SelectPositionMessageData {
     pub player: u8,
     pub card_code: u32,

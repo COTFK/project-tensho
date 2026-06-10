@@ -29,7 +29,7 @@ use crate::utility::get_cached_label;
 use crate::utility::get_cached_script;
 use crate::utility::get_card_data;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Hash, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SelectedCard {
     pub location: CardLocation,
     pub index: usize,

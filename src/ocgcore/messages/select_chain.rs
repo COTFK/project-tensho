@@ -3,7 +3,7 @@ use crate::ocgcore::constants::CardLocation;
 use crate::ocgcore::data::CardData;
 use crate::ocgcore::data::CardType;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Hash, Debug, Clone, PartialEq, Eq)]
 pub struct SelectChainMessageData {
     pub player: u8,
     pub effects: Vec<CardData>,

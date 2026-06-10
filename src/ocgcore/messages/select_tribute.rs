@@ -3,7 +3,7 @@ use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
 use crate::ocgcore::data::CardType;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Hash, Debug, Clone, PartialEq, Eq)]
 pub struct SelectTributeMessageData {
     pub player: u8,
     pub is_cancelable: bool,

@@ -1,7 +1,7 @@
 use ocgcore_ffi::types::OCG_CardData;
 
 // 1. Define a thread-safe, static-friendly clone of the card data.
-#[derive(Debug, Clone, Copy)]
+#[derive(Hash, Debug, Clone, Copy)]
 pub struct StaticCardData {
     pub code: u32,
     pub alias: u32,

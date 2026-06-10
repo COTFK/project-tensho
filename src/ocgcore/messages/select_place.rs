@@ -1,7 +1,7 @@
 use crate::ocgcore::constants::CardLocation;
 use crate::ocgcore::data::Zone;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Hash, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SelectPlaceMessageData {
     pub player: u8,
     pub count: u8,

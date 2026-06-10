@@ -1,6 +1,6 @@
 use super::constants::BattlePosition;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Hash, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Response {
     Yes,
     No,
