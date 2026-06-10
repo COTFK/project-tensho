@@ -1,4 +1,4 @@
-# Burning Draw MVP - Fire King simulator
+# Project Tensho MVP - Fire King simulator
 
 ## Objective
 Provide a cross-platform, single-player "sandbox" environment where players can practice turn 1 combos using a predefined Fire King deck.

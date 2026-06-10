@@ -1,7 +1,7 @@
 [application]
 
 [web.app]
-title = "Burning Draw"
+title = "Project Tensho"
 
 [web.watcher]
 index_on_404 = false

@@ -17,7 +17,7 @@ pub fn RotateDeviceOverlay() -> Element {
             }
             p {
                 class: "text-slate-400 text-sm max-w-xs",
-                "Project Burning Draw is designed to be played in landscape mode."
+                "Project Tensho is designed to be played in landscape mode."
             }
         }
     )

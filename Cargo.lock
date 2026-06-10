@@ -321,23 +321,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5d20789868f4b01b2f2caec9f5c4e0213b41e3e5702a50157d699ae31ced2fcb"
 
 [[package]]
-name = "burning-draw"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bitflags 2.12.1",
- "dioxus",
- "futures",
- "getrandom 0.4.2",
- "ocgcore-ffi",
- "rand 0.10.1",
- "reqwest",
- "serde_json",
- "tracing",
- "web-sys",
-]
-
-[[package]]
 name = "bytemuck"
 version = "1.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3960,6 +3943,23 @@ checksum = "4488a4a36b9a4ba6b9334a32a39971f77c1436ec82c38707bce707699cc3bbcb"
 dependencies = [
  "quote",
  "syn 2.0.117",
+]
+
+[[package]]
+name = "project-tensho"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bitflags 2.12.1",
+ "dioxus",
+ "futures",
+ "getrandom 0.4.2",
+ "ocgcore-ffi",
+ "rand 0.10.1",
+ "reqwest",
+ "serde_json",
+ "tracing",
+ "web-sys",
 ]
 
 [[package]]
