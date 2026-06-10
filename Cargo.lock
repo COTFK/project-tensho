@@ -1446,7 +1446,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3508,6 +3508,8 @@ dependencies = [
 [[package]]
 name = "ocgcore-ffi"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aedbe9791fde30475943b8699d413dd8780de0a2ba613344b01604ea1cfacc08"
 dependencies = [
  "cc",
  "js-sys",
