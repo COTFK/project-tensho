@@ -13,6 +13,8 @@ use crate::ui::RotateDeviceOverlay;
 use crate::utility::BUILD_VERSION;
 use crate::utility::GIT_HASH;
 
+static _TAILWIND: Asset = asset!("/assets/tailwind.css", AssetOptions::css().with_hash_suffix(false));
+
 fn main() {
     dioxus::launch(AppContainer);
 }
@@ -24,7 +26,6 @@ pub fn AppContainer() -> Element {
     let core_resource = use_resource(move || load_duel(cache_resource));
 
     rsx!(
-        document::Link { rel: "stylesheet", href: asset!("/assets/tailwind.css") }
         RotateDeviceOverlay {}
         match &*core_resource.read() {
             Some(Ok(duel)) => rsx!(
