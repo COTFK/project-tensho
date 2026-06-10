@@ -383,11 +383,11 @@ pub fn handle_core_message() {
             state.card_prompting_to_activate.with_mut(|v| {
                 v.push(CardData {
                     action_index: None,
-                    card_code: message.card_code,
-                    controller: message.controller,
-                    location: message.location,
+                    card_code: message.0.card_code,
+                    controller: message.0.controller,
+                    location: message.0.location,
                     position: None,
-                    sequence: message.sequence,
+                    sequence: message.0.sequence,
                     description: None,
                     is_selected: false,
                     level: None,
