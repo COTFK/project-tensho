@@ -37,8 +37,6 @@ impl Duel {
         let bytes = response.get_response_bytes();
         let buf_len = bytes.len() as u32;
 
-        tracing::debug!("Sending response {response:?} with bytes {bytes:?}");
-
         unsafe {
             ocgcore_ffi::OCG_DuelSetResponse(self.handle, bytes.as_ptr() as *const c_void, buf_len);
         }

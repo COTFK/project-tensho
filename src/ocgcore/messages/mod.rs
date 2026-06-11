@@ -46,9 +46,6 @@ impl TryFrom<&[u8]> for CoreMessage {
 
     fn try_from(bytes: &[u8]) -> anyhow::Result<Self, Self::Error> {
         let message_type = bytes[4];
-
-        tracing::debug!("Received message {message_type:?} with bytes: {bytes:?}");
-
         match message_type {
             1 => Ok(CoreMessage::Retry),
             11 => Ok(CoreMessage::Idle(IdleMessageData::try_from(bytes)?)),
