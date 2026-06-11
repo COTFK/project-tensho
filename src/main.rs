@@ -13,10 +13,17 @@ use crate::ui::RotateDeviceOverlay;
 use crate::utility::BUILD_VERSION;
 use crate::utility::GIT_HASH;
 
-static _TAILWIND: Asset = asset!("/assets/tailwind.css", AssetOptions::builder().with_hash_suffix(false));
+static _TAILWIND: Asset = asset!(
+    "/assets/tailwind.css",
+    AssetOptions::builder().with_hash_suffix(false)
+);
 
 fn main() {
-    dioxus::launch(AppContainer);
+    dioxus::LaunchBuilder::new()
+        .with_cfg(desktop!(dioxus::desktop::Config::new().with_custom_head(
+            format!("<link rel=\"stylesheet\" href=\"{_TAILWIND}\">")
+        )))
+        .launch(AppContainer);
 }
 
 #[component]
