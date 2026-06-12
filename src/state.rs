@@ -48,6 +48,7 @@ pub struct DuelState {
     pub monsters: Signal<Vec<Option<CardData>>>,
     pub spell_traps: Signal<Vec<Option<CardData>>>,
     pub graveyard: Signal<Vec<Option<CardData>>>,
+    pub banishment: Signal<Vec<Option<CardData>>>,
     pub card_prompting_to_activate: Signal<Vec<CardData>>,
     pub selectables: Signal<Option<SelectCardMessageData>>,
     pub sort_cards_to_select_from: Signal<Option<SortCardMessageData>>,
@@ -55,6 +56,7 @@ pub struct DuelState {
     pub available_zones: Signal<Vec<Zone>>,
     pub positions_to_select: Signal<Vec<BattlePosition>>,
     pub show_graveyard: Signal<bool>,
+    pub show_banishment: Signal<bool>,
     pub show_extra_deck: Signal<bool>,
     pub effects_to_select_from: Signal<Vec<CardData>>,
     pub cards_to_select_from: Signal<Option<SelectUnselectMessageData>>,
@@ -78,6 +80,7 @@ impl DuelState {
             monsters: use_signal(Vec::new),
             spell_traps: use_signal(Vec::new),
             graveyard: use_signal(Vec::new),
+            banishment: use_signal(Vec::new),
             card_prompting_to_activate: use_signal(Vec::new),
             selectables: use_signal(|| None),
             sort_cards_to_select_from: use_signal(|| None),
@@ -85,6 +88,7 @@ impl DuelState {
             available_zones: use_signal(Vec::new),
             positions_to_select: use_signal(Vec::new),
             show_graveyard: use_signal(|| false),
+            show_banishment: use_signal(|| false),
             show_extra_deck: use_signal(|| false),
             effects_to_select_from: use_signal(Vec::new),
             cards_to_select_from: use_signal(|| None),
@@ -113,6 +117,7 @@ impl DuelState {
         self.monsters.clear();
         self.spell_traps.clear();
         self.graveyard.clear();
+        self.banishment.clear();
         self.card_prompting_to_activate.clear();
         self.selectables.set(None);
         self.sort_cards_to_select_from.set(None);
@@ -451,4 +456,7 @@ pub fn handle_core_message() {
         .spell_traps
         .set(duel.get_cards(CardLocation::SpellTrapZone));
     state.graveyard.set(duel.get_cards(CardLocation::Graveyard));
+    state
+        .banishment
+        .set(duel.get_cards(CardLocation::Banishment));
 }

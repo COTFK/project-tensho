@@ -9,6 +9,7 @@ use super::graveyard::GraveyardModal;
 use crate::ocgcore::Response;
 use crate::state::DuelState;
 use crate::state::send_response;
+use crate::ui::banishment::BanishmentModal;
 use crate::utility::get_optional_string_label;
 
 #[component]
@@ -112,6 +113,7 @@ pub fn ModalContainer() -> Element {
         CardSelector { }
         SortCardSelector { }
         GraveyardModal {}
+        BanishmentModal {}
         EffectSelector {}
         ExtraDeckModal {}
         OptionSelector {}

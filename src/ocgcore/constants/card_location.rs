@@ -7,6 +7,7 @@ pub enum CardLocation {
     MonsterZone = 4,
     SpellTrapZone = 8,
     Graveyard = 16,
+    Banishment = 32,
     ExtraDeck = 64,
 }
 
@@ -20,6 +21,7 @@ impl TryFrom<u8> for CardLocation {
             4 => Ok(CardLocation::MonsterZone),
             8 => Ok(CardLocation::SpellTrapZone),
             16 => Ok(CardLocation::Graveyard),
+            32 => Ok(CardLocation::Banishment),
             64 => Ok(CardLocation::ExtraDeck),
             _ => anyhow::bail!("Received wrong location value: {value}"),
         }
@@ -33,6 +35,7 @@ impl Display for CardLocation {
             CardLocation::Hand => "Hand",
             CardLocation::ExtraDeck => "Extra Deck",
             CardLocation::Graveyard => "GY",
+            CardLocation::Banishment => "Banishment",
             CardLocation::MonsterZone => "Monster Zone",
             CardLocation::SpellTrapZone => "Spell/Trap Zone",
         };

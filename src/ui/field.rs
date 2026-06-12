@@ -13,6 +13,7 @@ use crate::ocgcore::constants::CardLocation;
 use crate::state::DuelState;
 use crate::state::SelectedCard;
 use crate::state::send_response;
+use crate::ui::banishment::Banishment;
 use crate::ui::components::ActionButton;
 use crate::ui::components::Card;
 use crate::ui::components::CardActionMenu;
@@ -31,6 +32,7 @@ pub fn Field() -> Element {
             // Extra monster zones (row 1)
             div { class: "col-start-3 row-start-1", Zone { index: 5, card: monsters.get(5).copied().flatten(), location: CardLocation::MonsterZone } }
             div { class: "col-start-5 row-start-1", Zone { index: 6, card: monsters.get(6).copied().flatten(), location: CardLocation::MonsterZone } }
+            div { class: "col-start-7 row-start-1", Banishment {} }
 
             // Main row (row 2)
             div { class: "col-start-1 row-start-2", Zone { index: 5, card: spell_traps.get(5).copied().flatten(), location: CardLocation::SpellTrapZone } }

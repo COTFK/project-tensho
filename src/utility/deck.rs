@@ -35,10 +35,10 @@ pub static EXTRA_DECK_IDS: [u32; 15] = [
 
 pub const fn unpack_setcode(packed: u64) -> [u16; 4] {
     [
-        (packed & 0xFFFF) as u16,          // Block 1 (Lowest)
-        ((packed >> 16) & 0xFFFF) as u16,   // Block 2
-        ((packed >> 32) & 0xFFFF) as u16,   // Block 3
-        ((packed >> 48) & 0xFFFF) as u16,   // Block 4 (Highest)
+        (packed & 0xFFFF) as u16,         // Block 1 (Lowest)
+        ((packed >> 16) & 0xFFFF) as u16, // Block 2
+        ((packed >> 32) & 0xFFFF) as u16, // Block 3
+        ((packed >> 48) & 0xFFFF) as u16, // Block 4 (Highest)
     ]
 }
 

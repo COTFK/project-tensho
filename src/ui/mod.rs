@@ -1,3 +1,4 @@
+mod banishment;
 mod components;
 mod constants;
 mod duel;
