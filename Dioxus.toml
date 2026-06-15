@@ -3,9 +3,6 @@
 [web.app]
 title = "Project Tensho"
 
-[web.watcher]
-index_on_404 = false
-
 [bundle]
 identifier = "org.projecttensho.tensho"
 publisher = "Project Tensho"

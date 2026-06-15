@@ -2,6 +2,7 @@ mod ocgcore;
 mod state;
 mod ui;
 mod utility;
+mod settings;
 
 use dioxus::prelude::*;
 
@@ -18,19 +19,26 @@ static _TAILWIND: Asset = asset!(
     AssetOptions::builder().with_hash_suffix(false)
 );
 
+#[derive(Clone, Debug, PartialEq, Routable)]
+enum Route {
+    #[route("/?:hand")]
+    AppContainer { hand: Option<String> },
+}
+
+
 fn main() {
     dioxus::LaunchBuilder::new()
         .with_cfg(desktop!(dioxus::desktop::Config::new().with_custom_head(
             format!("<link rel=\"stylesheet\" href=\"{_TAILWIND}\">")
         )))
-        .launch(AppContainer);
+        .launch(|| rsx! { Router::<Route> {} });
 }
 
 #[component]
-pub fn AppContainer() -> Element {
+pub fn AppContainer(hand: Option<String>) -> Element {
     let cache_resource = use_resource(cache_dependencies);
 
-    let core_resource = use_resource(move || load_duel(cache_resource));
+    let core_resource = use_resource(move || load_duel(cache_resource, hand.clone()));
 
     rsx!(
         RotateDeviceOverlay {}

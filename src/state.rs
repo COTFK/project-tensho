@@ -2,6 +2,7 @@ use dioxus::prelude::*;
 use rand::seq::SliceRandom;
 use std::future::pending;
 
+use crate::settings::CustomHand;
 use crate::ocgcore::CardData;
 use crate::ocgcore::CardType;
 use crate::ocgcore::Duel;
@@ -198,7 +199,23 @@ pub async fn cache_dependencies() -> anyhow::Result<OCGCore> {
     OCGCore::load(get_card_data, get_cached_script, log).await
 }
 
-pub async fn load_duel(cache_resource: Resource<anyhow::Result<OCGCore>>) -> anyhow::Result<Duel> {
+fn pull_ids_to_front(main_array: &mut [u32; 40], target_ids: &[u32]) {
+    let mut front_index = 0;
+
+    for &target_id in target_ids {
+        if let Some(pos) = main_array[front_index..]
+            .iter()
+            .position(|item| *item == target_id)
+        {
+            let actual_idx = front_index + pos;
+            main_array[front_index..=actual_idx].rotate_right(1);
+
+            front_index += 1;
+        }
+    }
+}
+
+pub async fn load_duel(cache_resource: Resource<anyhow::Result<OCGCore>>, custom_hand: Option<String>) -> anyhow::Result<Duel> {
     let core = {
         let cache_state = cache_resource.read();
         match &*cache_state {
@@ -213,7 +230,21 @@ pub async fn load_duel(cache_resource: Resource<anyhow::Result<OCGCore>>) -> any
         None => pending().await,
     };
 
-    let duel = core.create_duel()?;
+    let mut main_deck = MAIN_DECK_IDS;
+    main_deck.shuffle(&mut rand::rng());
+
+    let mut starting_draw_count = 5u32;
+    if let Some(card_list) = custom_hand {
+        if !card_list.is_empty() {
+            let parsed_custom_hand: CustomHand = CustomHand::try_from(card_list)?;
+            starting_draw_count = parsed_custom_hand.0.len() as u32;
+            let hand_slice = parsed_custom_hand.0.as_slice();
+            pull_ids_to_front(&mut main_deck, hand_slice);
+            main_deck.reverse();
+        }
+    }
+
+    let duel = core.create_duel(starting_draw_count)?;
 
     core.load_script(
         &duel,
@@ -225,10 +256,7 @@ pub async fn load_duel(cache_resource: Resource<anyhow::Result<OCGCore>>) -> any
         get_cached_script("utility.lua").unwrap(),
         "utility.lua",
     );
-
-    let mut main_deck = MAIN_DECK_IDS;
-    main_deck.shuffle(&mut rand::rng());
-
+        
     for card_id in main_deck {
         duel.add_card(
             CardOwner::Player,

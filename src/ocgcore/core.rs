@@ -47,7 +47,7 @@ impl OCGCore {
         Ok(Self { _context })
     }
 
-    pub fn create_duel(&self) -> anyhow::Result<Duel> {
+    pub fn create_duel(&self, starting_draw_count: u32) -> anyhow::Result<Duel> {
         const DUEL_MODE_MR5: u64 = 0x2E800;
         let mut duel: OCG_Duel = std::ptr::null_mut();
 
@@ -62,7 +62,7 @@ impl OCGCore {
             flags: DUEL_MODE_MR5,
             team1: OCG_Player {
                 starting_lp: 8000,
-                starting_draw_count: 5,
+                starting_draw_count: starting_draw_count,
                 draw_count_per_turn: 1,
             },
             team2: OCG_Player {
