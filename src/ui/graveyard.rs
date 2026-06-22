@@ -30,7 +30,11 @@ pub fn Graveyard() -> Element {
         div {
             class: "relative bg-slate-50/2 {ZONE_SIZE} aspect-square flex items-center justify-center border-0.5",
             class: if has_cards {"hover:outline-4 hover:outline-yellow-300"},
-            onclick: move |_| if has_cards { state.show_graveyard.set(true) },
+            onclick: move |_| if has_cards {
+                state.show_extra_deck.set(false);
+                state.show_banishment.set(false);
+                state.show_graveyard.set(true);
+            },
             if has_cards {
                 div {
                     class: "relative h-full aspect-[59/86]",

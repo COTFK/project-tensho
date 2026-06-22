@@ -30,7 +30,11 @@ pub fn Banishment() -> Element {
         div {
             class: "relative flex items-center justify-center border-0.5",
             class: if has_cards {"hover:outline-4 hover:outline-yellow-300"},
-            onclick: move |_| if has_cards { state.show_banishment.set(true) },
+            onclick: move |_| if has_cards {
+                state.show_extra_deck.set(false);
+                state.show_banishment.set(true);
+                state.show_graveyard.set(false);
+            },
             if has_cards {
                 div {
                     class: "relative {ZONE_SIZE} aspect-[59/86] -rotate-90",
