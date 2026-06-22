@@ -22,7 +22,7 @@ static _TAILWIND: Asset = asset!(
 #[derive(Clone, Debug, PartialEq, Routable)]
 enum Route {
     #[route("/?:hand")]
-    AppContainer { hand: Option<String> },
+    App { hand: Option<String> },
 }
 
 
@@ -35,7 +35,7 @@ fn main() {
 }
 
 #[component]
-pub fn AppContainer(hand: Option<String>) -> Element {
+pub fn App(hand: Option<String>) -> Element {
     let cache_resource = use_resource(cache_dependencies);
 
     let core_resource = use_resource(move || load_duel(cache_resource, hand.clone()));
