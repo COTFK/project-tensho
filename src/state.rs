@@ -202,11 +202,7 @@ pub async fn cache_dependencies() -> anyhow::Result<OCGCore> {
     cache_scripts(&all_cards).await;
     cache_labels(&all_cards).await;
 
-    fn log(text: String) {
-        tracing::info!(text);
-    }
-
-    OCGCore::load(get_card_data, get_cached_script, log).await
+    OCGCore::load(get_card_data, get_cached_script, |text| tracing::info!(text)).await
 }
 
 fn pull_ids_to_front(main_array: &mut [u32; 40], target_ids: &[u32]) {
