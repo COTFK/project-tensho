@@ -126,6 +126,8 @@ impl DuelState {
         self.available_zones.clear();
         self.positions_to_select.clear();
         self.show_graveyard.set(false);
+        self.show_extra_deck.set(false);
+        self.show_banishment.set(false);
         self.cards_to_select_from.set(None);
         self.effects_to_select_from.clear();
         self.tributes.set(None);
@@ -311,6 +313,8 @@ pub fn send_response(response: Response) {
     state.available_zones.clear();
     state.positions_to_select.clear();
     state.show_graveyard.set(false);
+    state.show_extra_deck.set(false);
+    state.show_banishment.set(false);
     state.cards_to_select_from.set(None);
     state.effects_to_select_from.clear();
     state.tributes.set(None);
