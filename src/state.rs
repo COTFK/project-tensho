@@ -176,6 +176,14 @@ pub fn handle_right_click(evt: MouseEvent) {
         state.show_graveyard.set(false);
     }
 
+    if (state.show_extra_deck)() {
+        state.show_extra_deck.set(false);
+    }
+
+    if (state.show_banishment)() {
+        state.show_banishment.set(false);
+    }
+
     if (state.tributes)().is_some_and(|message| message.is_cancelable) {
         send_response(Response::PassPriority);
     }
