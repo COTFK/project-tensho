@@ -231,7 +231,31 @@ pub fn send_response(response: Response) {
     let duel = duel().expect("Duel context missing active duel");
 
     duel.set_response(response);
-    state.reset();
+    state.clear_pending_input();
+}
+
+impl UIState {
+    pub fn clear_pending_input(&mut self) {
+        self.selected_card.set(None);
+        self.special_summons.set(Vec::new());
+        self.activatable_effects.set(Vec::new());
+        self.waiting_on_input.set(false);
+        self.card_prompting_to_activate.set(Vec::new());
+        self.selectables.set(None);
+        self.sort_cards_to_select_from.set(None);
+        self.yes_no_question.set(None);
+        self.available_zones.set(Vec::new());
+        self.positions_to_select.set(Vec::new());
+        self.show_graveyard.set(false);
+        self.show_banishment.set(false);
+        self.show_extra_deck.set(false);
+        self.effects_to_select_from.set(Vec::new());
+        self.cards_to_select_from.set(None);
+        self.tributes.set(None);
+        self.selected_tributes.set(Vec::new());
+        self.options_to_prompt.set(None);
+        self.numbers_to_select_from.set(None);
+    }
 }
 
 pub fn handle_core_message() {

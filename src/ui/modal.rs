@@ -14,19 +14,32 @@ use crate::utility::get_optional_string_label;
 
 #[component]
 pub fn ModalContainer() -> Element {
+    rsx!(
+        PromptActivationModal {}
+        YesNoQuestionModal {}
+        CardChoiceModal {}
+        PositionSelectorModal {}
+        CardSelector { }
+        SortCardSelector { }
+        GraveyardModal {}
+        BanishmentModal {}
+        EffectSelector {}
+        ExtraDeckModal {}
+        OptionSelector {}
+        NumberSelector {}
+
+    )
+}
+
+#[component]
+fn PromptActivationModal() -> Element {
     let state = use_context::<UIState>();
-    let cards_to_select_from = (state.cards_to_select_from)();
-    let tributes = (state.tributes)();
-    let selected_tributes = (state.selected_tributes)();
-    let selected_tributes_len = selected_tributes.len();
-    let tribute_selection_is_valid = tributes.as_ref().is_some_and(|message| {
-        selected_tributes_len >= message.min_select as usize
-            && selected_tributes_len <= message.max_select as usize
-    });
+    let prompts = (state.card_prompting_to_activate)();
+    let has_action_index = prompts.iter().any(|card| card.action_index.is_some());
 
     rsx!(
         MessageModal {
-            trigger: state.card_prompting_to_activate.iter().any(|card| card.action_index.is_some()),
+            trigger: has_action_index,
             title: "A card or effect can be activated. Activate?",
             OptionButton {
                 label: "No",
@@ -35,7 +48,7 @@ pub fn ModalContainer() -> Element {
             }
         }
         MessageModal {
-            trigger: !state.card_prompting_to_activate.iter().any(|card| card.action_index.is_some()) && !state.card_prompting_to_activate.is_empty(),
+            trigger: !has_action_index && !prompts.is_empty(),
             title: "Activate trigger effect?",
             OptionButton {
                 label: "No",
@@ -43,9 +56,18 @@ pub fn ModalContainer() -> Element {
                 additional_classes: "bg-red-600/70",
             }
         }
+    )
+}
+
+#[component]
+fn YesNoQuestionModal() -> Element {
+    let state = use_context::<UIState>();
+    let question = (state.yes_no_question)();
+
+    rsx!(
         MessageModal {
-            trigger: (state.yes_no_question)().is_some(),
-            title: (state.yes_no_question)().unwrap_or_default(),
+            trigger: question.is_some(),
+            title: question.unwrap_or_default(),
             div {
                 class: "flex flex-row gap-4",
                 OptionButton {
@@ -60,6 +82,22 @@ pub fn ModalContainer() -> Element {
                 }
             }
         }
+    )
+}
+
+#[component]
+fn CardChoiceModal() -> Element {
+    let state = use_context::<UIState>();
+    let cards_to_select_from = (state.cards_to_select_from)();
+    let tributes = (state.tributes)();
+    let selected_tributes = (state.selected_tributes)();
+    let selected_tributes_len = selected_tributes.len();
+    let tribute_selection_is_valid = tributes.as_ref().is_some_and(|message| {
+        selected_tributes_len >= message.min_select as usize
+            && selected_tributes_len <= message.max_select as usize
+    });
+
+    rsx!(
         MessageModal {
             trigger: cards_to_select_from.is_some() || tributes.is_some(),
             title: "Select cards",
@@ -98,10 +136,19 @@ pub fn ModalContainer() -> Element {
                 }
             }
         }
+    )
+}
+
+#[component]
+fn PositionSelectorModal() -> Element {
+    let state = use_context::<UIState>();
+    let positions = (state.positions_to_select)();
+
+    rsx!(
         MessageModal {
-            trigger: !state.positions_to_select.is_empty(),
+            trigger: !positions.is_empty(),
             title: "Select battle position",
-            for position in (state.positions_to_select)() {
+            for position in positions {
                 OptionButton {
                     label: position,
                     onclick: move |_| send_response(Response::SelectPosition { position }),
@@ -109,16 +156,6 @@ pub fn ModalContainer() -> Element {
                 }
             }
         }
-
-        CardSelector { }
-        SortCardSelector { }
-        GraveyardModal {}
-        BanishmentModal {}
-        EffectSelector {}
-        ExtraDeckModal {}
-        OptionSelector {}
-        NumberSelector {}
-
     )
 }
 
