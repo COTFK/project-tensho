@@ -1,8 +1,8 @@
 mod ocgcore;
+mod settings;
 mod state;
 mod ui;
 mod utility;
-mod settings;
 
 use dioxus::prelude::*;
 
@@ -25,7 +25,6 @@ enum Route {
     App { hand: Option<String> },
 }
 
-
 fn main() {
     dioxus::LaunchBuilder::new()
         .with_cfg(desktop!(dioxus::desktop::Config::new().with_custom_head(
@@ -38,12 +37,12 @@ fn main() {
 pub fn App(hand: Option<String>) -> Element {
     let cache_resource = use_resource(cache_cards);
     if cache_resource.read().is_none() {
-        return rsx! {LoadingScreen {  }}
+        return rsx! {LoadingScreen {  }};
     }
 
     let core_resource = use_resource(load_core);
     if core_resource.read().is_none() {
-        return rsx! {LoadingScreen {  }}
+        return rsx! {LoadingScreen {  }};
     }
 
     rsx!(

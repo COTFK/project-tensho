@@ -161,9 +161,10 @@ pub async fn load_duel(
     core_resource: Resource<anyhow::Result<OCGCore>>,
     custom_hand: Option<String>,
 ) -> anyhow::Result<Duel> {
-    let core = core_resource.read().as_ref().and_then(|result| {
-        result.as_ref().ok().cloned()
-    });
+    let core = core_resource
+        .read()
+        .as_ref()
+        .and_then(|result| result.as_ref().ok().cloned());
 
     let core = match core {
         Some(core) => core,
@@ -174,14 +175,14 @@ pub async fn load_duel(
     main_deck.shuffle(&mut rand::rng());
 
     let mut starting_draw_count = 5u32;
-    if let Some(card_list) = custom_hand {
-        if !card_list.is_empty() {
-            let parsed_custom_hand: CustomHand = CustomHand::try_from(card_list)?;
-            starting_draw_count = parsed_custom_hand.0.len() as u32;
-            let hand_slice = parsed_custom_hand.0.as_slice();
-            pull_ids_to_front(&mut main_deck, hand_slice);
-            main_deck.reverse();
-        }
+    if let Some(card_list) = custom_hand
+        && !card_list.is_empty()
+    {
+        let parsed_custom_hand: CustomHand = CustomHand::try_from(card_list)?;
+        starting_draw_count = parsed_custom_hand.0.len() as u32;
+        let hand_slice = parsed_custom_hand.0.as_slice();
+        pull_ids_to_front(&mut main_deck, hand_slice);
+        main_deck.reverse();
     }
 
     let duel = core.create_duel(starting_draw_count)?;

@@ -7,11 +7,15 @@ use super::components::OptionButton;
 use super::components::PickerModal;
 use super::components::svg::SummonIcon;
 use super::constants::ZONE_SIZE;
+use crate::ocgcore::CardType;
 use crate::ocgcore::Response;
+use crate::ocgcore::constants::BattlePosition;
 use crate::ocgcore::constants::CardLocation;
 use crate::state::UIState;
 use crate::state::send_response;
 use crate::ui::components::CardStack;
+use crate::utility::CARD_BACK;
+use crate::utility::EXTRA_BACK;
 
 #[component]
 pub fn Banishment() -> Element {
@@ -25,6 +29,27 @@ pub fn Banishment() -> Element {
 
     // Disable if effect selection modal is active
     let suppress_actions = !state.effects_to_select_from.is_empty();
+
+    let image_url = if has_cards {
+        let first_card = (state.banishment)().last().unwrap().unwrap();
+        if first_card.position == Some(BattlePosition::FaceDown) {
+            if first_card
+                .card_type
+                .intersects(CardType::FUSION | CardType::SYNCHRO | CardType::XYZ | CardType::LINK)
+            {
+                EXTRA_BACK.to_string()
+            } else {
+                CARD_BACK.to_string()
+            }
+        } else {
+            format!(
+                "https://images.ygoprodeck.com/images/cards/{}.jpg",
+                (state.banishment)().last().unwrap().unwrap().card_code
+            )
+        }
+    } else {
+        String::new()
+    };
 
     rsx!(
         div {
@@ -44,7 +69,7 @@ pub fn Banishment() -> Element {
                     }
                     CardStack {
                         length: state.banishment.len(),
-                        image_url: format!("https://images.ygoprodeck.com/images/cards/{}.jpg", (state.banishment)().last().unwrap().unwrap().card_code),
+                        image_url,
                     }
                 }
             }

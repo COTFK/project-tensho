@@ -1,7 +1,7 @@
 mod deck;
 mod labels;
-mod script;
 pub mod macros;
+mod script;
 
 pub use deck::EXTRA_DECK_IDS;
 pub use deck::MAIN_DECK_IDS;
