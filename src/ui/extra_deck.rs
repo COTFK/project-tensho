@@ -9,14 +9,14 @@ use super::components::PickerModal;
 use super::constants::ZONE_SIZE;
 use crate::ocgcore::Response;
 use crate::ocgcore::constants::CardLocation;
-use crate::state::DuelState;
+use crate::state::UIState;
 use crate::state::send_response;
 use crate::ui::components::svg::SummonIcon;
 use crate::utility::EXTRA_BACK;
 
 #[component]
 pub fn ExtraDeck() -> Element {
-    let mut state = use_context::<DuelState>();
+    let mut state = use_context::<UIState>();
     let available_special_summons = (state.special_summons)();
 
     let has_summons = available_special_summons
@@ -55,7 +55,7 @@ pub fn ExtraDeck() -> Element {
 
 #[component]
 pub fn ExtraDeckModal() -> Element {
-    let state = use_context::<DuelState>();
+    let state = use_context::<UIState>();
     let extra_deck = state.extra_deck;
     let available_special_summons = (state.special_summons)();
     let mut show_extra_deck = state.show_extra_deck;

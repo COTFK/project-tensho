@@ -10,6 +10,6 @@ mod main_deck;
 mod modal;
 mod rotate_device;
 
-pub use duel::DuelScreen;
+pub use duel::DuelWrapper;
 pub use loading::LoadingScreen;
 pub use rotate_device::RotateDeviceOverlay;

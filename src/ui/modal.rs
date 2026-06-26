@@ -7,14 +7,14 @@ use super::components::PickerModal;
 use super::extra_deck::ExtraDeckModal;
 use super::graveyard::GraveyardModal;
 use crate::ocgcore::Response;
-use crate::state::DuelState;
+use crate::state::UIState;
 use crate::state::send_response;
 use crate::ui::banishment::BanishmentModal;
 use crate::utility::get_optional_string_label;
 
 #[component]
 pub fn ModalContainer() -> Element {
-    let state = use_context::<DuelState>();
+    let state = use_context::<UIState>();
     let cards_to_select_from = (state.cards_to_select_from)();
     let tributes = (state.tributes)();
     let selected_tributes = (state.selected_tributes)();
@@ -124,7 +124,7 @@ pub fn ModalContainer() -> Element {
 
 #[component]
 pub fn CardSelector() -> Element {
-    let state = use_context::<DuelState>();
+    let state = use_context::<UIState>();
     let selectables = (state.selectables)();
     let mut selected_cards = use_signal(Vec::new);
 
@@ -202,7 +202,7 @@ pub fn CardSelector() -> Element {
 
 #[component]
 pub fn SortCardSelector() -> Element {
-    let state = use_context::<DuelState>();
+    let state = use_context::<UIState>();
     let sort_cards = (state.sort_cards_to_select_from)();
     let cards = sort_cards
         .as_ref()
@@ -269,7 +269,7 @@ pub fn SortCardSelector() -> Element {
 
 #[component]
 pub fn EffectSelector() -> Element {
-    let mut state = use_context::<DuelState>();
+    let mut state = use_context::<UIState>();
 
     rsx!(
         PickerModal {
@@ -299,7 +299,7 @@ pub fn EffectSelector() -> Element {
 
 #[component]
 pub fn OptionSelector() -> Element {
-    let state = use_context::<DuelState>();
+    let state = use_context::<UIState>();
     let options_message = (state.options_to_prompt)();
 
     rsx!(
@@ -323,7 +323,7 @@ pub fn OptionSelector() -> Element {
 
 #[component]
 pub fn NumberSelector() -> Element {
-    let state = use_context::<DuelState>();
+    let state = use_context::<UIState>();
     let numbers = (state.numbers_to_select_from)();
 
     rsx!(

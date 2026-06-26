@@ -10,7 +10,7 @@ use crate::ocgcore::Response;
 use crate::ocgcore::constants::BattlePosition;
 use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
-use crate::state::DuelState;
+use crate::state::UIState;
 use crate::state::SelectedCard;
 use crate::state::send_response;
 use crate::ui::banishment::Banishment;
@@ -21,7 +21,7 @@ use crate::ui::constants::ZONE_SIZE;
 
 #[component]
 pub fn Field() -> Element {
-    let state = use_context::<DuelState>();
+    let state = use_context::<UIState>();
     let monsters = (state.monsters)();
     let spell_traps = (state.spell_traps)();
 
@@ -61,7 +61,7 @@ pub fn Field() -> Element {
 
 #[component]
 fn Zone(index: u8, location: CardLocation, card: Option<CardData>) -> Element {
-    let state = use_context::<DuelState>();
+    let state = use_context::<UIState>();
 
     let placeable_on = (state.available_zones)()
         .iter()
@@ -103,7 +103,7 @@ fn Zone(index: u8, location: CardLocation, card: Option<CardData>) -> Element {
 
 #[component]
 pub fn FieldCard(index: u8, location: CardLocation, card: CardData) -> Element {
-    let mut state = use_context::<DuelState>();
+    let mut state = use_context::<UIState>();
 
     let mut selected_card = state.selected_card;
     let activatable_map = (state.activatable_effects)();

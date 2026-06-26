@@ -2,12 +2,12 @@ use dioxus::prelude::*;
 
 use super::components::CardStack;
 use super::constants::ZONE_SIZE;
-use crate::state::DuelState;
+use crate::state::UIState;
 use crate::utility::CARD_BACK;
 
 #[component]
 pub fn MainDeck() -> Element {
-    let state = use_context::<DuelState>();
+    let state = use_context::<UIState>();
 
     rsx!(
         div {

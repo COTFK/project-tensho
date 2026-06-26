@@ -9,13 +9,13 @@ use super::components::svg::SummonIcon;
 use super::constants::ZONE_SIZE;
 use crate::ocgcore::Response;
 use crate::ocgcore::constants::CardLocation;
-use crate::state::DuelState;
+use crate::state::UIState;
 use crate::state::send_response;
 use crate::ui::components::CardStack;
 
 #[component]
 pub fn Banishment() -> Element {
-    let mut state = use_context::<DuelState>();
+    let mut state = use_context::<UIState>();
 
     let has_cards = state.banishment.len() > 0;
     let has_trigger_effects = state
@@ -54,7 +54,7 @@ pub fn Banishment() -> Element {
 
 #[component]
 pub fn BanishmentModal() -> Element {
-    let state = use_context::<DuelState>();
+    let state = use_context::<UIState>();
     let banishment = state.banishment;
     let cards_prompting_to_activate = state.card_prompting_to_activate;
     let mut show_banishment = state.show_banishment;

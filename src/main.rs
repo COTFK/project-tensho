@@ -6,9 +6,9 @@ mod settings;
 
 use dioxus::prelude::*;
 
-use crate::state::cache_dependencies;
-use crate::state::load_duel;
-use crate::ui::DuelScreen;
+use crate::state::cache_cards;
+use crate::state::load_core;
+use crate::ui::DuelWrapper;
 use crate::ui::LoadingScreen;
 use crate::ui::RotateDeviceOverlay;
 use crate::utility::BUILD_VERSION;
@@ -36,21 +36,21 @@ fn main() {
 
 #[component]
 pub fn App(hand: Option<String>) -> Element {
-    let cache_resource = use_resource(cache_dependencies);
+    let cache_resource = use_resource(cache_cards);
+    if cache_resource.read().is_none() {
+        return rsx! {LoadingScreen {  }}
+    }
 
-    let core_resource = use_resource(move || load_duel(cache_resource, hand.clone()));
+    let core_resource = use_resource(load_core);
+    if core_resource.read().is_none() {
+        return rsx! {LoadingScreen {  }}
+    }
 
     rsx!(
         RotateDeviceOverlay {}
-        match &*core_resource.read() {
-            Some(Ok(duel)) => rsx!(
-                DuelScreen {
-                    duel: duel.clone(),
-                    resource_handle: core_resource,
-                }
-            ),
-            Some(Err(e)) => rsx!("{e:#?}"),
-            None => rsx!(LoadingScreen {}),
+        DuelWrapper {
+            core_resource: core_resource,
+            custom_hand: hand,
         }
         div {
             class: "fixed bottom-3 left-3 z-50 rounded-md bg-gray-950/70 px-2 py-1 font-mono text-gray-200 text-[8px] md:text-xs lg:text-base shadow-lg ring-1 ring-white/10 backdrop-blur-sm pointer-events-none",

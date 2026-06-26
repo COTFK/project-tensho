@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 use rand::seq::SliceRandom;
 use std::future::pending;
 
-use crate::settings::CustomHand;
+use crate::define_ui_state;
 use crate::ocgcore::CardData;
 use crate::ocgcore::CardType;
 use crate::ocgcore::Duel;
@@ -22,6 +22,7 @@ use crate::ocgcore::messages::SelectOptionMessageData;
 use crate::ocgcore::messages::SelectTributeMessageData;
 use crate::ocgcore::messages::SelectUnselectMessageData;
 use crate::ocgcore::messages::SortCardMessageData;
+use crate::settings::CustomHand;
 use crate::utility::EXTRA_DECK_IDS;
 use crate::utility::MAIN_DECK_IDS;
 use crate::utility::cache_labels;
@@ -36,113 +37,43 @@ pub struct SelectedCard {
     pub index: usize,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct DuelState {
-    pub duel: Signal<Duel>,
-    pub main_deck_length: Signal<u32>,
-    pub extra_deck: Signal<Vec<Option<CardData>>>,
-    pub hand_contents: Signal<Vec<HandCard>>,
-    pub selected_card: Signal<Option<SelectedCard>>,
-    pub special_summons: Signal<Vec<CardData>>,
-    pub activatable_effects: Signal<Vec<CardData>>,
-    pub waiting_on_input: Signal<bool>,
-    pub monsters: Signal<Vec<Option<CardData>>>,
-    pub spell_traps: Signal<Vec<Option<CardData>>>,
-    pub graveyard: Signal<Vec<Option<CardData>>>,
-    pub banishment: Signal<Vec<Option<CardData>>>,
-    pub card_prompting_to_activate: Signal<Vec<CardData>>,
-    pub selectables: Signal<Option<SelectCardMessageData>>,
-    pub sort_cards_to_select_from: Signal<Option<SortCardMessageData>>,
-    pub yes_no_question: Signal<Option<String>>,
-    pub available_zones: Signal<Vec<Zone>>,
-    pub positions_to_select: Signal<Vec<BattlePosition>>,
-    pub show_graveyard: Signal<bool>,
-    pub show_banishment: Signal<bool>,
-    pub show_extra_deck: Signal<bool>,
-    pub effects_to_select_from: Signal<Vec<CardData>>,
-    pub cards_to_select_from: Signal<Option<SelectUnselectMessageData>>,
-    pub tributes: Signal<Option<SelectTributeMessageData>>,
-    pub selected_tributes: Signal<Vec<u8>>,
-    pub options_to_prompt: Signal<Option<SelectOptionMessageData>>,
-    pub numbers_to_select_from: Signal<Option<AnnounceNumberMessageData>>,
-}
-
-impl DuelState {
-    pub fn new(duel: Duel) -> Self {
-        Self {
-            duel: use_signal(move || duel),
-            main_deck_length: use_signal(|| 0),
-            extra_deck: use_signal(Vec::new),
-            hand_contents: use_signal(Vec::new),
-            selected_card: use_signal(|| None),
-            special_summons: use_signal(Vec::new),
-            activatable_effects: use_signal(Vec::new),
-            waiting_on_input: use_signal(|| false),
-            monsters: use_signal(Vec::new),
-            spell_traps: use_signal(Vec::new),
-            graveyard: use_signal(Vec::new),
-            banishment: use_signal(Vec::new),
-            card_prompting_to_activate: use_signal(Vec::new),
-            selectables: use_signal(|| None),
-            sort_cards_to_select_from: use_signal(|| None),
-            yes_no_question: use_signal(|| None),
-            available_zones: use_signal(Vec::new),
-            positions_to_select: use_signal(Vec::new),
-            show_graveyard: use_signal(|| false),
-            show_banishment: use_signal(|| false),
-            show_extra_deck: use_signal(|| false),
-            effects_to_select_from: use_signal(Vec::new),
-            cards_to_select_from: use_signal(|| None),
-            tributes: use_signal(|| None),
-            selected_tributes: use_signal(Vec::new),
-            options_to_prompt: use_signal(|| None),
-            numbers_to_select_from: use_signal(|| None),
-        }
-    }
-
-    pub fn reset(&mut self, duel: Duel) {
-        if self.duel.read().clone() == duel {
-            return;
-        }
-
-        (self.duel)().destroy();
-        self.duel.set(duel);
-
-        self.main_deck_length.set(0);
-        self.extra_deck.clear();
-        self.hand_contents.clear();
-        self.selected_card.set(None);
-        self.special_summons.clear();
-        self.activatable_effects.clear();
-        self.waiting_on_input.set(false);
-        self.monsters.clear();
-        self.spell_traps.clear();
-        self.graveyard.clear();
-        self.banishment.clear();
-        self.card_prompting_to_activate.clear();
-        self.selectables.set(None);
-        self.sort_cards_to_select_from.set(None);
-        self.yes_no_question.set(None);
-        self.available_zones.clear();
-        self.positions_to_select.clear();
-        self.show_graveyard.set(false);
-        self.show_extra_deck.set(false);
-        self.show_banishment.set(false);
-        self.cards_to_select_from.set(None);
-        self.effects_to_select_from.clear();
-        self.tributes.set(None);
-        self.selected_tributes.clear();
-        self.options_to_prompt.set(None);
-        self.numbers_to_select_from.set(None);
-    }
-}
+define_ui_state!(UIState {
+    main_deck_length: u32,
+    extra_deck: Vec<Option<CardData>>,
+    hand_contents: Vec<HandCard>,
+    selected_card: Option<SelectedCard>,
+    special_summons: Vec<CardData>,
+    activatable_effects: Vec<CardData>,
+    waiting_on_input: bool,
+    monsters: Vec<Option<CardData>>,
+    spell_traps: Vec<Option<CardData>>,
+    graveyard: Vec<Option<CardData>>,
+    banishment: Vec<Option<CardData>>,
+    card_prompting_to_activate: Vec<CardData>,
+    selectables: Option<SelectCardMessageData>,
+    sort_cards_to_select_from: Option<SortCardMessageData>,
+    yes_no_question: Option<String>,
+    available_zones: Vec<Zone>,
+    positions_to_select: Vec<BattlePosition>,
+    show_graveyard: bool,
+    show_banishment: bool,
+    show_extra_deck: bool,
+    effects_to_select_from: Vec<CardData>,
+    cards_to_select_from: Option<SelectUnselectMessageData>,
+    tributes: Option<SelectTributeMessageData>,
+    selected_tributes: Vec<u8>,
+    options_to_prompt: Option<SelectOptionMessageData>,
+    numbers_to_select_from: Option<AnnounceNumberMessageData>,
+});
 
 pub fn run_game_loop() {
-    let state = use_context::<DuelState>();
+    let state = consume_context::<UIState>();
+    let duel = consume_context::<Signal<Option<Duel>>>();
+    let duel = duel().expect("Duel context missing active duel");
 
     if !(state.waiting_on_input)() {
         loop {
-            match (state.duel)().process() {
+            match duel.process() {
                 DuelStatus::Awaiting => {
                     handle_core_message();
                     break;
@@ -155,7 +86,7 @@ pub fn run_game_loop() {
 }
 
 pub fn handle_right_click(evt: MouseEvent) {
-    let mut state = use_context::<DuelState>();
+    let mut state = consume_context::<UIState>();
 
     // Allow to decline chains & activations
     if !(state.card_prompting_to_activate)().is_empty() {
@@ -193,7 +124,7 @@ pub fn handle_right_click(evt: MouseEvent) {
     evt.prevent_default();
 }
 
-pub async fn cache_dependencies() -> anyhow::Result<OCGCore> {
+pub async fn cache_cards() {
     let all_cards = MAIN_DECK_IDS
         .into_iter()
         .chain(EXTRA_DECK_IDS)
@@ -201,8 +132,6 @@ pub async fn cache_dependencies() -> anyhow::Result<OCGCore> {
 
     cache_scripts(&all_cards).await;
     cache_labels(&all_cards).await;
-
-    OCGCore::load(get_card_data, get_cached_script, |text| tracing::info!(text)).await
 }
 
 fn pull_ids_to_front(main_array: &mut [u32; 40], target_ids: &[u32]) {
@@ -221,19 +150,24 @@ fn pull_ids_to_front(main_array: &mut [u32; 40], target_ids: &[u32]) {
     }
 }
 
-pub async fn load_duel(cache_resource: Resource<anyhow::Result<OCGCore>>, custom_hand: Option<String>) -> anyhow::Result<Duel> {
-    let core = {
-        let cache_state = cache_resource.read();
-        match &*cache_state {
-            Some(Ok(core)) => Some(core.clone()),
-            Some(Err(err)) => return Err(anyhow::anyhow!("Core initialization failed: {err:#}")),
-            None => None,
-        }
-    };
+pub async fn load_core() -> anyhow::Result<OCGCore> {
+    OCGCore::load(get_card_data, get_cached_script, |text| {
+        tracing::info!(text)
+    })
+    .await
+}
+
+pub async fn load_duel(
+    core_resource: Resource<anyhow::Result<OCGCore>>,
+    custom_hand: Option<String>,
+) -> anyhow::Result<Duel> {
+    let core = core_resource.read().as_ref().and_then(|result| {
+        result.as_ref().ok().cloned()
+    });
 
     let core = match core {
         Some(core) => core,
-        None => pending().await,
+        None => return pending().await,
     };
 
     let mut main_deck = MAIN_DECK_IDS;
@@ -262,7 +196,7 @@ pub async fn load_duel(cache_resource: Resource<anyhow::Result<OCGCore>>, custom
         get_cached_script("utility.lua").unwrap(),
         "utility.lua",
     );
-        
+
     for card_id in main_deck {
         duel.add_card(
             CardOwner::Player,
@@ -291,38 +225,18 @@ pub async fn load_duel(cache_resource: Resource<anyhow::Result<OCGCore>>, custom
 }
 
 pub fn send_response(response: Response) {
-    let mut state = use_context::<DuelState>();
+    let mut state = consume_context::<UIState>();
+    let duel = consume_context::<Signal<Option<Duel>>>();
+    let duel = duel().expect("Duel context missing active duel");
 
-    state.duel.read().set_response(response);
-
-    // Clean up state and wait for new data
-    state.hand_contents.clear();
-    state.selected_card.set(None);
-    state.special_summons.clear();
-    state.activatable_effects.clear();
-    state.waiting_on_input.set(false);
-    state.monsters.clear();
-    state.spell_traps.clear();
-    state.card_prompting_to_activate.clear();
-    state.selectables.set(None);
-    state.yes_no_question.set(None);
-    state.available_zones.clear();
-    state.positions_to_select.clear();
-    state.show_graveyard.set(false);
-    state.show_extra_deck.set(false);
-    state.show_banishment.set(false);
-    state.cards_to_select_from.set(None);
-    state.effects_to_select_from.clear();
-    state.tributes.set(None);
-    state.selected_tributes.clear();
-    state.options_to_prompt.set(None);
-    state.numbers_to_select_from.set(None);
-    state.sort_cards_to_select_from.set(None);
+    duel.set_response(response);
+    state.reset();
 }
 
 pub fn handle_core_message() {
-    let mut state = use_context::<DuelState>();
-    let duel = (state.duel)();
+    let mut state = consume_context::<UIState>();
+    let duel = consume_context::<Signal<Option<Duel>>>();
+    let duel = duel().expect("Duel context missing active duel");
 
     state.hand_contents.set(duel.get_raw_hand());
 

@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 
 use crate::ocgcore::CardData;
 use crate::ocgcore::CardType;
-use crate::ocgcore::HandCard;
+use crate::state::UIState;
 use crate::ocgcore::Response;
 use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
@@ -14,11 +14,11 @@ use crate::ui::components::CardActionMenu;
 use crate::ui::components::svg::SummonIcon;
 
 #[component]
-pub fn Hand(
-    cards: ReadSignal<Vec<HandCard>>,
-    selected_card: WriteSignal<Option<SelectedCard>>,
-    suppress_actions: ReadSignal<bool>,
-) -> Element {
+pub fn Hand() -> Element {
+    let state = use_context::<UIState>();
+    let cards = state.hand_contents;
+    let mut selected_card = state.selected_card;
+    let suppress_actions = !state.effects_to_select_from.is_empty();
     let hand_size = cards().len() as i32;
     let center = hand_size - 1;
 
@@ -41,7 +41,7 @@ pub fn Hand(
                             z_index: if is_selected { 100 } else { 0 },
                             CardActionMenu {
                                 class: "absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-[110%] flex flex-row items-center justify-center px-6 py-1 md:px-8",
-                                trigger: is_selected && (card.normal_summon_index.is_some() || card.is_activatable_or_chainable || card.spell_trap_set_index.is_some()) && !suppress_actions(),
+                                trigger: is_selected && (card.normal_summon_index.is_some() || card.is_activatable_or_chainable || card.spell_trap_set_index.is_some()) && !suppress_actions,
                                 if card.normal_summon_index.is_some() {
                                     ActionButton {
                                         label: "Summon",
@@ -100,8 +100,8 @@ pub fn Hand(
                                 is_selected,
                                 show_highlight_on_select: false,
                                 show_dotted_highlight: false,
-                                show_blue_aura: (card.normal_summon_index.is_some() || card.spell_trap_set_index.is_some() || card.monster_set_index.is_some()) && !suppress_actions(),
-                                show_orange_aura: card.is_activatable_or_chainable && !suppress_actions(),
+                                show_blue_aura: (card.normal_summon_index.is_some() || card.spell_trap_set_index.is_some() || card.monster_set_index.is_some()) && !suppress_actions,
+                                show_orange_aura: card.is_activatable_or_chainable && !suppress_actions,
                                 facedown: false,
                                 use_extra_deck_back: false,
                                 onclick:  move |evt: MouseEvent| {

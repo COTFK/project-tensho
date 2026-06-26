@@ -1,4 +1,5 @@
 use std::ffi::c_void;
+use std::rc::Rc;
 
 use ocgcore_ffi::types::OCG_Duel;
 use ocgcore_ffi::types::OCG_NewCardInfo;
@@ -15,22 +16,41 @@ use crate::ocgcore::data::CardType;
 use crate::ocgcore::data::HandCard;
 use crate::ocgcore::messages::CoreMessage;
 
+#[derive(Hash, Debug, PartialEq)]
+struct DuelInner {
+    handle: OCG_Duel,
+    core: OCGCore,
+}
+
+impl Drop for DuelInner {
+    fn drop(&mut self) {
+        unsafe {
+            ocgcore_ffi::OCG_DestroyDuel(self.handle);
+        }
+    }
+}
+
 #[derive(Hash, Debug, Clone, PartialEq)]
 pub struct Duel {
-    pub(super) handle: OCG_Duel,
-    core: OCGCore,
+    inner: Rc<DuelInner>,
 }
 
 impl Duel {
     pub fn new(handle: OCG_Duel, core: &OCGCore) -> Self {
         Self {
-            handle,
-            core: core.clone(),
+            inner: Rc::new(DuelInner {
+                handle,
+                core: core.clone(),
+            }),
         }
     }
 
+    pub(super) fn handle(&self) -> OCG_Duel {
+        self.inner.handle
+    }
+
     pub fn start(&self) {
-        unsafe { ocgcore_ffi::OCG_StartDuel(self.handle) };
+        unsafe { ocgcore_ffi::OCG_StartDuel(self.inner.handle) };
     }
 
     pub fn set_response(&self, response: Response) {
@@ -38,32 +58,30 @@ impl Duel {
         let buf_len = bytes.len() as u32;
 
         unsafe {
-            ocgcore_ffi::OCG_DuelSetResponse(self.handle, bytes.as_ptr() as *const c_void, buf_len);
+            ocgcore_ffi::OCG_DuelSetResponse(
+                self.inner.handle,
+                bytes.as_ptr() as *const c_void,
+                buf_len,
+            );
         }
     }
 
     pub fn parse_messages(&self) -> CoreMessage {
         let mut length = 0;
         let messages_ptr =
-            unsafe { ocgcore_ffi::OCG_DuelGetMessage(self.handle, &mut length) } as *mut u8;
+            unsafe { ocgcore_ffi::OCG_DuelGetMessage(self.inner.handle, &mut length) } as *mut u8;
         let messages = unsafe { std::slice::from_raw_parts(messages_ptr, length as usize) };
 
         CoreMessage::try_from(messages).unwrap()
     }
 
     pub fn process(&self) -> DuelStatus {
-        let status = unsafe { ocgcore_ffi::OCG_DuelProcess(self.handle) };
+        let status = unsafe { ocgcore_ffi::OCG_DuelProcess(self.inner.handle) };
         DuelStatus::try_from(status).unwrap()
     }
 
-    pub fn destroy(&self) {
-        unsafe {
-            ocgcore_ffi::OCG_DestroyDuel(self.handle);
-        }
-    }
-
     pub fn count_location(&self, team: CardOwner, location: CardLocation) -> u32 {
-        unsafe { ocgcore_ffi::OCG_DuelQueryCount(self.handle, team as u8, location as u32) }
+        unsafe { ocgcore_ffi::OCG_DuelQueryCount(self.inner.handle, team as u8, location as u32) }
     }
 
     fn query_location(
@@ -82,7 +100,7 @@ impl Duel {
 
         let mut length = 0;
         let ptr = unsafe {
-            ocgcore_ffi::OCG_DuelQueryLocation(self.handle, &mut length, &query) as *mut u8
+            ocgcore_ffi::OCG_DuelQueryLocation(self.inner.handle, &mut length, &query) as *mut u8
         };
         let data = unsafe { std::slice::from_raw_parts(ptr, length as usize) };
 
@@ -278,6 +296,6 @@ impl Duel {
             pos: position,
         };
 
-        unsafe { ocgcore_ffi::OCG_DuelNewCard(self.handle, &card) };
+        unsafe { ocgcore_ffi::OCG_DuelNewCard(self.inner.handle, &card) };
     }
 }

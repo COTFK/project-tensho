@@ -97,6 +97,6 @@ impl OCGCore {
         let name = CString::new(name).unwrap();
         let name_ptr = name.as_ptr();
 
-        unsafe { ocgcore_ffi::OCG_LoadScript(duel.handle, script_ptr, length, name_ptr) }
+        unsafe { ocgcore_ffi::OCG_LoadScript(duel.handle(), script_ptr, length, name_ptr) }
     }
 }
