@@ -55,15 +55,8 @@ impl TryFrom<&[u8]> for SelectCardMessageData {
             let _is_xyz_material = (raw_location_byte & 0x80) != 0;
             let base_location_byte = raw_location_byte & 0x7F;
 
-            let location = CardLocation::try_from(base_location_byte).unwrap_or_else(|err| {
-                tracing::error!(
-                    "Unknown location modifier: {}. Error: {:?}",
-                    base_location_byte,
-                    err
-                );
-                CardLocation::Deck
-            });
-
+            let location = CardLocation::try_from(base_location_byte)?;
+            
             // 4. Sequence placement
             let sequence = raw_bytes[offset + 6];
 
