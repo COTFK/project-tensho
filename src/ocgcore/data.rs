@@ -22,7 +22,7 @@ pub struct Zone {
     pub sequence: u8,
 }
 
-#[derive(Hash, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Hash, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct CardData {
     pub action_index: Option<u8>,
     pub card_code: u32,
@@ -36,10 +36,11 @@ pub struct CardData {
     pub attack: Option<u32>,
     pub defense: Option<u32>,
     pub card_type: CardType,
+    pub link_rating: Option<u32>,
 }
 
 bitflags! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
     pub struct CardType: u32 {
         const MONSTER       = 0x1;
         const SPELL         = 0x2;

@@ -1,7 +1,6 @@
 use crate::ocgcore::CardData;
 use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
-use crate::ocgcore::data::CardType;
 
 #[derive(Hash, Debug, Clone, PartialEq, Eq)]
 pub struct SelectTributeMessageData {
@@ -48,15 +47,9 @@ impl TryFrom<&[u8]> for SelectTributeMessageData {
                 card_code,
                 controller: CardController::try_from(controller)?,
                 location: CardLocation::try_from(location)?,
-                position: None,
-                description: None,
-                is_selected: false,
                 sequence,
                 action_index: Some(index as u8),
-                level: None,
-                attack: None,
-                defense: None,
-                card_type: CardType::empty(),
+                ..Default::default()
             });
         }
 

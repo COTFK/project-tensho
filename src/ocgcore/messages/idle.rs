@@ -1,7 +1,6 @@
 use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
 use crate::ocgcore::data::CardData;
-use crate::ocgcore::data::CardType;
 use crate::ocgcore::utility::read_u8;
 use crate::ocgcore::utility::read_u32;
 use crate::ocgcore::utility::read_u64;
@@ -92,16 +91,10 @@ impl TryFrom<&[u8]> for IdleMessageData {
                         c,
                         "normal_summons.controller",
                     )?)?,
-                    position: None,
                     location: CardLocation::try_from(read_u8(raw, c, "normal_summons.location")?)?,
                     sequence: read_u32(raw, c, "normal_summons.index")? as u8,
                     action_index: Some(idx as u8),
-                    description: None,
-                    is_selected: false,
-                    level: None,
-                    attack: None,
-                    defense: None,
-                    card_type: CardType::empty(),
+                    ..Default::default()
                 })
             })?;
 
@@ -114,16 +107,10 @@ impl TryFrom<&[u8]> for IdleMessageData {
                         c,
                         "special_summons.controller",
                     )?)?,
-                    position: None,
                     location: CardLocation::try_from(read_u8(raw, c, "special_summons.location")?)?,
                     sequence: read_u32(raw, c, "special_summons.index")? as u8,
                     action_index: Some(idx as u8),
-                    description: None,
-                    is_selected: false,
-                    level: None,
-                    attack: None,
-                    defense: None,
-                    card_type: CardType::empty(),
+                    ..Default::default()
                 })
             })?;
 
@@ -136,7 +123,6 @@ impl TryFrom<&[u8]> for IdleMessageData {
                         c,
                         "battle_positions.controller",
                     )?)?,
-                    position: None,
                     location: CardLocation::try_from(read_u8(
                         raw,
                         c,
@@ -144,12 +130,7 @@ impl TryFrom<&[u8]> for IdleMessageData {
                     )?)?,
                     sequence: read_u8(raw, c, "battle_positions.index")?,
                     action_index: Some(idx as u8),
-                    description: None,
-                    is_selected: false,
-                    level: None,
-                    attack: None,
-                    defense: None,
-                    card_type: CardType::empty(),
+                    ..Default::default()
                 })
             })?;
 
@@ -163,15 +144,9 @@ impl TryFrom<&[u8]> for IdleMessageData {
                         "monster_sets.controller",
                     )?)?,
                     location: CardLocation::try_from(read_u8(raw, c, "monster_sets.location")?)?,
-                    position: None,
                     sequence: read_u32(raw, c, "monster_sets.index")? as u8,
                     action_index: Some(idx as u8),
-                    description: None,
-                    is_selected: false,
-                    level: None,
-                    attack: None,
-                    defense: None,
-                    card_type: CardType::empty(),
+                    ..Default::default()
                 })
             })?;
 
@@ -184,16 +159,10 @@ impl TryFrom<&[u8]> for IdleMessageData {
                         c,
                         "spell_trap_sets.controller",
                     )?)?,
-                    position: None,
                     location: CardLocation::try_from(read_u8(raw, c, "spell_trap_sets.location")?)?,
                     sequence: read_u32(raw, c, "spell_trap_sets.index")? as u8,
                     action_index: Some(idx as u8),
-                    description: None,
-                    is_selected: false,
-                    level: None,
-                    attack: None,
-                    defense: None,
-                    card_type: CardType::empty(),
+                    ..Default::default()
                 })
             })?;
 
@@ -215,15 +184,10 @@ impl TryFrom<&[u8]> for IdleMessageData {
                     card_code,
                     controller: CardController::try_from(controller)?,
                     location: CardLocation::try_from(location)?,
-                    position: None,
                     sequence,
                     action_index: Some(idx as u8),
                     description: Some(description_id),
-                    is_selected: false,
-                    level: None,
-                    attack: None,
-                    defense: None,
-                    card_type: CardType::empty(),
+                    ..Default::default()
                 })
             },
         )?;

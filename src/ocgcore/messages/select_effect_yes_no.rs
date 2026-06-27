@@ -1,5 +1,4 @@
 use crate::ocgcore::CardData;
-use crate::ocgcore::CardType;
 use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
 
@@ -17,18 +16,11 @@ impl TryFrom<&[u8]> for SelectEffectYNMessageData {
         let sequence = bytes[12];
 
         Ok(SelectEffectYNMessageData(CardData {
-            action_index: None,
             card_code,
             controller,
             location,
-            position: None,
             sequence,
-            description: None,
-            is_selected: false,
-            level: None,
-            attack: None,
-            defense: None,
-            card_type: CardType::empty(),
+            ..Default::default()
         }))
     }
 }

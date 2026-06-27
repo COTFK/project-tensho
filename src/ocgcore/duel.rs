@@ -169,6 +169,7 @@ impl Duel {
             let mut attack = None;
             let mut defense = None;
             let mut level = None;
+            let mut link_rating = None;
 
             loop {
                 let length = u16::from_le_bytes([payload[cursor], payload[cursor + 1]]) as usize;
@@ -237,6 +238,14 @@ impl Duel {
                             payload[cursor + 9],
                         ]));
                     }
+                    0x0080_0000 => {
+                        link_rating = Some(u32::from_le_bytes([
+                            payload[cursor + 6],
+                            payload[cursor + 7],
+                            payload[cursor + 8],
+                            payload[cursor + 9],
+                        ]));
+                    }
                     0x8000_0000 => {
                         cards.push(Some(CardData {
                             card_code,
@@ -244,13 +253,12 @@ impl Duel {
                             location,
                             position,
                             sequence: current_sequence,
-                            action_index: None,
-                            description: None,
-                            is_selected: false,
                             level,
                             attack,
                             defense,
                             card_type,
+                            link_rating,
+                            ..Default::default()
                         }));
                         current_sequence += 1;
                         cursor = record_end;

@@ -1,7 +1,8 @@
 use std::fmt::Display;
 
-#[derive(Hash, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Hash, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum CardLocation {
+    #[default]
     Deck = 1,
     Hand = 2,
     MonsterZone = 4,

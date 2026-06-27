@@ -4,7 +4,6 @@ use std::future::pending;
 
 use crate::define_ui_state;
 use crate::ocgcore::CardData;
-use crate::ocgcore::CardType;
 use crate::ocgcore::Duel;
 use crate::ocgcore::HandCard;
 use crate::ocgcore::OCGCore;
@@ -362,18 +361,11 @@ pub fn handle_core_message() {
         CoreMessage::SelectEffectYN(message) => {
             state.card_prompting_to_activate.with_mut(|v| {
                 v.push(CardData {
-                    action_index: None,
                     card_code: message.0.card_code,
                     controller: message.0.controller,
                     location: message.0.location,
-                    position: None,
                     sequence: message.0.sequence,
-                    description: None,
-                    is_selected: false,
-                    level: None,
-                    attack: None,
-                    defense: None,
-                    card_type: CardType::empty(),
+                    ..Default::default()
                 })
             });
             state.waiting_on_input.set(true);

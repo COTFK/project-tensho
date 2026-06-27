@@ -1,7 +1,6 @@
 use dioxus::prelude::*;
 
 use crate::ocgcore::CardData;
-use crate::ocgcore::CardType;
 use crate::ocgcore::Response;
 use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
@@ -83,18 +82,10 @@ pub fn Hand() -> Element {
                             }
                             Card {
                                 card: CardData {
-                                    action_index: None,
                                     card_code: card.code,
                                     controller: CardController::Player,
                                     location: CardLocation::Hand,
-                                    position: None,
-                                    sequence: 0,
-                                    description: None,
-                                    is_selected: false,
-                                    level: None,
-                                    attack: None,
-                                    defense: None,
-                                    card_type: CardType::empty()
+                                    ..CardData::default()
                                 },
                                 class: "w-[10vw]",
                                 is_selected,

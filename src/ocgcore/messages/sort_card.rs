@@ -1,7 +1,6 @@
 use crate::ocgcore::CardData;
 use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
-use crate::ocgcore::data::CardType;
 
 #[derive(Hash, Debug, Clone, PartialEq, Eq)]
 pub struct SortCardMessageData {
@@ -30,18 +29,11 @@ impl TryFrom<&[u8]> for SortCardMessageData {
             let sequence = bytes[offset + 6];
 
             cards.push(CardData {
-                action_index: None,
                 card_code,
                 controller: CardController::try_from(controller)?,
                 location: CardLocation::try_from(location)?,
-                position: None,
                 sequence,
-                description: None,
-                is_selected: false,
-                level: None,
-                attack: None,
-                defense: None,
-                card_type: CardType::empty(),
+                ..Default::default()
             });
         }
 

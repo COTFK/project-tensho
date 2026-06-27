@@ -1,7 +1,6 @@
 use crate::ocgcore::CardData;
 use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
-use crate::ocgcore::data::CardType;
 
 #[derive(Hash, Debug, Clone, PartialEq, Eq)]
 pub struct SelectCardMessageData {
@@ -35,7 +34,7 @@ impl TryFrom<&[u8]> for SelectCardMessageData {
             }
 
             // 1. 4-byte Card ID
-            let id = u32::from_le_bytes([
+            let card_code = u32::from_le_bytes([
                 raw_bytes[offset],
                 raw_bytes[offset + 1],
                 raw_bytes[offset + 2],
@@ -56,23 +55,16 @@ impl TryFrom<&[u8]> for SelectCardMessageData {
             let base_location_byte = raw_location_byte & 0x7F;
 
             let location = CardLocation::try_from(base_location_byte)?;
-            
+
             // 4. Sequence placement
             let sequence = raw_bytes[offset + 6];
 
             cards.push(CardData {
-                card_code: id,
+                card_code,
                 controller,
                 location,
-                position: None,
                 sequence,
-                action_index: None,
-                description: None,
-                is_selected: false,
-                level: None,
-                attack: None,
-                defense: None,
-                card_type: CardType::empty(),
+                ..Default::default()
             });
         }
 
