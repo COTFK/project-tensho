@@ -44,3 +44,11 @@ All combos in [The Fire King Sanctuary] can be successfully performed.
 
 ### Windows/macOS
 Windows and macOS should be theoretically supported, but have not been tested yet. **If you manage to get them running, raise a pull request!**
+
+## Contributing
+We accept contributions! Reach out to us in the [Circle of the Fire Kings Discord server](https://discord.gg/8JtxHUAdGq) to chat and discuss your proposed changes!
+
+## License
+Project Tensho is licensed under [the AGPL-3.0 license](LICENSE).
+
+Unless explicitly stated otherwise, any contribution to this project shall be licensed under the aforementioned license, without any additional terms or conditions.
