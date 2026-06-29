@@ -13,9 +13,11 @@ fi
 
 pushd "$EMSDK_DIR" >/dev/null
 
-./emsdk install latest
-./emsdk activate latest
+EMSDK_VERSION="6.0.0"
+
+./emsdk install "$EMSDK_VERSION"
+./emsdk activate "$EMSDK_VERSION"
 
 popd >/dev/null
 
-echo "Installed emsdk to $EMSDK_DIR"
+echo "Installed emsdk $EMSDK_VERSION to $EMSDK_DIR"
