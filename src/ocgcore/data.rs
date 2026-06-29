@@ -33,6 +33,7 @@ pub struct CardData {
     pub description: Option<u32>,
     pub is_selected: bool,
     pub level: Option<u32>,
+    pub rank: Option<u32>,
     pub attack: Option<u32>,
     pub defense: Option<u32>,
     pub card_type: CardType,

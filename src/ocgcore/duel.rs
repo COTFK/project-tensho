@@ -169,6 +169,7 @@ impl Duel {
             let mut attack = None;
             let mut defense = None;
             let mut level = None;
+            let mut rank = None;
             let mut link_rating = None;
 
             loop {
@@ -221,6 +222,14 @@ impl Duel {
                             payload[cursor + 8],
                             payload[cursor + 9],
                         ]));
+                    },
+                    0x0000_0020 if cursor + 10 <= payload.len() => {
+                        rank = Some(u32::from_le_bytes([
+                            payload[cursor + 6],
+                            payload[cursor + 7],
+                            payload[cursor + 8],
+                            payload[cursor + 9],
+                        ]));
                     }
                     0x0000_0100 if cursor + 10 <= payload.len() => {
                         attack = Some(u32::from_le_bytes([
@@ -254,6 +263,7 @@ impl Duel {
                             position,
                             sequence: current_sequence,
                             level,
+                            rank,
                             attack,
                             defense,
                             card_type,
