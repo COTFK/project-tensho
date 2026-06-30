@@ -29,18 +29,19 @@ All combos in [The Fire King Sanctuary] can be successfully performed.
 [**Dioxus CLI**]: https://dioxuslabs.com/learn/0.7/getting_started/#install-the-dioxus-cli
 [**Emscripten SDK**]: https://emscripten.org/
 
-### Linux users
+### Web
+**These steps were tested on a fresh Fedora 44 install** - other distros/OSes may require different steps/commands.
+
+- Make sure you have Emscripten 6.0.0 installed; for best results, Linux users can use the helper script at `scripts/install-emsdk.sh`.
+- Make sure a C compiler is installed: `sudo dnf install gcc`
+- Dioxus CLI should handle everything for you afterwards. Run `dx serve --web` and you're good to go!
+
+### Linux
 **These steps were tested on a fresh Fedora 44 install** - other distros may require different steps/commands.
 
-#### Native build
 - Install the following prerequisites: `sudo dnf install gcc gcc-c++ webkit2gtk4.1-devel openssl-devel libxdo-devel`
     - For other distros, see the [Tauri docs](https://tauri.app/start/prerequisites/#linux).
 - Run `dx serve --desktop`
-
-#### Build for the web
-- Make sure you have Emscripten 6.0.0 installed; for best results, use the helper script at `scripts/install-emsdk.sh`.
-- Make sure GCC is installed: `sudo dnf install gcc`
-- Dioxus CLI should handle everything for you afterwards. Run `dx serve --web` and you're good to go!
 
 ### Windows
 On Windows, `dx serve --desktop` seems to work out of the box.
