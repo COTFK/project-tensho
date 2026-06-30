@@ -56,3 +56,14 @@ We accept contributions! Reach out to us in the [Circle of the Fire Kings Discor
 Project Tensho is licensed under [the AGPL-3.0 license](LICENSE).
 
 Unless explicitly stated otherwise, any contribution to this project shall be licensed under the aforementioned license, without any additional terms or conditions.
+
+## Credits
+
+Icons are provided by [Ikonate] & [RPG-Awesome].
+Card images courtesy of [YGOPRODeck].
+Game core & card data provided by [Project Ignis].
+
+[Ikonate]: https://ikonate.com/
+[RPG-Awesome]: https://nagoshiashumari.github.io/Rpg-Awesome/
+[YGOPRODeck]: https://ygoprodeck.com/api-guide/
+[Project Ignis]: https://github.com/ProjectIgnis
