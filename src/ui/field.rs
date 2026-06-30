@@ -193,11 +193,7 @@ pub fn FieldCard(index: u8, location: CardLocation, card: CardData) -> Element {
     });
 
     let selectable_for_extra_deck_summon = card_in_select_list.is_some();
-    let is_selected_for_extra_deck_summon = if selectable_for_extra_deck_summon {
-        card_in_select_list.unwrap().is_selected
-    } else {
-        false
-    };
+    let is_selected_for_extra_deck_summon = card_in_select_list.is_some_and(|c| c.is_selected);
 
     let tributes = (state.tributes)();
     let card_in_tribute_list = tributes.as_ref().and_then(|message| {
@@ -224,32 +220,30 @@ pub fn FieldCard(index: u8, location: CardLocation, card: CardData) -> Element {
             CardActionMenu {
                 class: "absolute left-1/2 bottom-1/2 -translate-x-[50%] translate-y-[50%] px-3 py-1 z-10",
                 trigger: is_selected && (prompted || activatable) && !suppress_actions,
-                if prompted || activatable {
-                    ActionButton {
-                        label: "Activate",
-                        class: "border-yellow-500 text-yellow-300",
-                        onclick: move |evt: MouseEvent| {
-                            evt.stop_propagation();
+                ActionButton {
+                    label: "Activate",
+                    class: "border-yellow-500 text-yellow-300",
+                    onclick: move |evt: MouseEvent| {
+                        evt.stop_propagation();
 
-                            if prompted {
-                                if let Some(index) = chain_index {
-                                    send_response(Response::Chain { index });
-                                } else {
-                                    send_response(Response::Yes);
-                                }
+                        if prompted {
+                            if let Some(index) = chain_index {
+                                send_response(Response::Chain { index });
+                            } else {
+                                send_response(Response::Yes);
                             }
+                        }
 
-                            if activatable {
-                                if effects_of_this_card.len() > 1 {
-                                    state.effects_to_select_from.set(effects_of_this_card.to_owned());
-                                    state.selected_card.set(None);
-                                } else if let Some(idx) = activatable_eff_index {
-                                    send_response(Response::Activate { index: idx });
-                                }
+                        if activatable {
+                            if effects_of_this_card.len() > 1 {
+                                state.effects_to_select_from.set(effects_of_this_card.to_owned());
+                                state.selected_card.set(None);
+                            } else if let Some(idx) = activatable_eff_index {
+                                send_response(Response::Activate { index: idx });
                             }
-                        },
-                        SummonIcon {}
-                    }
+                        }
+                    },
+                    SummonIcon {}
                 }
             }
             Card {
@@ -273,15 +267,13 @@ pub fn FieldCard(index: u8, location: CardLocation, card: CardData) -> Element {
                                 selected_tributes.push(action_index);
                             }
                         });
+                    } else if let Some(index) = select_unselect_index {
+                        send_response(Response::SelectUnselectCard { index });
                     } else {
-                        if let Some(index) = select_unselect_index {
-                            send_response(Response::SelectUnselectCard { index });
-                        } else {
-                            selected_card.set(Some(SelectedCard {
-                                location,
-                                index: index as usize
-                            }));
-                        }
+                        selected_card.set(Some(SelectedCard {
+                            location,
+                            index: index as usize
+                        }));
                     }
                 },
             }
