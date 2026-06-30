@@ -1,11 +1,5 @@
 use dioxus::prelude::*;
 
-use crate::ui::components::ActionButton;
-use crate::ui::components::Card;
-use crate::ui::components::CardActionMenu;
-use crate::ui::components::OptionButton;
-use crate::ui::components::PickerModal;
-use crate::ui::components::svg::SummonIcon;
 use super::constants::ZONE_SIZE;
 use crate::ocgcore::CardType;
 use crate::ocgcore::Response;
@@ -13,7 +7,13 @@ use crate::ocgcore::constants::BattlePosition;
 use crate::ocgcore::constants::CardLocation;
 use crate::state::UIState;
 use crate::state::send_response;
+use crate::ui::components::ActionButton;
+use crate::ui::components::Card;
+use crate::ui::components::CardActionMenu;
 use crate::ui::components::CardStack;
+use crate::ui::components::OptionButton;
+use crate::ui::components::PickerModal;
+use crate::ui::components::svg::LightningTrioIcon;
 use crate::utility::CARD_BACK;
 use crate::utility::EXTRA_BACK;
 
@@ -140,7 +140,7 @@ pub fn BanishmentModal() -> Element {
                                                 selected_card.set(None);
                                             }
                                         },
-                                        SummonIcon {  }
+                                        LightningTrioIcon {  }
                                     }
                                 }
                             }

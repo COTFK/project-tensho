@@ -1,8 +1,8 @@
 use dioxus::prelude::*;
 
-use crate::ui::components::CardStack;
 use super::constants::ZONE_SIZE;
 use crate::state::UIState;
+use crate::ui::components::CardStack;
 use crate::utility::CARD_BACK;
 
 #[component]

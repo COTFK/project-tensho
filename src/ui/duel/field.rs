@@ -17,7 +17,7 @@ use crate::state::send_response;
 use crate::ui::components::ActionButton;
 use crate::ui::components::Card;
 use crate::ui::components::CardActionMenu;
-use crate::ui::components::svg::SummonIcon;
+use crate::ui::components::svg::LightningTrioIcon;
 use crate::utility::get_card_data;
 
 #[component]
@@ -243,7 +243,7 @@ pub fn FieldCard(index: u8, location: CardLocation, card: CardData) -> Element {
                             }
                         }
                     },
-                    SummonIcon {}
+                    LightningTrioIcon {}
                 }
             }
             Card {

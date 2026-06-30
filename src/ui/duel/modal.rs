@@ -1,15 +1,15 @@
 use dioxus::prelude::*;
 
-use crate::ui::components::Card;
-use crate::ui::components::MessageModal;
-use crate::ui::components::OptionButton;
-use crate::ui::components::PickerModal;
+use super::banishment::BanishmentModal;
 use super::extra_deck::ExtraDeckModal;
 use super::graveyard::GraveyardModal;
 use crate::ocgcore::Response;
 use crate::state::UIState;
 use crate::state::send_response;
-use super::banishment::BanishmentModal;
+use crate::ui::components::Card;
+use crate::ui::components::MessageModal;
+use crate::ui::components::OptionButton;
+use crate::ui::components::PickerModal;
 use crate::utility::get_optional_string_label;
 
 #[component]

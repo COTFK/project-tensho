@@ -10,6 +10,8 @@ use crate::state::send_response;
 use crate::ui::components::ActionButton;
 use crate::ui::components::Card;
 use crate::ui::components::CardActionMenu;
+use crate::ui::components::svg::BoltShieldIcon;
+use crate::ui::components::svg::LightningTrioIcon;
 use crate::ui::components::svg::SummonIcon;
 
 #[component]
@@ -39,7 +41,7 @@ pub fn Hand() -> Element {
                             transform: "rotateZ({rotation}deg) translateY({translate_y}%)",
                             z_index: if is_selected { 100 } else { 0 },
                             CardActionMenu {
-                                class: "absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-[110%] flex flex-row items-center justify-center px-6 py-1 md:px-8",
+                                class: "absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-[110%] flex flex-row items-center justify-center px-10 py-1 md:px-12",
                                 trigger: is_selected && (card.normal_summon_index.is_some() || card.is_activatable_or_chainable || card.spell_trap_set_index.is_some()) && !suppress_actions,
                                 if card.normal_summon_index.is_some() {
                                     ActionButton {
@@ -63,7 +65,7 @@ pub fn Hand() -> Element {
                                             if let Some(index) = card.chain_index { send_response(Response::Chain { index }); }
                                             if let Some(index) = card.activate_index { send_response(Response::Activate { index }); }
                                         },
-                                        SummonIcon {}
+                                        LightningTrioIcon {}
                                     }
                                 }
                                 if card.spell_trap_set_index.is_some() || card.monster_set_index.is_some() {
@@ -76,7 +78,7 @@ pub fn Hand() -> Element {
                                             if let Some(index) = card.spell_trap_set_index { send_response(Response::SetSpellTrap { index }); }
                                             if let Some(index) = card.monster_set_index { send_response(Response::SetMonster { index }); }
                                         },
-                                        SummonIcon { }
+                                        BoltShieldIcon {}
                                     }
                                 }
                             }

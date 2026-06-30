@@ -222,7 +222,7 @@ impl Duel {
                             payload[cursor + 8],
                             payload[cursor + 9],
                         ]));
-                    },
+                    }
                     0x0000_0020 if cursor + 10 <= payload.len() => {
                         rank = Some(u32::from_le_bytes([
                             payload[cursor + 6],

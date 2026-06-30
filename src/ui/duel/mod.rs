@@ -12,7 +12,6 @@ pub use hand::Hand;
 use dioxus::prelude::*;
 use web_sys::window;
 
-use crate::ui::components::UIButton;
 use crate::ocgcore::Duel;
 use crate::ocgcore::OCGCore;
 use crate::state::UIState;
@@ -20,6 +19,7 @@ use crate::state::handle_right_click;
 use crate::state::load_duel;
 use crate::state::run_game_loop;
 use crate::ui::LoadingScreen;
+use crate::ui::components::UIButton;
 use crate::ui::components::svg::FullscreenIcon;
 use crate::ui::components::svg::ResetIcon;
 use field::Field;

@@ -1,17 +1,17 @@
 use dioxus::prelude::*;
 
-use crate::ui::components::ActionButton;
-use crate::ui::components::Card;
-use crate::ui::components::CardActionMenu;
-use crate::ui::components::OptionButton;
-use crate::ui::components::PickerModal;
-use crate::ui::components::svg::SummonIcon;
 use super::constants::ZONE_SIZE;
 use crate::ocgcore::Response;
 use crate::ocgcore::constants::CardLocation;
 use crate::state::UIState;
 use crate::state::send_response;
+use crate::ui::components::ActionButton;
+use crate::ui::components::Card;
+use crate::ui::components::CardActionMenu;
 use crate::ui::components::CardStack;
+use crate::ui::components::OptionButton;
+use crate::ui::components::PickerModal;
+use crate::ui::components::svg::LightningTrioIcon;
 
 #[component]
 pub fn Graveyard() -> Element {
@@ -115,7 +115,7 @@ pub fn GraveyardModal() -> Element {
                                                 selected_card.set(None);
                                             }
                                         },
-                                        SummonIcon {  }
+                                        LightningTrioIcon {  }
                                     }
                                 }
                             }
