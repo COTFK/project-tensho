@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use super::components::svg::RotateDeviceIcon;
+use crate::ui::components::svg::RotateDeviceIcon;
 
 #[component]
 pub fn RotateDeviceOverlay() -> Element {

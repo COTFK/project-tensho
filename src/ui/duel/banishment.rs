@@ -1,50 +1,75 @@
 use dioxus::prelude::*;
 
-use super::components::ActionButton;
-use super::components::Card;
-use super::components::CardActionMenu;
-use super::components::OptionButton;
-use super::components::PickerModal;
-use super::components::svg::SummonIcon;
+use crate::ui::components::ActionButton;
+use crate::ui::components::Card;
+use crate::ui::components::CardActionMenu;
+use crate::ui::components::OptionButton;
+use crate::ui::components::PickerModal;
+use crate::ui::components::svg::SummonIcon;
 use super::constants::ZONE_SIZE;
+use crate::ocgcore::CardType;
 use crate::ocgcore::Response;
+use crate::ocgcore::constants::BattlePosition;
 use crate::ocgcore::constants::CardLocation;
 use crate::state::UIState;
 use crate::state::send_response;
 use crate::ui::components::CardStack;
+use crate::utility::CARD_BACK;
+use crate::utility::EXTRA_BACK;
 
 #[component]
-pub fn Graveyard() -> Element {
+pub fn Banishment() -> Element {
     let mut state = use_context::<UIState>();
 
-    let has_cards = state.graveyard.len() > 0;
+    let has_cards = state.banishment.len() > 0;
     let has_trigger_effects = state
         .card_prompting_to_activate
         .iter()
-        .any(|card| card.location == CardLocation::Graveyard);
+        .any(|card| card.location == CardLocation::Banishment);
 
     // Disable if effect selection modal is active
     let suppress_actions = !state.effects_to_select_from.is_empty();
 
+    let image_url = if has_cards {
+        let first_card = (state.banishment)().last().unwrap().unwrap();
+        if first_card.position == Some(BattlePosition::FaceDown) {
+            if first_card
+                .card_type
+                .intersects(CardType::FUSION | CardType::SYNCHRO | CardType::XYZ | CardType::LINK)
+            {
+                EXTRA_BACK.to_string()
+            } else {
+                CARD_BACK.to_string()
+            }
+        } else {
+            format!(
+                "https://images.ygoprodeck.com/images/cards/{}.jpg",
+                (state.banishment)().last().unwrap().unwrap().card_code
+            )
+        }
+    } else {
+        String::new()
+    };
+
     rsx!(
         div {
-            class: "relative bg-slate-50/2 {ZONE_SIZE} aspect-square flex items-center justify-center border-0.5",
+            class: "relative flex items-center justify-center border-0.5",
             class: if has_cards {"hover:outline-4 hover:outline-yellow-300"},
             onclick: move |_| if has_cards {
                 state.show_extra_deck.set(false);
-                state.show_banishment.set(false);
-                state.show_graveyard.set(true);
+                state.show_banishment.set(true);
+                state.show_graveyard.set(false);
             },
             if has_cards {
                 div {
-                    class: "relative h-full aspect-[59/86]",
+                    class: "relative {ZONE_SIZE} aspect-[59/86] -rotate-90",
                     div {
                         class: "absolute inset-[2px] md:inset-[4px] my-0.5 md:my-1 rounded-[2px] blur-[1px] mix-blend-screen pointer-events-none",
                         class: if has_trigger_effects && !suppress_actions { "bg-yellow-400" },
                     }
                     CardStack {
-                        length: state.graveyard.len(),
-                        image_url: format!("https://images.ygoprodeck.com/images/cards/{}.jpg", (state.graveyard)().last().unwrap().unwrap().card_code),
+                        length: state.banishment.len(),
+                        image_url,
                     }
                 }
             }
@@ -53,26 +78,26 @@ pub fn Graveyard() -> Element {
 }
 
 #[component]
-pub fn GraveyardModal() -> Element {
+pub fn BanishmentModal() -> Element {
     let state = use_context::<UIState>();
-    let graveyard = state.graveyard;
+    let banishment = state.banishment;
     let cards_prompting_to_activate = state.card_prompting_to_activate;
-    let mut show_graveyard = state.show_graveyard;
+    let mut show_banishment = state.show_banishment;
 
     let mut selected_card = use_signal(|| None);
 
     rsx!(
         PickerModal {
-            title: "Graveyard",
-            trigger: show_graveyard(),
+            title: "Banishment",
+            trigger: show_banishment(),
             div {
                 class: "flex flex-row min-w-[40vw] w-full max-w-[77vw] h-max gap-0.5 px-2",
                 class: "overflow-x-auto scroll-smooth scrollbar-thin",
-                for (index, card) in graveyard().iter().enumerate() {
+                for (index, card) in banishment().iter().enumerate() {
                     {
                         let prompted_card = cards_prompting_to_activate()
                             .iter()
-                            .find(|card| card.location == CardLocation::Graveyard && card.sequence == index as u8)
+                            .find(|card| card.location == CardLocation::Banishment && card.sequence == index as u8)
                             .copied();
                         let chain_index = prompted_card.and_then(|card| card.action_index);
 
@@ -127,7 +152,7 @@ pub fn GraveyardModal() -> Element {
             OptionButton {
                 label: "Close",
                 onclick: move |_| {
-                    show_graveyard.set(false);
+                    show_banishment.set(false);
                     selected_card.set(None);
                 },
                 additional_classes: "bg-green-600/70"

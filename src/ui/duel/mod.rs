@@ -1,13 +1,18 @@
+mod banishment;
+mod constants;
+mod extra_deck;
+mod field;
+mod graveyard;
 mod hand;
+mod main_deck;
+mod modal;
 
 pub use hand::Hand;
 
 use dioxus::prelude::*;
 use web_sys::window;
 
-use super::components::UIButton;
-use super::field::Field;
-use super::modal::ModalContainer;
+use crate::ui::components::UIButton;
 use crate::ocgcore::Duel;
 use crate::ocgcore::OCGCore;
 use crate::state::UIState;
@@ -17,6 +22,8 @@ use crate::state::run_game_loop;
 use crate::ui::LoadingScreen;
 use crate::ui::components::svg::FullscreenIcon;
 use crate::ui::components::svg::ResetIcon;
+use field::Field;
+use modal::ModalContainer;
 
 #[component]
 pub fn DuelWrapper(

@@ -1,28 +1,27 @@
 use dioxus::prelude::*;
 
-use super::components::ActionButton;
-use super::components::Card;
-use super::components::CardActionMenu;
-use super::components::CardStack;
-use super::components::OptionButton;
-use super::components::PickerModal;
+use crate::ui::components::ActionButton;
+use crate::ui::components::Card;
+use crate::ui::components::CardActionMenu;
+use crate::ui::components::OptionButton;
+use crate::ui::components::PickerModal;
+use crate::ui::components::svg::SummonIcon;
 use super::constants::ZONE_SIZE;
 use crate::ocgcore::Response;
 use crate::ocgcore::constants::CardLocation;
 use crate::state::UIState;
 use crate::state::send_response;
-use crate::ui::components::svg::SummonIcon;
-use crate::utility::EXTRA_BACK;
+use crate::ui::components::CardStack;
 
 #[component]
-pub fn ExtraDeck() -> Element {
+pub fn Graveyard() -> Element {
     let mut state = use_context::<UIState>();
-    let available_special_summons = (state.special_summons)();
 
-    let has_summons = available_special_summons
+    let has_cards = state.graveyard.len() > 0;
+    let has_trigger_effects = state
+        .card_prompting_to_activate
         .iter()
-        .any(|card| card.location == CardLocation::ExtraDeck);
-    let has_cards = state.extra_deck.len() > 0;
+        .any(|card| card.location == CardLocation::Graveyard);
 
     // Disable if effect selection modal is active
     let suppress_actions = !state.effects_to_select_from.is_empty();
@@ -32,20 +31,20 @@ pub fn ExtraDeck() -> Element {
             class: "relative bg-slate-50/2 {ZONE_SIZE} aspect-square flex items-center justify-center border-0.5",
             class: if has_cards {"hover:outline-4 hover:outline-yellow-300"},
             onclick: move |_| if has_cards {
-                state.show_extra_deck.set(true);
+                state.show_extra_deck.set(false);
                 state.show_banishment.set(false);
-                state.show_graveyard.set(false);
+                state.show_graveyard.set(true);
             },
             if has_cards {
                 div {
                     class: "relative h-full aspect-[59/86]",
                     div {
-                        class: "absolute inset-[1px] my-0.5 ml-0.5 mb-1 md:inset-[2px] md:my-1 md:mb-2 md:ml-1 rounded-[2px] blur-[1px] mix-blend-screen pointer-events-none",
-                        class: if has_summons && !suppress_actions { "bg-yellow-400" },
+                        class: "absolute inset-[2px] md:inset-[4px] my-0.5 md:my-1 rounded-[2px] blur-[1px] mix-blend-screen pointer-events-none",
+                        class: if has_trigger_effects && !suppress_actions { "bg-yellow-400" },
                     }
                     CardStack {
-                        length: state.extra_deck.len(),
-                        image_url: EXTRA_BACK,
+                        length: state.graveyard.len(),
+                        image_url: format!("https://images.ygoprodeck.com/images/cards/{}.jpg", (state.graveyard)().last().unwrap().unwrap().card_code),
                     }
                 }
             }
@@ -54,32 +53,28 @@ pub fn ExtraDeck() -> Element {
 }
 
 #[component]
-pub fn ExtraDeckModal() -> Element {
+pub fn GraveyardModal() -> Element {
     let state = use_context::<UIState>();
-    let extra_deck = state.extra_deck;
-    let available_special_summons = (state.special_summons)();
-    let mut show_extra_deck = state.show_extra_deck;
+    let graveyard = state.graveyard;
+    let cards_prompting_to_activate = state.card_prompting_to_activate;
+    let mut show_graveyard = state.show_graveyard;
 
     let mut selected_card = use_signal(|| None);
 
     rsx!(
         PickerModal {
-            title: "Extra Deck",
-            trigger: show_extra_deck(),
+            title: "Graveyard",
+            trigger: show_graveyard(),
             div {
                 class: "flex flex-row min-w-[40vw] w-full max-w-[77vw] h-max gap-0.5 px-2",
                 class: "overflow-x-auto scroll-smooth scrollbar-thin",
-                for (index, card) in extra_deck().iter().enumerate() {
+                for (index, card) in graveyard().iter().enumerate() {
                     {
-                        let card = (*card).unwrap();
-                        let special_summon_index = available_special_summons
+                        let prompted_card = cards_prompting_to_activate()
                             .iter()
-                            .position(|summon| {
-                                summon.location == CardLocation::ExtraDeck
-                                    && summon.sequence == card.sequence
-                            })
-                            .map(|index| index as u8);
-                        let is_special_summonable = special_summon_index.is_some();
+                            .find(|card| card.location == CardLocation::Graveyard && card.sequence == index as u8)
+                            .copied();
+                        let chain_index = prompted_card.and_then(|card| card.action_index);
 
                         // Disable if effect selection modal is active
                         let suppress_actions = !state.effects_to_select_from.is_empty();
@@ -88,29 +83,37 @@ pub fn ExtraDeckModal() -> Element {
                             div {
                                 class: "relative py-2",
                                 Card {
-                                    card,
+                                    card: card.unwrap(),
                                     class: "w-[12vw]",
                                     is_selected: selected_card() == Some(index),
                                     show_highlight_on_select: true,
                                     show_dotted_highlight: false,
                                     show_blue_aura: false,
-                                    show_orange_aura: is_special_summonable && !suppress_actions,
-                                    facedown: false,
+                                    show_orange_aura: prompted_card.is_some() && !suppress_actions,
                                     use_extra_deck_back: false,
+                                    facedown: false,
                                     onclick: move |_| selected_card.set(Some(index))
                                 }
                                 CardActionMenu {
                                     class: "absolute left-1/2 bottom-1/2 -translate-x-[50%] translate-y-[50%] px-3 py-2 md:px-6",
-                                    trigger: selected_card() == Some(index) && is_special_summonable && !suppress_actions,
+                                    trigger: selected_card() == Some(index) && prompted_card.is_some() && !suppress_actions,
                                     ActionButton {
-                                        label: "Summon",
+                                        label: "Activate",
                                         class: "border-yellow-500 text-yellow-300",
                                         onclick: move |_| {
-                                            if let Some(special_summon_index) = special_summon_index {
-                                                send_response(Response::SpecialSummon { index: special_summon_index });
+                                            if prompted_card.is_some() && !suppress_actions {
+                                                if let Some(index) = chain_index {
+                                                    send_response(Response::Chain { index });
+                                                } else {
+                                                    send_response(Response::Yes);
+                                                }
+
+                                                // if activatable {
+                                                //     send_user_response(UserResponse::Activate { index: activatable_eff_index as u8 });
+                                                // }
+
+                                                selected_card.set(None);
                                             }
-                                            selected_card.set(None);
-                                            show_extra_deck.set(false);
                                         },
                                         SummonIcon {  }
                                     }
@@ -124,7 +127,7 @@ pub fn ExtraDeckModal() -> Element {
             OptionButton {
                 label: "Close",
                 onclick: move |_| {
-                    show_extra_deck.set(false);
+                    show_graveyard.set(false);
                     selected_card.set(None);
                 },
                 additional_classes: "bg-green-600/70"
