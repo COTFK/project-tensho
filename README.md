@@ -42,8 +42,11 @@ All combos in [The Fire King Sanctuary] can be successfully performed.
 - Make sure GCC is installed: `sudo dnf install gcc`
 - Dioxus CLI should handle everything for you afterwards. Run `dx serve --web` and you're good to go!
 
-### Windows/macOS
-Windows and macOS should be theoretically supported, but have not been tested yet. **If you manage to get them running, raise a pull request!**
+### Windows
+On Windows, `dx serve --desktop` seems to work out of the box.
+
+### macOS
+macOS should be theoretically supported, but has not been tested yet. **If you manage to get it running, raise a pull request!**
 
 ## Contributing
 We accept contributions! Reach out to us in the [Circle of the Fire Kings Discord server](https://discord.gg/8JtxHUAdGq) to chat and discuss your proposed changes!
