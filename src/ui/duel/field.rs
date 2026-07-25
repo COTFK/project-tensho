@@ -14,6 +14,7 @@ use crate::ocgcore::constants::CardLocation;
 use crate::state::SelectedCard;
 use crate::state::UIState;
 use crate::state::send_response;
+use crate::ui::animation::{AnimationStatus, CURRENT_ANIMATION, get_element_bounds};
 use crate::ui::components::ActionButton;
 use crate::ui::components::Card;
 use crate::ui::components::CardActionMenu;
@@ -67,20 +68,49 @@ fn Zone(index: u8, location: CardLocation, card: Option<CardData>) -> Element {
     let placeable_on = (state.available_zones)()
         .iter()
         .any(|zone| zone.location == location && zone.sequence == index);
+    let animation_running = CURRENT_ANIMATION
+        .read()
+        .as_ref()
+        .is_some_and(|animation| animation.status == AnimationStatus::Running);
+    let animation_target_id = format!("{location}-{index}-animation-target");
 
     rsx!(
         div {
+            id: "{location}-{index}",
             class: "relative bg-slate-50/2 {ZONE_SIZE} aspect-square flex items-center justify-center",
-            class: if placeable_on {"border-2 border-yellow-300"} else {"border-0.5"},
+            class: if placeable_on && !animation_running {"border-2 border-yellow-300"} else {"border-0.5"},
             onclick: move |_| {
-                if placeable_on {
-                    send_response(Response::Place {
-                        controller: CardController::Player as u8,
-                        location: location as u8,
-                        index: index as u8,
-                    });
+                if !placeable_on || animation_running {
+                    return;
+                }
+
+                let response = Response::Place {
+                    controller: CardController::Player as u8,
+                    location: location as u8,
+                    index,
+                };
+                let started = get_element_bounds(&animation_target_id).is_some_and(|destination| {
+                    super::start_pending_summon(destination, response.clone())
+                });
+
+                if !started {
+                    *CURRENT_ANIMATION.write() = None;
+                    *super::PENDING_SUMMON.write() = None;
+                    send_response(response);
                 }
             },
+            if card.is_none() {
+                div {
+                    class: "absolute inset-0 flex items-center justify-center pointer-events-none",
+                    div {
+                        class: "h-full aspect-[59/86] mx-auto p-[clamp(1px,0.3vw,5px)]",
+                        div {
+                            id: "{animation_target_id}",
+                            class: "h-full w-full invisible",
+                        }
+                    }
+                }
+            }
             if let Some(card) = card {
                 FieldCard {
                     index: index,

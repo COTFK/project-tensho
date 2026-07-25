@@ -14,16 +14,43 @@ use web_sys::window;
 
 use crate::ocgcore::Duel;
 use crate::ocgcore::OCGCore;
+use crate::ocgcore::Response;
 use crate::state::UIState;
 use crate::state::handle_right_click;
 use crate::state::load_duel;
 use crate::state::run_game_loop;
+use crate::state::send_response;
+use crate::ui::Animator;
 use crate::ui::LoadingScreen;
+use crate::ui::animation::{AnimationBounds, AnimationStatus, CURRENT_ANIMATION};
 use crate::ui::components::UIButton;
 use crate::ui::components::svg::FullscreenIcon;
 use crate::ui::components::svg::ResetIcon;
 use field::Field;
 use modal::ModalContainer;
+
+pub(super) struct PendingSummon {
+    pub source_hand_index: usize,
+    pub placement: Option<Response>,
+}
+
+pub(super) static PENDING_SUMMON: GlobalSignal<Option<PendingSummon>> = Signal::global(|| None);
+
+pub(super) fn start_pending_summon(destination: AnimationBounds, placement: Response) -> bool {
+    CURRENT_ANIMATION.with_mut(|animation| {
+        if let (Some(animation), Some(pending_summon)) =
+            (animation.as_mut(), PENDING_SUMMON.write().as_mut())
+        {
+            if animation.status == AnimationStatus::Queued {
+                pending_summon.placement = Some(placement);
+                animation.start(destination);
+                return true;
+            }
+        }
+
+        false
+    })
+}
 
 #[component]
 pub fn DuelWrapper(
@@ -66,8 +93,31 @@ pub fn DuelWrapper(
 #[component]
 pub fn DuelScreen(duel_resource: Resource<anyhow::Result<Duel>>) -> Element {
     let mut state = use_context::<UIState>();
+
     // Start game loop
     use_effect(run_game_loop);
+    use_effect(move || {
+        let animation_complete = CURRENT_ANIMATION
+            .read()
+            .as_ref()
+            .is_some_and(|animation| animation.status == AnimationStatus::Done);
+
+        if !animation_complete {
+            return;
+        }
+
+        let response = PENDING_SUMMON.with_mut(|pending_summon| {
+            pending_summon
+                .as_mut()
+                .and_then(|pending_summon| pending_summon.placement.take())
+        });
+
+        if let Some(response) = response {
+            *PENDING_SUMMON.write() = None;
+            *CURRENT_ANIMATION.write() = None;
+            send_response(response);
+        }
+    });
 
     rsx!(
         main {
@@ -82,6 +132,8 @@ pub fn DuelScreen(duel_resource: Resource<anyhow::Result<Duel>>) -> Element {
                 class: "fixed top-3 left-3 z-50 w-max h-max p-2",
                 label: "Restart game",
                 onclick: move |_| {
+                    *CURRENT_ANIMATION.write() = None;
+                    *PENDING_SUMMON.write() = None;
                     state.reset();
                     duel_resource.clear();
                     duel_resource.restart();
@@ -102,6 +154,7 @@ pub fn DuelScreen(duel_resource: Resource<anyhow::Result<Duel>>) -> Element {
                 },
                 FullscreenIcon {}
             }
+            Animator {}
             ModalContainer {}
             Field {}
             Hand {}
