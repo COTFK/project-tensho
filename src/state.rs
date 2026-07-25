@@ -407,6 +407,10 @@ pub fn handle_core_message() {
             state.sort_cards_to_select_from.set(Some(message));
             state.waiting_on_input.set(true);
         }
+        CoreMessage::Draw(message) => {
+            debug!("{message:?}");
+            state.waiting_on_input.set(true);
+        }
     }
 
     state
