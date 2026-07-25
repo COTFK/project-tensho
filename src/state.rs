@@ -22,6 +22,7 @@ use crate::ocgcore::messages::SelectTributeMessageData;
 use crate::ocgcore::messages::SelectUnselectMessageData;
 use crate::ocgcore::messages::SortCardMessageData;
 use crate::settings::CustomHand;
+use crate::ui::start_draw_animation;
 use crate::utility::EXTRA_DECK_IDS;
 use crate::utility::MAIN_DECK_IDS;
 use crate::utility::cache_labels;
@@ -408,8 +409,10 @@ pub fn handle_core_message() {
             state.waiting_on_input.set(true);
         }
         CoreMessage::Draw(message) => {
-            debug!("{message:?}");
-            state.waiting_on_input.set(true);
+            let hand_size = (state.hand_contents)().len();
+            if start_draw_animation(message.cards, hand_size, state) {
+                state.waiting_on_input.set(true);
+            }
         }
     }
 
