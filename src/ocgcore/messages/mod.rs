@@ -1,4 +1,5 @@
 mod announce_number;
+mod draw;
 mod idle;
 mod select_card;
 mod select_chain;
@@ -12,6 +13,7 @@ mod select_yes_no;
 mod sort_card;
 
 pub use announce_number::AnnounceNumberMessageData;
+pub use draw::DrawMessageData;
 pub use idle::IdleMessageData;
 pub use select_card::SelectCardMessageData;
 pub use select_chain::SelectChainMessageData;
@@ -28,6 +30,7 @@ pub use sort_card::SortCardMessageData;
 pub enum CoreMessage {
     Retry,
     Idle(IdleMessageData),
+    Draw(DrawMessageData),
     SelectEffectYN(SelectEffectYNMessageData),
     SelectYesNo(SelectYesNoMessageData),
     SelectCard(SelectCardMessageData),
@@ -77,6 +80,7 @@ impl TryFrom<&[u8]> for CoreMessage {
             26 => Ok(CoreMessage::SelectUnselectCard(
                 SelectUnselectMessageData::try_from(bytes)?,
             )),
+            90 => Ok(CoreMessage::Draw(DrawMessageData::try_from(bytes)?)),
             143 => Ok(CoreMessage::AnnounceNumber(
                 AnnounceNumberMessageData::try_from(bytes)?,
             )),
