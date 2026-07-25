@@ -33,6 +33,8 @@ pub fn Card(
             }
             img {
                 class: "relative w-full",
+                loading: "eager",
+                decoding: "async",
                 image_rendering: "smooth",
                 aspect_ratio: "59/86",
                 src: if !facedown {
