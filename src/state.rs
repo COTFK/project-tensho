@@ -73,11 +73,10 @@ pub fn run_game_loop() {
     if !(state.waiting_on_input)() {
         loop {
             match duel.process() {
-                DuelStatus::Awaiting => {
+                DuelStatus::Awaiting | DuelStatus::Continue => {
                     handle_core_message();
                     break;
                 }
-                DuelStatus::Continue => continue,
                 DuelStatus::End => break,
             }
         }
