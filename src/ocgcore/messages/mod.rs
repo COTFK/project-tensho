@@ -28,6 +28,7 @@ pub use sort_card::SortCardMessageData;
 
 #[derive(Hash, Debug, Clone, PartialEq, Eq)]
 pub enum CoreMessage {
+    Unsupported(u8),
     Retry,
     Idle(IdleMessageData),
     Draw(DrawMessageData),
@@ -84,7 +85,7 @@ impl TryFrom<&[u8]> for CoreMessage {
             143 => Ok(CoreMessage::AnnounceNumber(
                 AnnounceNumberMessageData::try_from(bytes)?,
             )),
-            _ => anyhow::bail!("Received wrong message: {message_type}"),
+            _ => Ok(CoreMessage::Unsupported(message_type)),
         }
     }
 }

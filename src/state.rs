@@ -75,8 +75,9 @@ pub fn run_game_loop() {
         loop {
             match duel.process() {
                 DuelStatus::Awaiting | DuelStatus::Continue => {
-                    handle_core_message();
-                    break;
+                    if handle_core_message() {
+                        break;
+                    }
                 }
                 DuelStatus::End => break,
             }
@@ -257,7 +258,7 @@ impl UIState {
     }
 }
 
-pub fn handle_core_message() {
+pub fn handle_core_message() -> bool {
     let mut state = consume_context::<UIState>();
     let duel = consume_context::<Signal<Option<Duel>>>();
     let duel = duel().expect("Duel context missing active duel");
@@ -265,6 +266,10 @@ pub fn handle_core_message() {
     state.hand_contents.set(duel.get_raw_hand());
 
     match duel.parse_messages() {
+        CoreMessage::Unsupported(message_type) => {
+            tracing::debug!(message_type, "Skipping unsupported core message");
+            return false;
+        }
         CoreMessage::Retry => {
             panic!("Received Retry - this shouldn't happen.");
         }
@@ -338,7 +343,7 @@ pub fn handle_core_message() {
         CoreMessage::SelectChain(message) => {
             if message.effects.is_empty() {
                 send_response(Response::PassPriority);
-                return;
+                return true;
             }
 
             state.hand_contents.with_mut(|hand| {
@@ -432,4 +437,5 @@ pub fn handle_core_message() {
     state
         .banishment
         .set(duel.get_cards(CardLocation::Banishment));
+    true
 }
