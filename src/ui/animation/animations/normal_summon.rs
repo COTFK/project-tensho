@@ -1,15 +1,15 @@
-use super::super::{Animation, AnimationBounds};
+use super::super::{Animation, AnimationBounds, scale_between};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NormalSummon;
 
 impl Animation for NormalSummon {
+    fn name(&self) -> &'static str {
+        "normal-summon"
+    }
+
     fn keyframes(&self, source: AnimationBounds, destination: AnimationBounds) -> String {
-        let destination_scale = if source.width > 0.0 {
-            destination.width / source.width
-        } else {
-            1.0
-        };
+        let destination_scale = scale_between(source, destination);
         let lift_scale = 1.5;
         let lift_center_x = source.x
             + source.width / 2.0
