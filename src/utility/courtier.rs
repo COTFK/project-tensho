@@ -76,7 +76,15 @@ fn subtype_flag(subtype: &str) -> CardType {
         "Xyz" => CardType::XYZ,
         "Pendulum" => CardType::PENDULUM,
         "Link" => CardType::LINK,
-        _ => CardType::empty(),
+        "Quick-Play" => CardType::QUICKPLAY,
+        "Continuous" => CardType::CONTINUOUS,
+        "Equip" => CardType::EQUIP,
+        "Field" => CardType::FIELD,
+        "Counter" => CardType::COUNTER,
+        other => {
+            tracing::warn!(subtype = %other, "unknown card subtype");
+            CardType::empty()
+        }
     }
 }
 
@@ -298,6 +306,39 @@ mod tests {
         let card: CourtierCardData = serde_json::from_str(json).unwrap();
 
         assert_eq!(card.labels.name.en, "Fire King Island");
+    }
+
+    fn spell_with_subtypes(subtypes: Option<Vec<&str>>) -> CourtierCardData {
+        CourtierCardData {
+            r#type: "Spell".into(),
+            subtypes: subtypes.map(|s| s.iter().map(|s| s.to_string()).collect()),
+            ..card_with(&[])
+        }
+    }
+
+    #[test]
+    fn continuous_spell_carries_continuous_flag() {
+        let card = spell_with_subtypes(Some(vec!["Continuous"]));
+
+        assert_eq!(
+            card_type(&card).unwrap(),
+            (CardType::SPELL | CardType::CONTINUOUS).bits()
+        );
+    }
+
+    #[test]
+    fn normal_spell_has_only_spell_flag() {
+        let card = spell_with_subtypes(None);
+
+        assert_eq!(card_type(&card).unwrap(), CardType::SPELL.bits());
+    }
+
+    #[test]
+    fn spell_and_trap_subtypes_map_to_their_flags() {
+        assert_eq!(subtype_flag("Quick-Play"), CardType::QUICKPLAY);
+        assert_eq!(subtype_flag("Equip"), CardType::EQUIP);
+        assert_eq!(subtype_flag("Field"), CardType::FIELD);
+        assert_eq!(subtype_flag("Counter"), CardType::COUNTER);
     }
 
     // Mirrors ocgcore's card::match_setcode: the base set must match and every bit of the query must be on the card.
