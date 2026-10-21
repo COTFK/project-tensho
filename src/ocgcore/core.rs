@@ -3,6 +3,7 @@ use std::ffi::c_void;
 use std::rc::Rc;
 
 use anyhow::anyhow;
+use ocgcore_ffi::constants::DUEL_MODE_MR5;
 use ocgcore_ffi::types::OCG_Duel;
 use ocgcore_ffi::types::OCG_DuelOptions;
 use ocgcore_ffi::types::OCG_Player;
@@ -48,7 +49,6 @@ impl OCGCore {
     }
 
     pub fn create_duel(&self, starting_draw_count: u32) -> anyhow::Result<Duel> {
-        const DUEL_MODE_MR5: u64 = 0x2E800;
         let mut duel: OCG_Duel = std::ptr::null_mut();
 
         let payload_ptr = &*self._context as *const DuelContext as *mut c_void;
@@ -59,7 +59,7 @@ impl OCGCore {
                 rand::random(),
                 rand::random(),
             ],
-            flags: DUEL_MODE_MR5,
+            flags: DUEL_MODE_MR5.into(),
             team1: OCG_Player {
                 starting_lp: 8000,
                 starting_draw_count,

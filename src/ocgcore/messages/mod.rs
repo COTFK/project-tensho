@@ -26,6 +26,13 @@ pub use select_unselect_card::SelectUnselectMessageData;
 pub use select_yes_no::SelectYesNoMessageData;
 pub use sort_card::SortCardMessageData;
 
+use ocgcore_ffi::constants::{
+    MSG_ANNOUNCE_NUMBER, MSG_DRAW, MSG_RETRY, MSG_SELECT_CARD, MSG_SELECT_CHAIN,
+    MSG_SELECT_EFFECTYN, MSG_SELECT_IDLECMD, MSG_SELECT_OPTION, MSG_SELECT_PLACE,
+    MSG_SELECT_POSITION, MSG_SELECT_TRIBUTE, MSG_SELECT_UNSELECT_CARD, MSG_SELECT_YESNO,
+    MSG_SORT_CARD,
+};
+
 #[derive(Hash, Debug, Clone, PartialEq, Eq)]
 pub enum CoreMessage {
     Unsupported(u8),
@@ -50,39 +57,39 @@ impl TryFrom<&[u8]> for CoreMessage {
 
     fn try_from(bytes: &[u8]) -> anyhow::Result<Self, Self::Error> {
         let message_type = bytes[4];
-        match message_type {
-            1 => Ok(CoreMessage::Retry),
-            11 => Ok(CoreMessage::Idle(IdleMessageData::try_from(bytes)?)),
-            12 => Ok(CoreMessage::SelectEffectYN(
+        match u32::from(message_type) {
+            MSG_RETRY => Ok(CoreMessage::Retry),
+            MSG_SELECT_IDLECMD => Ok(CoreMessage::Idle(IdleMessageData::try_from(bytes)?)),
+            MSG_SELECT_EFFECTYN => Ok(CoreMessage::SelectEffectYN(
                 SelectEffectYNMessageData::try_from(bytes)?,
             )),
-            13 => Ok(CoreMessage::SelectYesNo(SelectYesNoMessageData::try_from(
+            MSG_SELECT_YESNO => Ok(CoreMessage::SelectYesNo(SelectYesNoMessageData::try_from(
                 bytes,
             )?)),
-            14 => Ok(CoreMessage::SelectOption(
+            MSG_SELECT_OPTION => Ok(CoreMessage::SelectOption(
                 SelectOptionMessageData::try_from(bytes)?,
             )),
-            15 => Ok(CoreMessage::SelectCard(SelectCardMessageData::try_from(
+            MSG_SELECT_CARD => Ok(CoreMessage::SelectCard(SelectCardMessageData::try_from(
                 bytes,
             )?)),
-            16 => Ok(CoreMessage::SelectChain(SelectChainMessageData::try_from(
+            MSG_SELECT_CHAIN => Ok(CoreMessage::SelectChain(SelectChainMessageData::try_from(
                 bytes,
             )?)),
-            18 => Ok(CoreMessage::SelectPlace(SelectPlaceMessageData::try_from(
+            MSG_SELECT_PLACE => Ok(CoreMessage::SelectPlace(SelectPlaceMessageData::try_from(
                 bytes,
             )?)),
-            19 => Ok(CoreMessage::SelectPosition(
+            MSG_SELECT_POSITION => Ok(CoreMessage::SelectPosition(
                 SelectPositionMessageData::try_from(bytes)?,
             )),
-            20 => Ok(CoreMessage::SelectTribute(
+            MSG_SELECT_TRIBUTE => Ok(CoreMessage::SelectTribute(
                 SelectTributeMessageData::try_from(bytes)?,
             )),
-            25 => Ok(CoreMessage::SortCard(SortCardMessageData::try_from(bytes)?)),
-            26 => Ok(CoreMessage::SelectUnselectCard(
+            MSG_SORT_CARD => Ok(CoreMessage::SortCard(SortCardMessageData::try_from(bytes)?)),
+            MSG_SELECT_UNSELECT_CARD => Ok(CoreMessage::SelectUnselectCard(
                 SelectUnselectMessageData::try_from(bytes)?,
             )),
-            90 => Ok(CoreMessage::Draw(DrawMessageData::try_from(bytes)?)),
-            143 => Ok(CoreMessage::AnnounceNumber(
+            MSG_DRAW => Ok(CoreMessage::Draw(DrawMessageData::try_from(bytes)?)),
+            MSG_ANNOUNCE_NUMBER => Ok(CoreMessage::AnnounceNumber(
                 AnnounceNumberMessageData::try_from(bytes)?,
             )),
             _ => Ok(CoreMessage::Unsupported(message_type)),

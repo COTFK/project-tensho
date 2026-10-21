@@ -4,6 +4,7 @@ use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
 use crate::ocgcore::utility::read_u8;
 use crate::ocgcore::utility::read_u32;
+use ocgcore_ffi::constants::MSG_SELECT_UNSELECT_CARD;
 
 #[derive(Hash, Debug, Clone, PartialEq, Eq)]
 pub struct SelectUnselectMessageData {
@@ -50,9 +51,9 @@ impl TryFrom<&[u8]> for SelectUnselectMessageData {
 
     fn try_from(raw_bytes: &[u8]) -> anyhow::Result<Self, Self::Error> {
         // 1. Handle length headers if the socket layer prepends them
-        let message_offset = if raw_bytes[0] == 26 {
+        let message_offset = if u32::from(raw_bytes[0]) == MSG_SELECT_UNSELECT_CARD {
             0
-        } else if raw_bytes.len() >= 5 && raw_bytes[4] == 26 {
+        } else if raw_bytes.len() >= 5 && u32::from(raw_bytes[4]) == MSG_SELECT_UNSELECT_CARD {
             let declared_len = u32::from_le_bytes(raw_bytes[0..4].try_into().unwrap()) as usize;
             if declared_len != raw_bytes.len().saturating_sub(4) {
                 anyhow::bail!("Length prefix mismatch parsing message 26");
@@ -60,7 +61,7 @@ impl TryFrom<&[u8]> for SelectUnselectMessageData {
             4
         } else {
             anyhow::bail!(
-                "Invalid message ID: Expected MSG_SELECT_UNSELECT_CARD (26), got {}",
+                "Invalid message ID: Expected MSG_SELECT_UNSELECT_CARD ({MSG_SELECT_UNSELECT_CARD}), got {}",
                 raw_bytes.first().copied().unwrap_or_default()
             );
         };

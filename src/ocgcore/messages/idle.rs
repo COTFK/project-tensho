@@ -4,6 +4,7 @@ use crate::ocgcore::data::CardData;
 use crate::ocgcore::utility::read_u8;
 use crate::ocgcore::utility::read_u32;
 use crate::ocgcore::utility::read_u64;
+use ocgcore_ffi::constants::MSG_SELECT_IDLECMD;
 
 #[derive(Hash, Debug, Clone, PartialEq, Eq, Default)]
 pub struct IdleMessageData {
@@ -30,9 +31,9 @@ impl TryFrom<&[u8]> for IdleMessageData {
             );
         }
 
-        let message_offset = if raw_bytes[0] == 11 {
+        let message_offset = if u32::from(raw_bytes[0]) == MSG_SELECT_IDLECMD {
             0
-        } else if raw_bytes.len() >= 5 && raw_bytes[4] == 11 {
+        } else if raw_bytes.len() >= 5 && u32::from(raw_bytes[4]) == MSG_SELECT_IDLECMD {
             let declared_len = u32::from_le_bytes(raw_bytes[0..4].try_into().unwrap()) as usize;
             if declared_len != raw_bytes.len().saturating_sub(4) {
                 anyhow::bail!(
@@ -47,9 +48,9 @@ impl TryFrom<&[u8]> for IdleMessageData {
             0
         };
 
-        if raw_bytes.get(message_offset).copied() != Some(11) {
+        if raw_bytes.get(message_offset).copied().map(u32::from) != Some(MSG_SELECT_IDLECMD) {
             anyhow::bail!(
-                "Invalid message ID: Expected MSG_SELECT_IDLECMD (11), got {}",
+                "Invalid message ID: Expected MSG_SELECT_IDLECMD ({MSG_SELECT_IDLECMD}), got {}",
                 raw_bytes.get(message_offset).copied().unwrap_or_default()
             );
         }

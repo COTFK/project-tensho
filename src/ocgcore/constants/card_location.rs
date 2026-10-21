@@ -1,29 +1,34 @@
 use std::fmt::Display;
 
+use ocgcore_ffi::constants::{
+    LOCATION_DECK, LOCATION_EXTRA, LOCATION_GRAVE, LOCATION_HAND, LOCATION_MZONE, LOCATION_REMOVED,
+    LOCATION_SZONE,
+};
+
 #[derive(Hash, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum CardLocation {
     #[default]
-    Deck = 1,
-    Hand = 2,
-    MonsterZone = 4,
-    SpellTrapZone = 8,
-    Graveyard = 16,
-    Banishment = 32,
-    ExtraDeck = 64,
+    Deck = LOCATION_DECK as isize,
+    Hand = LOCATION_HAND as isize,
+    MonsterZone = LOCATION_MZONE as isize,
+    SpellTrapZone = LOCATION_SZONE as isize,
+    Graveyard = LOCATION_GRAVE as isize,
+    Banishment = LOCATION_REMOVED as isize,
+    ExtraDeck = LOCATION_EXTRA as isize,
 }
 
 impl TryFrom<u8> for CardLocation {
     type Error = anyhow::Error;
 
     fn try_from(value: u8) -> anyhow::Result<Self, Self::Error> {
-        match value {
-            1 => Ok(CardLocation::Deck),
-            2 => Ok(CardLocation::Hand),
-            4 => Ok(CardLocation::MonsterZone),
-            8 => Ok(CardLocation::SpellTrapZone),
-            16 => Ok(CardLocation::Graveyard),
-            32 => Ok(CardLocation::Banishment),
-            64 => Ok(CardLocation::ExtraDeck),
+        match u32::from(value) {
+            LOCATION_DECK => Ok(CardLocation::Deck),
+            LOCATION_HAND => Ok(CardLocation::Hand),
+            LOCATION_MZONE => Ok(CardLocation::MonsterZone),
+            LOCATION_SZONE => Ok(CardLocation::SpellTrapZone),
+            LOCATION_GRAVE => Ok(CardLocation::Graveyard),
+            LOCATION_REMOVED => Ok(CardLocation::Banishment),
+            LOCATION_EXTRA => Ok(CardLocation::ExtraDeck),
             _ => anyhow::bail!("Received wrong location value: {value}"),
         }
     }

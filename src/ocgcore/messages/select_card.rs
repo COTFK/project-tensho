@@ -1,6 +1,7 @@
 use crate::ocgcore::CardData;
 use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
+use ocgcore_ffi::constants::LOCATION_OVERLAY;
 
 #[derive(Hash, Debug, Clone, PartialEq, Eq)]
 pub struct SelectCardMessageData {
@@ -51,8 +52,8 @@ impl TryFrom<&[u8]> for SelectCardMessageData {
 
             // 3. Bitmask Location Extraction
             let raw_location_byte = raw_bytes[offset + 5];
-            let _is_xyz_material = (raw_location_byte & 0x80) != 0;
-            let base_location_byte = raw_location_byte & 0x7F;
+            let _is_xyz_material = (raw_location_byte & LOCATION_OVERLAY as u8) != 0;
+            let base_location_byte = raw_location_byte & !(LOCATION_OVERLAY as u8);
 
             let location = CardLocation::try_from(base_location_byte)?;
 

@@ -1,4 +1,7 @@
 use crate::ocgcore::constants::BattlePosition;
+use ocgcore_ffi::constants::{
+    POS_FACEDOWN_ATTACK, POS_FACEDOWN_DEFENSE, POS_FACEUP_ATTACK, POS_FACEUP_DEFENSE,
+};
 
 #[derive(Hash, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SelectPositionMessageData {
@@ -14,18 +17,18 @@ impl TryFrom<&[u8]> for SelectPositionMessageData {
         let mut positions = Vec::new();
         let player = bytes[5];
         let card_code = u32::from_le_bytes([bytes[6], bytes[7], bytes[8], bytes[9]]);
-        let position_mask = bytes[10];
+        let position_mask = u32::from(bytes[10]);
 
-        if (position_mask & 0x1) != 0 {
+        if (position_mask & POS_FACEUP_ATTACK) != 0 {
             positions.push(BattlePosition::FaceUpAttack);
         }
-        if (position_mask & 0x2) != 0 {
+        if (position_mask & POS_FACEDOWN_ATTACK) != 0 {
             positions.push(BattlePosition::FaceDownAttack);
         }
-        if (position_mask & 0x4) != 0 {
+        if (position_mask & POS_FACEUP_DEFENSE) != 0 {
             positions.push(BattlePosition::FaceUpDefense);
         }
-        if (position_mask & 0x8) != 0 {
+        if (position_mask & POS_FACEDOWN_DEFENSE) != 0 {
             positions.push(BattlePosition::FaceDownDefense);
         }
 

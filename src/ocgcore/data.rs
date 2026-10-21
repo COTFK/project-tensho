@@ -43,31 +43,31 @@ pub struct CardData {
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
     pub struct CardType: u32 {
-        const MONSTER       = 0x1;
-        const SPELL         = 0x2;
-        const TRAP          = 0x4;
-        const NORMAL        = 0x10;
-        const EFFECT        = 0x20;
-        const FUSION        = 0x40;
-        const RITUAL        = 0x80;
-        const TRAPMONSTER   = 0x100;
-        const SPIRIT        = 0x200;
-        const UNION         = 0x400;
-        const GEMINI        = 0x800;
-        const TUNER         = 0x1000;
-        const SYNCHRO       = 0x2000;
-        const TOKEN         = 0x4000;
-        const MAXIMUM       = 0x8000;
-        const QUICKPLAY     = 0x10000;
-        const CONTINUOUS    = 0x20000;
-        const EQUIP         = 0x40000;
-        const FIELD         = 0x80000;
-        const COUNTER       = 0x100000;
-        const FLIP          = 0x200000;
-        const TOON          = 0x400000;
-        const XYZ           = 0x800000;
-        const PENDULUM      = 0x1000000;
-        const SPSUMMON      = 0x2000000;
-        const LINK          = 0x4000000;
+        const MONSTER = ocgcore_ffi::constants::TYPE_MONSTER;
+        const SPELL = ocgcore_ffi::constants::TYPE_SPELL;
+        const TRAP = ocgcore_ffi::constants::TYPE_TRAP;
+        const NORMAL = ocgcore_ffi::constants::TYPE_NORMAL;
+        const EFFECT = ocgcore_ffi::constants::TYPE_EFFECT;
+        const FUSION = ocgcore_ffi::constants::TYPE_FUSION;
+        const RITUAL = ocgcore_ffi::constants::TYPE_RITUAL;
+        const TRAPMONSTER = ocgcore_ffi::constants::TYPE_TRAPMONSTER;
+        const SPIRIT = ocgcore_ffi::constants::TYPE_SPIRIT;
+        const UNION = ocgcore_ffi::constants::TYPE_UNION;
+        const GEMINI = ocgcore_ffi::constants::TYPE_GEMINI;
+        const TUNER = ocgcore_ffi::constants::TYPE_TUNER;
+        const SYNCHRO = ocgcore_ffi::constants::TYPE_SYNCHRO;
+        const TOKEN = ocgcore_ffi::constants::TYPE_TOKEN;
+        const MAXIMUM = ocgcore_ffi::constants::TYPE_MAXIMUM;
+        const QUICKPLAY = ocgcore_ffi::constants::TYPE_QUICKPLAY;
+        const CONTINUOUS = ocgcore_ffi::constants::TYPE_CONTINUOUS;
+        const EQUIP = ocgcore_ffi::constants::TYPE_EQUIP;
+        const FIELD = ocgcore_ffi::constants::TYPE_FIELD;
+        const COUNTER = ocgcore_ffi::constants::TYPE_COUNTER;
+        const FLIP = ocgcore_ffi::constants::TYPE_FLIP;
+        const TOON = ocgcore_ffi::constants::TYPE_TOON;
+        const XYZ = ocgcore_ffi::constants::TYPE_XYZ;
+        const PENDULUM = ocgcore_ffi::constants::TYPE_PENDULUM;
+        const SPSUMMON = ocgcore_ffi::constants::TYPE_SPSUMMON;
+        const LINK = ocgcore_ffi::constants::TYPE_LINK;
     }
 }

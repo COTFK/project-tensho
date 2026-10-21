@@ -1,13 +1,21 @@
 use std::ffi::c_void;
 use std::rc::Rc;
 
+use ocgcore_ffi::constants::QUERY_ATTACK;
+use ocgcore_ffi::constants::QUERY_CODE;
+use ocgcore_ffi::constants::QUERY_DEFENSE;
+use ocgcore_ffi::constants::QUERY_END;
+use ocgcore_ffi::constants::QUERY_LEVEL;
+use ocgcore_ffi::constants::QUERY_LINK;
+use ocgcore_ffi::constants::QUERY_POSITION;
+use ocgcore_ffi::constants::QUERY_RANK;
+use ocgcore_ffi::constants::QUERY_TYPE;
 use ocgcore_ffi::types::OCG_Duel;
 use ocgcore_ffi::types::OCG_NewCardInfo;
 use ocgcore_ffi::types::OCG_QueryInfo;
 
 use super::OCGCore;
 use super::constants::CardLocation;
-use super::constants::DuelStatus;
 use crate::ocgcore::CardData;
 use crate::ocgcore::Response;
 use crate::ocgcore::constants::BattlePosition;
@@ -15,6 +23,7 @@ use crate::ocgcore::constants::{CardController, CardOwner};
 use crate::ocgcore::data::CardType;
 use crate::ocgcore::data::HandCard;
 use crate::ocgcore::messages::CoreMessage;
+use ocgcore_ffi::enums::OCG_DuelStatus;
 
 #[derive(Hash, Debug, PartialEq)]
 struct DuelInner {
@@ -75,9 +84,9 @@ impl Duel {
         CoreMessage::try_from(messages).unwrap()
     }
 
-    pub fn process(&self) -> DuelStatus {
+    pub fn process(&self) -> OCG_DuelStatus {
         let status = unsafe { ocgcore_ffi::OCG_DuelProcess(self.inner.handle) };
-        DuelStatus::try_from(status).unwrap()
+        OCG_DuelStatus::try_from(status).unwrap()
     }
 
     pub fn count_location(&self, team: CardOwner, location: CardLocation) -> u32 {
@@ -188,7 +197,7 @@ impl Duel {
                 ]);
 
                 match query_flag {
-                    0x0000_0001 if cursor + 10 <= payload.len() => {
+                    QUERY_CODE if cursor + 10 <= payload.len() => {
                         card_code = u32::from_le_bytes([
                             payload[cursor + 6],
                             payload[cursor + 7],
@@ -196,7 +205,7 @@ impl Duel {
                             payload[cursor + 9],
                         ]);
                     }
-                    0x0000_0002 if cursor + 10 <= payload.len() => {
+                    QUERY_POSITION if cursor + 10 <= payload.len() => {
                         let raw_position = u32::from_le_bytes([
                             payload[cursor + 6],
                             payload[cursor + 7],
@@ -205,7 +214,7 @@ impl Duel {
                         ]);
                         position = BattlePosition::try_from(raw_position).ok();
                     }
-                    0x0000_0008 if cursor + 10 <= payload.len() => {
+                    QUERY_TYPE if cursor + 10 <= payload.len() => {
                         let raw_card_type = u32::from_le_bytes([
                             payload[cursor + 6],
                             payload[cursor + 7],
@@ -215,7 +224,7 @@ impl Duel {
 
                         card_type = CardType::from_bits_truncate(raw_card_type);
                     }
-                    0x0000_0010 if cursor + 10 <= payload.len() => {
+                    QUERY_LEVEL if cursor + 10 <= payload.len() => {
                         level = Some(u32::from_le_bytes([
                             payload[cursor + 6],
                             payload[cursor + 7],
@@ -223,7 +232,7 @@ impl Duel {
                             payload[cursor + 9],
                         ]));
                     }
-                    0x0000_0020 if cursor + 10 <= payload.len() => {
+                    QUERY_RANK if cursor + 10 <= payload.len() => {
                         rank = Some(u32::from_le_bytes([
                             payload[cursor + 6],
                             payload[cursor + 7],
@@ -231,7 +240,7 @@ impl Duel {
                             payload[cursor + 9],
                         ]));
                     }
-                    0x0000_0100 if cursor + 10 <= payload.len() => {
+                    QUERY_ATTACK if cursor + 10 <= payload.len() => {
                         attack = Some(u32::from_le_bytes([
                             payload[cursor + 6],
                             payload[cursor + 7],
@@ -239,7 +248,7 @@ impl Duel {
                             payload[cursor + 9],
                         ]));
                     }
-                    0x0000_0200 if cursor + 10 <= payload.len() => {
+                    QUERY_DEFENSE if cursor + 10 <= payload.len() => {
                         defense = Some(u32::from_le_bytes([
                             payload[cursor + 6],
                             payload[cursor + 7],
@@ -247,7 +256,7 @@ impl Duel {
                             payload[cursor + 9],
                         ]));
                     }
-                    0x0080_0000 => {
+                    QUERY_LINK => {
                         link_rating = Some(u32::from_le_bytes([
                             payload[cursor + 6],
                             payload[cursor + 7],
@@ -255,7 +264,7 @@ impl Duel {
                             payload[cursor + 9],
                         ]));
                     }
-                    0x8000_0000 => {
+                    QUERY_END => {
                         cards.push(Some(CardData {
                             card_code,
                             controller: CardController::Player,

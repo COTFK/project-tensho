@@ -1,26 +1,23 @@
 use std::fmt::Display;
 
+use ocgcore_ffi::constants::{
+    POS_FACEDOWN, POS_FACEDOWN_ATTACK, POS_FACEDOWN_DEFENSE, POS_FACEUP_ATTACK, POS_FACEUP_DEFENSE,
+};
+
 #[derive(Hash, Debug, PartialEq, Eq, Copy, Clone, PartialOrd, Ord)]
 pub enum BattlePosition {
-    FaceUpAttack = 1,
-    FaceDownAttack = 2,
-    FaceUpDefense = 4,
-    FaceDownDefense = 8,
-    FaceDown = 10,
+    FaceUpAttack = POS_FACEUP_ATTACK as isize,
+    FaceDownAttack = POS_FACEDOWN_ATTACK as isize,
+    FaceUpDefense = POS_FACEUP_DEFENSE as isize,
+    FaceDownDefense = POS_FACEDOWN_DEFENSE as isize,
+    FaceDown = POS_FACEDOWN as isize,
 }
 
 impl TryFrom<u8> for BattlePosition {
     type Error = anyhow::Error;
 
     fn try_from(value: u8) -> anyhow::Result<Self, Self::Error> {
-        match value {
-            1 => Ok(BattlePosition::FaceUpAttack),
-            2 => Ok(BattlePosition::FaceDownAttack),
-            4 => Ok(BattlePosition::FaceUpDefense),
-            8 => Ok(BattlePosition::FaceDownDefense),
-            10 => Ok(BattlePosition::FaceDown),
-            _ => anyhow::bail!("Received wrong battle position value: {value}"),
-        }
+        Self::try_from(u32::from(value))
     }
 }
 
@@ -29,11 +26,11 @@ impl TryFrom<u32> for BattlePosition {
 
     fn try_from(value: u32) -> anyhow::Result<Self, Self::Error> {
         match value {
-            1 => Ok(BattlePosition::FaceUpAttack),
-            2 => Ok(BattlePosition::FaceDownAttack),
-            4 => Ok(BattlePosition::FaceUpDefense),
-            8 => Ok(BattlePosition::FaceDownDefense),
-            10 => Ok(BattlePosition::FaceDown),
+            POS_FACEUP_ATTACK => Ok(BattlePosition::FaceUpAttack),
+            POS_FACEDOWN_ATTACK => Ok(BattlePosition::FaceDownAttack),
+            POS_FACEUP_DEFENSE => Ok(BattlePosition::FaceUpDefense),
+            POS_FACEDOWN_DEFENSE => Ok(BattlePosition::FaceDownDefense),
+            POS_FACEDOWN => Ok(BattlePosition::FaceDown),
             _ => anyhow::bail!("Received wrong battle position value: {value}"),
         }
     }

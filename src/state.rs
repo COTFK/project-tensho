@@ -13,7 +13,6 @@ use crate::ocgcore::constants::BattlePosition;
 use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
 use crate::ocgcore::constants::CardOwner;
-use crate::ocgcore::constants::DuelStatus;
 use crate::ocgcore::messages::AnnounceNumberMessageData;
 use crate::ocgcore::messages::CoreMessage;
 use crate::ocgcore::messages::SelectCardMessageData;
@@ -30,6 +29,7 @@ use crate::utility::cache_scripts;
 use crate::utility::get_cached_label;
 use crate::utility::get_cached_script;
 use crate::utility::get_card_data;
+use ocgcore_ffi::enums::OCG_DuelStatus;
 
 #[derive(Hash, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SelectedCard {
@@ -74,12 +74,13 @@ pub fn run_game_loop() {
     if !(state.waiting_on_input)() {
         loop {
             match duel.process() {
-                DuelStatus::Awaiting | DuelStatus::Continue => {
+                OCG_DuelStatus::OCG_DUEL_STATUS_AWAITING
+                | OCG_DuelStatus::OCG_DUEL_STATUS_CONTINUE => {
                     if handle_core_message() {
                         break;
                     }
                 }
-                DuelStatus::End => break,
+                OCG_DuelStatus::OCG_DUEL_STATUS_END => break,
             }
         }
     }
