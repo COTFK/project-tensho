@@ -1,3 +1,4 @@
+use super::labels::CardLabel;
 use ocgcore_ffi::types::OCG_CardData;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -11,6 +12,7 @@ std::thread_local! {
 #[derive(Debug, Clone)]
 pub struct CardData {
     pub data: OCG_CardData,
+    pub labels: CardLabel,
     _setcodes: Box<[u16]>, // owns the buffer that data.setcodes should point to
 }
 
@@ -26,13 +28,20 @@ impl CardDatabase {
         }
     }
 
-    pub fn insert(&mut self, code: u32, mut data: OCG_CardData, setcodes: &[u16]) {
+    pub fn insert(
+        &mut self,
+        code: u32,
+        mut data: OCG_CardData,
+        setcodes: &[u16],
+        labels: CardLabel,
+    ) {
         let mut buf: Box<[u16]> = setcodes.iter().copied().chain(std::iter::once(0)).collect();
         data.setcodes = buf.as_mut_ptr();
         self.cards.insert(
             code,
             Box::new(CardData {
                 data,
+                labels,
                 _setcodes: buf,
             }),
         );
@@ -42,8 +51,8 @@ impl CardDatabase {
         self.cards.extend(other.cards);
     }
 
-    pub fn get(&self, code: u32) -> Option<OCG_CardData> {
-        self.cards.get(&code).map(|card| card.data)
+    pub fn get(&self, code: u32) -> Option<&CardData> {
+        self.cards.get(&code).map(|card| card.as_ref())
     }
 }
 
@@ -51,9 +60,13 @@ pub fn store_card_data(db: CardDatabase) {
     CARD_DATABASE.with(|cache| cache.borrow_mut().extend(db));
 }
 
+pub fn get_card_label(code: u32) -> Option<CardLabel> {
+    CARD_DATABASE.with(|cache| cache.borrow().get(code).map(|card| card.labels.clone()))
+}
+
 pub fn get_card_data(code: u32) -> OCG_CardData {
     CARD_DATABASE
-        .with(|cache| cache.borrow().get(code))
+        .with(|cache| cache.borrow().get(code).map(|card| card.data))
         .unwrap_or_else(|| {
             tracing::warn!(code, "engine requested card data that is not cached");
             OCG_CardData {

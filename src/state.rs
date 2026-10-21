@@ -24,9 +24,8 @@ use crate::settings::CustomHand;
 use crate::ui::start_draw_animation;
 use crate::utility::EXTRA_DECK_IDS;
 use crate::utility::MAIN_DECK_IDS;
-use crate::utility::cache_labels;
 use crate::utility::cache_scripts;
-use crate::utility::get_cached_label;
+use crate::utility::get_card_label;
 use crate::utility::get_cached_script;
 use crate::utility::get_card_data;
 use ocgcore_ffi::enums::OCG_DuelStatus;
@@ -134,7 +133,6 @@ pub async fn cache_cards() {
         .collect::<Vec<_>>();
 
     cache_scripts(&all_cards).await;
-    cache_labels(&all_cards).await;
 }
 
 fn pull_ids_to_front(main_array: &mut [u32; 40], target_ids: &[u32]) {
@@ -389,7 +387,7 @@ pub fn handle_core_message() -> bool {
             state.waiting_on_input.set(true);
         }
         CoreMessage::SelectYesNo(message) => {
-            let label = get_cached_label(message.card_code).unwrap();
+            let label = get_card_label(message.card_code).unwrap();
             state.yes_no_question.set(Some(
                 label
                     .optional_strings

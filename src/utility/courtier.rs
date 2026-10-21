@@ -1,6 +1,7 @@
 use super::COURTIER_API_URL;
 use super::card_database::CardDatabase;
 use super::get_cached_script;
+use super::labels::build_card_label;
 use crate::ocgcore::CardType;
 use ocgcore_ffi::constants::{
     ATTRIBUTE_DARK, ATTRIBUTE_DIVINE, ATTRIBUTE_EARTH, ATTRIBUTE_FIRE, ATTRIBUTE_LIGHT,
@@ -31,6 +32,17 @@ struct CourtierCardData {
     scale: Option<u32>,
     linkval: Option<u32>,
     linkmarkers: Option<Vec<u32>>,
+    labels: CourtierLabels,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
+struct CourtierLabels {
+    name: CourtierLabelName,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
+struct CourtierLabelName {
+    en: String,
 }
 
 const UNKNOWN_STAT: i32 = -2;
@@ -228,8 +240,10 @@ pub async fn fetch_card_data(card_ids: Vec<u32>) -> anyhow::Result<CardDatabase>
 
     for card in card_data {
         let setcodes = card_setcodes(&card, &archetypes);
+        let name = card.labels.name.en.clone();
         let data = OCG_CardData::try_from(card)?;
-        db.insert(data.code, data, &setcodes);
+        let labels = build_card_label(data.code, name);
+        db.insert(data.code, data, &setcodes, labels);
     }
 
     let missing: Vec<u32> = requested
@@ -266,7 +280,24 @@ mod tests {
             scale: None,
             linkval: None,
             linkmarkers: None,
+            labels: CourtierLabels {
+                name: CourtierLabelName { en: String::new() },
+            },
         }
+    }
+
+    #[test]
+    fn labels_name_is_read_from_yaml_yugi_record() {
+        let json = r#"{
+            "id": "57554544",
+            "name": "Fire King Island",
+            "type": "Spell",
+            "labels": { "name": { "en": "Fire King Island", "ja": "炎王の島" } }
+        }"#;
+
+        let card: CourtierCardData = serde_json::from_str(json).unwrap();
+
+        assert_eq!(card.labels.name.en, "Fire King Island");
     }
 
     // Mirrors ocgcore's card::match_setcode: the base set must match and every bit of the query must be on the card.
