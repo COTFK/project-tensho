@@ -30,6 +30,8 @@ use crate::utility::get_cached_label;
 use crate::utility::get_cached_script;
 use crate::utility::get_card_data;
 use ocgcore_ffi::enums::OCG_DuelStatus;
+use crate::utility::fetch_card_data;
+use crate::utility::store_card_data;
 
 #[derive(Hash, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SelectedCard {
@@ -171,6 +173,12 @@ pub async fn load_duel(
         Some(core) => core,
         None => return pending().await,
     };
+
+    let ids = MAIN_DECK_IDS
+        .into_iter()
+        .chain(EXTRA_DECK_IDS)
+        .collect::<Vec<_>>();
+    store_card_data(fetch_card_data(ids).await?);
 
     let mut main_deck = MAIN_DECK_IDS;
     main_deck.shuffle(&mut rand::rng());

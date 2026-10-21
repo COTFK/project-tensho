@@ -1,6 +1,10 @@
+use std::io::ErrorKind;
 use std::process::Command;
 
 fn main() {
+    println!("cargo:rerun-if-changed=.env");
+    load_dotenv();
+
     println!("cargo:rerun-if-env-changed=GIT_HASH");
     println!("cargo:rerun-if-env-changed=GITHUB_SHA");
     println!("cargo:rerun-if-env-changed=VERCEL_GIT_COMMIT_SHA");
@@ -18,7 +22,18 @@ fn main() {
         .or_else(short_git_hash)
         .unwrap_or_else(|| "unknown".to_string());
 
+    let courtier_url = std::env::var("COURTIER_API_URL").expect("COURTIER_API_URL should be set");
+
     println!("cargo:rustc-env=GIT_HASH={git_hash}");
+    println!("cargo:rustc-env=COURTIER_API_URL={courtier_url}");
+}
+
+fn load_dotenv() {
+    match dotenvy::dotenv() {
+        Ok(_) => {}
+        Err(dotenvy::Error::Io(err)) if err.kind() == ErrorKind::NotFound => {}
+        Err(err) => panic!("failed to load .env: {err}"),
+    }
 }
 
 fn short_git_hash() -> Option<String> {
