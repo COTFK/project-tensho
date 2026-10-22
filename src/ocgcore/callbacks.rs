@@ -8,7 +8,7 @@ use ocgcore_ffi::types::OCG_Duel;
 use super::core::DuelContext;
 
 pub type CardReaderFn = fn(code: u32) -> OCG_CardData;
-pub type ScriptReaderFn = fn(name: &str) -> Option<Vec<u8>>;
+pub type ScriptReaderFn = Box<dyn Fn(&str) -> Option<Vec<u8>>>;
 pub type LogHandlerFn = fn(message: String);
 
 pub unsafe extern "C" fn log_handler_trampoline(

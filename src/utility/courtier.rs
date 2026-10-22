@@ -1,6 +1,5 @@
 use super::COURTIER_API_URL;
 use super::card_database::CardDatabase;
-use super::get_cached_script;
 use super::labels::build_card_label;
 use crate::ocgcore::CardType;
 use ocgcore_ffi::constants::{
@@ -154,7 +153,7 @@ fn link_marker(markers: Option<&[u32]>) -> u32 {
         .fold(0, |mask, &marker| mask | (1 << (marker - 1)))
 }
 
-const ARCHETYPE_SCRIPT: &str = "archetype_setcode_constants.lua";
+pub const ARCHETYPE_SCRIPT: &str = "archetype_setcode_constants.lua";
 
 fn normalize_archetype(name: &str) -> String {
     name.chars()
@@ -223,7 +222,10 @@ impl TryFrom<CourtierCardData> for OCG_CardData {
     }
 }
 
-pub async fn fetch_card_data(card_ids: Vec<u32>) -> anyhow::Result<CardDatabase> {
+pub async fn fetch_card_data(
+    card_ids: Vec<u32>,
+    archetype_script: &[u8],
+) -> anyhow::Result<CardDatabase> {
     let url = format!("{COURTIER_API_URL}/card/data");
 
     let client = reqwest::Client::new();
@@ -240,9 +242,7 @@ pub async fn fetch_card_data(card_ids: Vec<u32>) -> anyhow::Result<CardDatabase>
 
     let card_data = response.json::<Vec<CourtierCardData>>().await?;
 
-    let script = get_cached_script(ARCHETYPE_SCRIPT)
-        .ok_or_else(|| anyhow::anyhow!("{ARCHETYPE_SCRIPT} is not cached"))?;
-    let archetypes = parse_archetype_setcodes(std::str::from_utf8(&script)?)?;
+    let archetypes = parse_archetype_setcodes(std::str::from_utf8(archetype_script)?)?;
 
     let mut db = CardDatabase::new();
 
@@ -270,7 +270,7 @@ mod tests {
     use super::*;
 
     const ARCHETYPE_SCRIPT_TEXT: &str =
-        include_str!("../../assets/scripts/archetype_setcode_constants.lua");
+        include_str!("test_fixtures/archetype_setcode_constants.lua");
 
     fn card_with(archetype: &[&str]) -> CourtierCardData {
         CourtierCardData {

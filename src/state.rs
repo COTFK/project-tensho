@@ -22,11 +22,12 @@ use crate::ocgcore::messages::SelectUnselectMessageData;
 use crate::ocgcore::messages::SortCardMessageData;
 use crate::settings::CustomHand;
 use crate::ui::start_draw_animation;
+use crate::utility::ARCHETYPE_SCRIPT;
 use crate::utility::EXTRA_DECK_IDS;
 use crate::utility::MAIN_DECK_IDS;
+use crate::utility::Scripts;
 use crate::utility::cache_scripts;
 use crate::utility::get_card_label;
-use crate::utility::get_cached_script;
 use crate::utility::get_card_data;
 use ocgcore_ffi::enums::OCG_DuelStatus;
 use crate::utility::fetch_card_data;
@@ -126,13 +127,13 @@ pub fn handle_right_click(evt: MouseEvent) {
     evt.prevent_default();
 }
 
-pub async fn cache_cards() {
+pub async fn cache_cards() -> anyhow::Result<Scripts> {
     let all_cards = MAIN_DECK_IDS
         .into_iter()
         .chain(EXTRA_DECK_IDS)
         .collect::<Vec<_>>();
 
-    cache_scripts(&all_cards).await;
+    cache_scripts(&all_cards).await
 }
 
 fn pull_ids_to_front(main_array: &mut [u32; 40], target_ids: &[u32]) {
@@ -151,10 +152,12 @@ fn pull_ids_to_front(main_array: &mut [u32; 40], target_ids: &[u32]) {
     }
 }
 
-pub async fn load_core() -> anyhow::Result<OCGCore> {
-    OCGCore::load(get_card_data, get_cached_script, |text| {
-        tracing::info!(text)
-    })
+pub async fn load_core(scripts: Scripts) -> anyhow::Result<OCGCore> {
+    OCGCore::load(
+        get_card_data,
+        Box::new(move |name: &str| scripts.get(name).cloned()),
+        |text| tracing::info!(text),
+    )
     .await
 }
 
@@ -176,7 +179,10 @@ pub async fn load_duel(
         .into_iter()
         .chain(EXTRA_DECK_IDS)
         .collect::<Vec<_>>();
-    store_card_data(fetch_card_data(ids).await?);
+    let archetype_script = core
+        .script(ARCHETYPE_SCRIPT)
+        .ok_or_else(|| anyhow::anyhow!("{ARCHETYPE_SCRIPT} is not loaded"))?;
+    store_card_data(fetch_card_data(ids, &archetype_script).await?);
 
     let mut main_deck = MAIN_DECK_IDS;
     main_deck.shuffle(&mut rand::rng());
@@ -194,16 +200,8 @@ pub async fn load_duel(
 
     let duel = core.create_duel(starting_draw_count)?;
 
-    core.load_script(
-        &duel,
-        get_cached_script("constant.lua").unwrap(),
-        "constant.lua",
-    );
-    core.load_script(
-        &duel,
-        get_cached_script("utility.lua").unwrap(),
-        "utility.lua",
-    );
+    core.load_script(&duel, core.script("constant.lua").unwrap(), "constant.lua");
+    core.load_script(&duel, core.script("utility.lua").unwrap(), "utility.lua");
 
     for card_id in main_deck {
         duel.add_card(

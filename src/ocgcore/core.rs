@@ -18,15 +18,13 @@ pub use super::duel::Duel;
 
 /// The internal structure that our FFI `payload` will point to.
 /// This groups everything the trampolines need to do their job.
-#[derive(Hash, Debug, PartialEq)]
-#[allow(unpredictable_function_pointer_comparisons)]
 pub(super) struct DuelContext {
     pub script_reader: ScriptReaderFn,
     pub card_reader: CardReaderFn,
     pub log_handler: LogHandlerFn,
 }
 
-#[derive(Hash, Debug, Clone, PartialEq)]
+#[derive(Clone)]
 pub struct OCGCore {
     _context: Rc<DuelContext>,
 }
@@ -46,6 +44,10 @@ impl OCGCore {
         });
 
         Ok(Self { _context })
+    }
+
+    pub fn script(&self, name: &str) -> Option<Vec<u8>> {
+        (self._context.script_reader)(name)
     }
 
     pub fn create_duel(&self, starting_draw_count: u32) -> anyhow::Result<Duel> {

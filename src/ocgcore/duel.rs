@@ -25,10 +25,10 @@ use crate::ocgcore::data::HandCard;
 use crate::ocgcore::messages::CoreMessage;
 use ocgcore_ffi::enums::OCG_DuelStatus;
 
-#[derive(Hash, Debug, PartialEq)]
 struct DuelInner {
     handle: OCG_Duel,
-    core: OCGCore,
+    // Keeps the core, and its script reader, alive while the engine can call back into it.
+    _core: OCGCore,
 }
 
 impl Drop for DuelInner {
@@ -39,17 +39,21 @@ impl Drop for DuelInner {
     }
 }
 
-#[derive(Hash, Debug, Clone, PartialEq)]
+#[derive(Clone)]
 pub struct Duel {
     inner: Rc<DuelInner>,
 }
 
 impl Duel {
+    pub fn ptr_eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.inner, &other.inner)
+    }
+
     pub fn new(handle: OCG_Duel, core: &OCGCore) -> Self {
         Self {
             inner: Rc::new(DuelInner {
                 handle,
-                core: core.clone(),
+                _core: core.clone(),
             }),
         }
     }

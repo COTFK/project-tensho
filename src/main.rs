@@ -36,11 +36,13 @@ fn main() {
 #[component]
 pub fn App(hand: Option<String>) -> Element {
     let cache_resource = use_resource(cache_cards);
-    if cache_resource.read().is_none() {
-        return rsx! {LoadingScreen {  }};
-    }
+    let scripts = match &*cache_resource.read() {
+        None => return rsx! {LoadingScreen {  }},
+        Some(Err(e)) => return rsx!("{e:#?}"),
+        Some(Ok(scripts)) => scripts.clone(),
+    };
 
-    let core_resource = use_resource(load_core);
+    let core_resource = use_resource(move || load_core(scripts.clone()));
     if core_resource.read().is_none() {
         return rsx! {LoadingScreen {  }};
     }

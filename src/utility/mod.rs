@@ -11,8 +11,9 @@ pub use card_database::get_card_data;
 pub use card_database::get_card_label;
 pub use card_database::store_card_data;
 pub use labels::get_optional_string_label;
+pub use script::Scripts;
 pub use script::cache_scripts;
-pub use script::get_cached_script;
+pub use courtier::ARCHETYPE_SCRIPT;
 pub use courtier::fetch_card_data;
 
 use dioxus::prelude::*;

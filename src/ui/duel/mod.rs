@@ -89,7 +89,12 @@ pub fn DuelWrapper(
         };
 
         let current_duel = duel_context();
-        if current_duel == next_duel {
+        let unchanged = match (&current_duel, &next_duel) {
+            (Some(current), Some(next)) => current.ptr_eq(next),
+            (None, None) => true,
+            _ => false,
+        };
+        if unchanged {
             return;
         }
 

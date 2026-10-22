@@ -1,15 +1,19 @@
-use anyhow::anyhow;
-use dioxus::prelude::*;
-use futures::future::join_all;
+use super::COURTIER_API_URL;
+use anyhow::Context;
+use futures::future::try_join_all;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::rc::Rc;
+use tracing::warn;
 
-static SCRIPT_FOLDER: Asset = asset!("/assets/scripts");
-static BASE_SCRIPTS: [&str; 25] = [
+pub type Scripts = Rc<HashMap<String, Vec<u8>>>;
+
+static BASE_SCRIPTS: [&str; 26] = [
     "constant.lua",
     "utility.lua",
     "card_counter_constants.lua",
     "archetype_setcode_constants.lua",
+    "chain.lua",
     "debug_utility.lua",
     "cards_specific_functions.lua",
     "proc_fusion.lua",
@@ -33,67 +37,70 @@ static BASE_SCRIPTS: [&str; 25] = [
     "deprecated_functions.lua",
 ];
 
-std::thread_local! {
-    static SCRIPT_CACHE: std::cell::RefCell<HashMap<String, Vec<u8>>> = std::cell::RefCell::new(HashMap::new());
+async fn fetch_base_script(
+    client: &reqwest::Client,
+    name: &str,
+) -> anyhow::Result<(String, Vec<u8>)> {
+    let url = format!("{COURTIER_API_URL}/script/{name}");
+    let bytes = client
+        .get(url)
+        .send()
+        .await?
+        .error_for_status()
+        .with_context(|| format!("Unable to fetch script {name}"))?
+        .bytes()
+        .await?;
+
+    Ok((name.to_string(), bytes.to_vec()))
 }
 
-fn cache_script(name: &str, data: Vec<u8>) {
-    SCRIPT_CACHE.with(|cache| {
-        cache.borrow_mut().insert(name.to_string(), data);
-    });
+async fn fetch_card_scripts(
+    client: &reqwest::Client,
+    card_ids: &[u32],
+) -> anyhow::Result<HashMap<String, String>> {
+    let url = format!("{COURTIER_API_URL}/card/script");
+    let body = HashMap::from([("card_ids", card_ids)]);
+
+    let scripts = client
+        .post(url)
+        .json(&body)
+        .send()
+        .await?
+        .error_for_status()
+        .context("Unable to fetch card scripts")?
+        .json()
+        .await?;
+
+    Ok(scripts)
 }
 
-pub fn get_cached_script(name: &str) -> Option<Vec<u8>> {
-    SCRIPT_CACHE.with(|cache| cache.borrow().get(name).cloned())
-}
+pub async fn cache_scripts(deck_card_ids: &[u32]) -> anyhow::Result<Scripts> {
+    let client = reqwest::Client::new();
+    let unique_ids: Vec<u32> = deck_card_ids
+        .iter()
+        .copied()
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
 
-async fn get_script_data(name: &str) -> anyhow::Result<Vec<u8>> {
-    let path = format!("{SCRIPT_FOLDER}/{name}");
+    let (base_scripts, mut card_scripts) = futures::try_join!(
+        try_join_all(
+            BASE_SCRIPTS
+                .iter()
+                .map(|name| fetch_base_script(&client, name))
+        ),
+        fetch_card_scripts(&client, &unique_ids),
+    )?;
 
-    dioxus::asset_resolver::read_asset_bytes(path)
-        .await
-        .map_err(|e| anyhow!("Unable to load script bytes: {e}"))
-}
-
-pub async fn cache_scripts(deck_card_ids: &[u32]) {
-    let mut base_tasks = Vec::new();
-    for script in BASE_SCRIPTS {
-        base_tasks.push(async move {
-            match get_script_data(script).await {
-                Ok(bytes) if !bytes.is_empty() => Some((script.to_string(), bytes)),
-                _ => {
-                    warn!("Failed to load baseline script: {script}");
-                    None
-                }
+    let mut scripts: HashMap<String, Vec<u8>> = base_scripts.into_iter().collect();
+    for id in unique_ids {
+        match card_scripts.remove(&format!("{id:08}")) {
+            Some(lua) => {
+                scripts.insert(format!("c{id}.lua"), lua.into_bytes());
             }
-        });
-    }
-
-    let mut seen = HashSet::new();
-    let mut card_tasks = Vec::new();
-
-    for &id in deck_card_ids {
-        if seen.insert(id) {
-            let script_name = format!("c{id}.lua");
-            card_tasks.push(async move {
-                match get_script_data(&script_name).await {
-                    Ok(bytes) if !bytes.is_empty() => Some((script_name, bytes)),
-                    _ => {
-                        warn!("Failed to load card script: {script_name}");
-                        None
-                    }
-                }
-            });
+            None => warn!("No card script available for {id:08}"),
         }
     }
 
-    let (base_results, card_results) = futures::join!(join_all(base_tasks), join_all(card_tasks));
-
-    for item in base_results
-        .into_iter()
-        .flatten()
-        .chain(card_results.into_iter().flatten())
-    {
-        cache_script(&item.0, item.1);
-    }
+    Ok(Rc::new(scripts))
 }
