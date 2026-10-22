@@ -5,8 +5,10 @@ mod properties;
 pub use animations::*;
 pub use animator::Animator;
 pub use properties::AnimationController;
+pub use properties::AnimationOutcome;
 pub use properties::AnimationRequest;
 pub use properties::AnimationStatus;
+pub use properties::AnimationTrack;
 
 use dioxus::prelude::*;
 use web_sys::window;
@@ -14,7 +16,7 @@ use web_sys::window;
 pub static ANIMATION_CONTROLLER: GlobalSignal<AnimationController> =
     Signal::global(Default::default);
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct AnimationBounds {
     pub x: f64,
     pub y: f64,
@@ -23,9 +25,34 @@ pub struct AnimationBounds {
 }
 
 pub trait Animation {
-    fn name(&self) -> &'static str;
-    fn keyframes(&self, source: AnimationBounds, destination: AnimationBounds) -> String;
-    fn parameters(&self) -> &'static str;
+    fn keyframes(
+        &self,
+        name: &str,
+        source: AnimationBounds,
+        destination: AnimationBounds,
+    ) -> String;
+    fn duration_ms(&self) -> u32;
+    fn parameters(&self, _name: &str) -> String {
+        String::new()
+    }
+}
+
+impl AnimationBounds {
+    fn is_valid(self) -> bool {
+        self.x.is_finite()
+            && self.y.is_finite()
+            && self.width.is_finite()
+            && self.height.is_finite()
+            && self.width > 0.0
+            && self.height > 0.0
+    }
+}
+
+pub fn cancel_animations() {
+    let completions = ANIMATION_CONTROLLER.with_mut(AnimationController::clear);
+    for completion in completions {
+        completion();
+    }
 }
 
 pub fn scale_between(source: AnimationBounds, destination: AnimationBounds) -> f64 {

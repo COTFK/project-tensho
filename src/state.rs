@@ -21,17 +21,18 @@ use crate::ocgcore::messages::SelectTributeMessageData;
 use crate::ocgcore::messages::SelectUnselectMessageData;
 use crate::ocgcore::messages::SortCardMessageData;
 use crate::settings::CustomHand;
+use crate::ui::ANIMATION_CONTROLLER;
 use crate::ui::start_draw_animation;
 use crate::utility::ARCHETYPE_SCRIPT;
 use crate::utility::EXTRA_DECK_IDS;
 use crate::utility::MAIN_DECK_IDS;
 use crate::utility::Scripts;
 use crate::utility::cache_scripts;
-use crate::utility::get_card_label;
-use crate::utility::get_card_data;
-use ocgcore_ffi::enums::OCG_DuelStatus;
 use crate::utility::fetch_card_data;
+use crate::utility::get_card_data;
+use crate::utility::get_card_label;
 use crate::utility::store_card_data;
+use ocgcore_ffi::enums::OCG_DuelStatus;
 
 #[derive(Hash, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SelectedCard {
@@ -47,6 +48,7 @@ define_ui_state!(UIState {
     special_summons: Vec<CardData>,
     activatable_effects: Vec<CardData>,
     waiting_on_input: bool,
+    opening_draw_finished: bool,
     monsters: Vec<Option<CardData>>,
     spell_traps: Vec<Option<CardData>>,
     graveyard: Vec<Option<CardData>>,
@@ -73,7 +75,9 @@ pub fn run_game_loop() {
     let duel = consume_context::<Signal<Option<Duel>>>();
     let duel = duel().expect("Duel context missing active duel");
 
-    if !(state.waiting_on_input)() {
+    let waiting_on_input = (state.waiting_on_input)();
+    let animation_blocked = ANIMATION_CONTROLLER.read().blocks_game_loop();
+    if !waiting_on_input && !animation_blocked {
         loop {
             match duel.process() {
                 OCG_DuelStatus::OCG_DUEL_STATUS_AWAITING
@@ -89,6 +93,10 @@ pub fn run_game_loop() {
 }
 
 pub fn handle_right_click(evt: MouseEvent) {
+    evt.prevent_default();
+    if ANIMATION_CONTROLLER.read().blocks_game_loop() {
+        return;
+    }
     let mut state = consume_context::<UIState>();
 
     // Allow to decline chains & activations
@@ -123,8 +131,6 @@ pub fn handle_right_click(evt: MouseEvent) {
     if (state.tributes)().is_some_and(|message| message.is_cancelable) {
         send_response(Response::PassPriority);
     }
-
-    evt.prevent_default();
 }
 
 pub async fn cache_cards() -> anyhow::Result<Scripts> {
@@ -278,6 +284,10 @@ pub fn handle_core_message() -> bool {
         CoreMessage::Retry => {
             panic!("Received Retry - this shouldn't happen.");
         }
+        CoreMessage::NewTurn => {
+            state.opening_draw_finished.set(true);
+            return false;
+        }
         CoreMessage::Idle(actions) => {
             let normal_summons = actions.normal_summons;
             let special_summons = actions.special_summons;
@@ -419,9 +429,10 @@ pub fn handle_core_message() -> bool {
             state.waiting_on_input.set(true);
         }
         CoreMessage::Draw(message) => {
-            let hand_size = (state.hand_contents)().len();
-            if start_draw_animation(message.cards, hand_size, state) {
-                state.waiting_on_input.set(true);
+            if message.player == CardController::Player as u8 {
+                let opening = !(state.opening_draw_finished)();
+                state.opening_draw_finished.set(true);
+                start_draw_animation(message.cards, (state.hand_contents)().len(), opening);
             }
         }
     }

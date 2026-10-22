@@ -4,11 +4,12 @@ use super::super::{Animation, AnimationBounds, scale_between};
 pub struct NormalSummon;
 
 impl Animation for NormalSummon {
-    fn name(&self) -> &'static str {
-        "normal-summon"
-    }
-
-    fn keyframes(&self, source: AnimationBounds, destination: AnimationBounds) -> String {
+    fn keyframes(
+        &self,
+        name: &str,
+        source: AnimationBounds,
+        destination: AnimationBounds,
+    ) -> String {
         let destination_scale = scale_between(source, destination);
         let lift_scale = 1.5;
         let lift_center_x = source.x
@@ -21,7 +22,7 @@ impl Animation for NormalSummon {
         let lift_y = lift_center_y - source.height * lift_scale / 2.0;
 
         format!(
-            "@keyframes normal-summon {{
+            "@keyframes {name} {{
             0% {{
                 transform: translate3d({}px, {}px, 0) scale(1.0);
                 animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -36,7 +37,7 @@ impl Animation for NormalSummon {
         )
     }
 
-    fn parameters(&self) -> &'static str {
-        "transform-origin: top left; animation: normal-summon 450ms linear forwards;"
+    fn duration_ms(&self) -> u32 {
+        450
     }
 }

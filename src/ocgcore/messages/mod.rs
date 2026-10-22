@@ -27,7 +27,7 @@ pub use select_yes_no::SelectYesNoMessageData;
 pub use sort_card::SortCardMessageData;
 
 use ocgcore_ffi::constants::{
-    MSG_ANNOUNCE_NUMBER, MSG_DRAW, MSG_RETRY, MSG_SELECT_CARD, MSG_SELECT_CHAIN,
+    MSG_ANNOUNCE_NUMBER, MSG_DRAW, MSG_NEW_TURN, MSG_RETRY, MSG_SELECT_CARD, MSG_SELECT_CHAIN,
     MSG_SELECT_EFFECTYN, MSG_SELECT_IDLECMD, MSG_SELECT_OPTION, MSG_SELECT_PLACE,
     MSG_SELECT_POSITION, MSG_SELECT_TRIBUTE, MSG_SELECT_UNSELECT_CARD, MSG_SELECT_YESNO,
     MSG_SORT_CARD,
@@ -37,6 +37,7 @@ use ocgcore_ffi::constants::{
 pub enum CoreMessage {
     Unsupported(u8),
     Retry,
+    NewTurn,
     Idle(IdleMessageData),
     Draw(DrawMessageData),
     SelectEffectYN(SelectEffectYNMessageData),
@@ -59,6 +60,7 @@ impl TryFrom<&[u8]> for CoreMessage {
         let message_type = bytes[4];
         match u32::from(message_type) {
             MSG_RETRY => Ok(CoreMessage::Retry),
+            MSG_NEW_TURN => Ok(CoreMessage::NewTurn),
             MSG_SELECT_IDLECMD => Ok(CoreMessage::Idle(IdleMessageData::try_from(bytes)?)),
             MSG_SELECT_EFFECTYN => Ok(CoreMessage::SelectEffectYN(
                 SelectEffectYNMessageData::try_from(bytes)?,

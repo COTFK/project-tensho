@@ -21,51 +21,47 @@ use crate::state::load_duel;
 use crate::state::run_game_loop;
 use crate::ui::Animator;
 use crate::ui::LoadingScreen;
-use crate::ui::animation::{ANIMATION_CONTROLLER, AnimationRequest, DrawCard, DrawToHand};
+use crate::ui::animation::{
+    ANIMATION_CONTROLLER, AnimationRequest, AnimationTrack, DrawCard, DrawToHand, cancel_animations,
+};
 use crate::ui::components::UIButton;
 use crate::ui::components::svg::FullscreenIcon;
 use crate::ui::components::svg::ResetIcon;
 use field::Field;
 use modal::ModalContainer;
 
-fn draw_animation(card: CardData, target_index: usize, hand_size: usize) -> AnimationRequest {
-    let (rotation, translate_y) = hand::hand_transform(target_index, hand_size);
-
-    AnimationRequest::between(
-        rsx!(DrawCard {
-            card,
-            rotation,
-            translate_y,
-        }),
-        Box::new(DrawToHand),
-        "main-deck-animation-source",
-        format!("hand-animation-target-{target_index}"),
-    )
-}
-
-pub fn start_draw_animation(cards: Vec<CardData>, hand_size: usize, mut state: UIState) -> bool {
+pub fn start_draw_animation(cards: Vec<CardData>, hand_size: usize, opening: bool) {
     if cards.is_empty() {
-        return false;
+        return;
     }
-    let first_drawn_index = hand_size.saturating_sub(cards.len());
-    let card_count = cards.len();
-    let requests = cards
+    let Some(first_drawn_index) = hand_size.checked_sub(cards.len()) else {
+        tracing::error!(
+            hand_size,
+            draw_count = cards.len(),
+            "Draw batch exceeds the current hand"
+        );
+        return;
+    };
+    let tracks = cards
         .into_iter()
         .zip(first_drawn_index..hand_size)
         .enumerate()
         .map(|(draw_index, (card, target_index))| {
-            let request = draw_animation(card, target_index, hand_size);
-            if draw_index + 1 == card_count {
-                request.on_complete(move || {
-                    state.waiting_on_input.set(false);
-                })
-            } else {
-                request
-            }
-        });
+            let (rotation, translate_y) = hand::hand_transform(target_index, hand_size);
+            let animation = DrawToHand::new(rotation, translate_y, draw_index, opening);
+            let delay_ms = animation.delay_ms;
+            AnimationTrack::between(
+                rsx!(DrawCard { card }),
+                Box::new(animation),
+                "main-deck-animation-source",
+                format!("hand-animation-target-{target_index}"),
+            )
+            .delayed(delay_ms)
+            .preserve_source()
+        })
+        .collect();
 
-    ANIMATION_CONTROLLER.with_mut(|controller| controller.enqueue_all(requests));
-    true
+    ANIMATION_CONTROLLER.with_mut(|controller| controller.enqueue(AnimationRequest::new(tracks)));
 }
 
 #[component]
@@ -98,6 +94,7 @@ pub fn DuelWrapper(
             return;
         }
 
+        cancel_animations();
         state.reset();
         duel_context.set(next_duel);
     });
@@ -131,7 +128,7 @@ pub fn DuelScreen(duel_resource: Resource<anyhow::Result<Duel>>) -> Element {
                 class: "fixed top-3 left-3 z-50 w-max h-max p-2",
                 label: "Restart game",
                 onclick: move |_| {
-                    ANIMATION_CONTROLLER.with_mut(|controller| controller.clear());
+                    cancel_animations();
                     state.reset();
                     duel_resource.clear();
                     duel_resource.restart();

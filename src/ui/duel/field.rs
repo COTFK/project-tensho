@@ -14,7 +14,7 @@ use crate::ocgcore::constants::CardLocation;
 use crate::state::SelectedCard;
 use crate::state::UIState;
 use crate::state::send_response;
-use crate::ui::animation::ANIMATION_CONTROLLER;
+use crate::ui::animation::{ANIMATION_CONTROLLER, AnimationOutcome};
 use crate::ui::components::ActionButton;
 use crate::ui::components::Card;
 use crate::ui::components::CardActionMenu;
@@ -68,7 +68,7 @@ fn Zone(index: u8, location: CardLocation, card: Option<CardData>) -> Element {
     let placeable_on = (state.available_zones)()
         .iter()
         .any(|zone| zone.location == location && zone.sequence == index);
-    let animation_running = ANIMATION_CONTROLLER.read().is_running();
+    let animation_running = ANIMATION_CONTROLLER.read().blocks_game_loop();
     let animation_target_id = format!("{location}-{index}-animation-target");
 
     rsx!(
@@ -88,13 +88,14 @@ fn Zone(index: u8, location: CardLocation, card: Option<CardData>) -> Element {
                 };
                 let placement = response.clone();
                 let started = ANIMATION_CONTROLLER.with_mut(|controller| {
-                    controller.set_current_destination(animation_target_id.clone(), move || {
-                        send_response(placement)
+                    controller.set_current_destination(animation_target_id.clone(), move |outcome| {
+                        if outcome != AnimationOutcome::Cancelled {
+                            send_response(placement)
+                        }
                     })
                 });
 
                 if !started {
-                    ANIMATION_CONTROLLER.with_mut(|controller| controller.clear());
                     send_response(response);
                 }
             },

@@ -7,7 +7,9 @@ use crate::ocgcore::constants::CardLocation;
 use crate::state::SelectedCard;
 use crate::state::UIState;
 use crate::state::send_response;
-use crate::ui::animation::{ANIMATION_CONTROLLER, AnimationCard, AnimationRequest, NormalSummon};
+use crate::ui::animation::{
+    ANIMATION_CONTROLLER, AnimationCard, AnimationRequest, AnimationTrack, NormalSummon,
+};
 use crate::ui::components::ActionButton;
 use crate::ui::components::Card;
 use crate::ui::components::CardActionMenu;
@@ -27,47 +29,40 @@ pub fn Hand() -> Element {
     let state = use_context::<UIState>();
     let cards = state.hand_contents;
     let mut selected_card = state.selected_card;
-    let suppress_actions = !state.effects_to_select_from.is_empty();
     let animation_controller = ANIMATION_CONTROLLER.read();
-    let visible_cards: Vec<_> = cards()
-        .iter()
-        .copied()
-        .enumerate()
-        .filter(|(index, card)| {
-            !animation_controller.is_running_from(&format!("{}-{index}", card.code))
-        })
-        .collect();
-    let hand_size = visible_cards.len();
+    let animation_blocked = animation_controller.blocks_game_loop();
+    let suppress_actions = !state.effects_to_select_from.is_empty() || animation_blocked;
+    let hand_cards = cards();
+    let hand_size = hand_cards.len();
 
     rsx!(
         div {
             class: "fixed flex flex-row justify-center self-end place-self-center inset-0 translate-y-[27.5%] z-50",
-            for (visible_index, (index, card)) in visible_cards.into_iter().enumerate() {
+            for (index, card) in hand_cards.into_iter().enumerate() {
                 {
                     let is_selected = selected_card().is_some_and(|s| s.location == CardLocation::Hand && s.index == index);
-                    let (distance, default_translate_y) = hand_transform(visible_index, hand_size);
+                    let (distance, default_translate_y) = hand_transform(index, hand_size);
                     let rotation = if is_selected { 0 } else { distance };
                     let translate_y = if is_selected { -25 } else { default_translate_y };
-                    let is_visible = !animation_controller.is_destination_pending(&format!("hand-animation-target-{index}"));
+                    let stacking_order = if is_selected { hand_size } else { index };
+                    let is_visible = !animation_controller.is_destination_pending(&format!("hand-animation-target-{index}"))
+                        && !animation_controller.is_source_hidden(&format!("{}-{index}", card.code));
 
                     rsx!(
                         div {
                             key: "{card.code}-{index}",
                             id: "hand-animation-target-{index}",
                             class: "w-[10vw] aspect-[59/86] shrink-0 -mx-[1.1vw] relative",
-                            onmounted: move |_| {
-                                ANIMATION_CONTROLLER.with_mut(|controller| controller.try_start_current());
-                            },
+                            z_index: "{stacking_order}",
                             div {
                                     id: "{card.code}-{index}",
                                     class: "absolute inset-0 group",
                                     transition: "transform 150ms ease-in-out",
                                     opacity: if is_visible { "1" } else { "0" },
-                                    pointer_events: if is_visible { "auto" } else { "none" },
+                                    pointer_events: if is_visible && !animation_blocked { "auto" } else { "none" },
                                     aria_hidden: if is_visible { "false" } else { "true" },
                                     transform: "translateZ(0) rotateZ({rotation}deg) translateY({translate_y}%)",
                                     backface_visibility: "hidden",
-                                    z_index: if is_selected { 100 } else { 0 },
                                     CardActionMenu {
                                 class: "absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-[110%] flex flex-row items-center justify-center px-10 py-1 md:px-12",
                                 trigger: is_selected && (card.normal_summon_index.is_some() || card.is_activatable_or_chainable || card.spell_trap_set_index.is_some()) && !suppress_actions,
@@ -79,7 +74,7 @@ pub fn Hand() -> Element {
                                             evt.stop_propagation();
                                             selected_card.set(None);
                                             ANIMATION_CONTROLLER.with_mut(|controller| {
-                                                controller.enqueue(AnimationRequest::new(
+                                                controller.enqueue(AnimationRequest::new(vec![AnimationTrack::new(
                                                     rsx!(AnimationCard {
                                                         card: CardData {
                                                             card_code: card.code,
@@ -91,7 +86,7 @@ pub fn Hand() -> Element {
                                                     }),
                                                     Box::new(NormalSummon),
                                                     format!("{}-{index}", card.code),
-                                                ));
+                                                )]));
                                             });
                                             if let Some(index) = card.normal_summon_index { send_response(Response::NormalSummon { index }); }
                                         },
@@ -142,6 +137,9 @@ pub fn Hand() -> Element {
                                 use_extra_deck_back: false,
                                 onclick:  move |evt: MouseEvent| {
                                     evt.stop_propagation();
+                                    if ANIMATION_CONTROLLER.read().blocks_game_loop() {
+                                        return;
+                                    }
                                     selected_card.set(Some(SelectedCard { location: CardLocation::Hand, index }));
                                 },
                                     }
