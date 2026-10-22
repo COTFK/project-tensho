@@ -12,6 +12,7 @@ use crate::ui::components::CardStack;
 use crate::ui::components::OptionButton;
 use crate::ui::components::PickerModal;
 use crate::ui::components::svg::LightningTrioIcon;
+use crate::utility::COURTIER_API_URL;
 
 #[component]
 pub fn Graveyard() -> Element {
@@ -44,7 +45,7 @@ pub fn Graveyard() -> Element {
                     }
                     CardStack {
                         length: state.graveyard.len(),
-                        image_url: format!("https://images.ygoprodeck.com/images/cards/{}.jpg", (state.graveyard)().last().unwrap().unwrap().card_code),
+                        image_url: format!("{COURTIER_API_URL}/card/{:08}/image", (state.graveyard)().last().unwrap().unwrap().card_code),
                     }
                 }
             }

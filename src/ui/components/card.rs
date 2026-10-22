@@ -2,6 +2,7 @@ use dioxus::prelude::*;
 
 use crate::ocgcore::CardData;
 use crate::utility::CARD_BACK;
+use crate::utility::COURTIER_API_URL;
 use crate::utility::EXTRA_BACK;
 
 #[component]
@@ -38,7 +39,7 @@ pub fn Card(
                 image_rendering: "smooth",
                 aspect_ratio: "59/86",
                 src: if !facedown {
-                    format!("https://images.ygoprodeck.com/images/cards/{}.jpg", card.card_code)
+                    format!("{COURTIER_API_URL}/card/{:08}/image", card.card_code)
                 } else {
                     if use_extra_deck_back {
                         EXTRA_BACK.to_string()

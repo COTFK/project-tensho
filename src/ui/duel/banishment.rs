@@ -15,6 +15,7 @@ use crate::ui::components::OptionButton;
 use crate::ui::components::PickerModal;
 use crate::ui::components::svg::LightningTrioIcon;
 use crate::utility::CARD_BACK;
+use crate::utility::COURTIER_API_URL;
 use crate::utility::EXTRA_BACK;
 
 #[component]
@@ -43,7 +44,7 @@ pub fn Banishment() -> Element {
             }
         } else {
             format!(
-                "https://images.ygoprodeck.com/images/cards/{}.jpg",
+                "{COURTIER_API_URL}/card/{:08}/image",
                 (state.banishment)().last().unwrap().unwrap().card_code
             )
         }
