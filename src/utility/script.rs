@@ -8,34 +8,20 @@ use tracing::warn;
 
 pub type Scripts = Rc<HashMap<String, Vec<u8>>>;
 
-static BASE_SCRIPTS: [&str; 26] = [
-    "constant.lua",
-    "utility.lua",
-    "card_counter_constants.lua",
-    "archetype_setcode_constants.lua",
-    "chain.lua",
-    "debug_utility.lua",
-    "cards_specific_functions.lua",
-    "proc_fusion.lua",
-    "proc_fusion_spell.lua",
-    "proc_ritual.lua",
-    "proc_synchro.lua",
-    "proc_union.lua",
-    "proc_xyz.lua",
-    "proc_pendulum.lua",
-    "proc_link.lua",
-    "proc_equip.lua",
-    "proc_persistent.lua",
-    "proc_workaround.lua",
-    "proc_normal.lua",
-    "proc_skill.lua",
-    "proc_rush.lua",
-    "proc_maximum.lua",
-    "proc_gemini.lua",
-    "proc_spirit.lua",
-    "proc_unofficial.lua",
-    "deprecated_functions.lua",
-];
+async fn fetch_system_scripts(client: &reqwest::Client) -> anyhow::Result<Vec<String>> {
+    let url = format!("{COURTIER_API_URL}/scripts/system");
+
+    let names = client
+        .get(url)
+        .send()
+        .await?
+        .error_for_status()
+        .context("Unable to fetch system script list")?
+        .json()
+        .await?;
+
+    Ok(names)
+}
 
 async fn fetch_base_script(
     client: &reqwest::Client,
@@ -83,14 +69,16 @@ pub async fn cache_scripts(deck_card_ids: &[u32]) -> anyhow::Result<Scripts> {
         .into_iter()
         .collect();
 
-    let (base_scripts, mut card_scripts) = futures::try_join!(
-        try_join_all(
-            BASE_SCRIPTS
-                .iter()
-                .map(|name| fetch_base_script(&client, name))
-        ),
+    let (system_names, mut card_scripts) = futures::try_join!(
+        fetch_system_scripts(&client),
         fetch_card_scripts(&client, &unique_ids),
     )?;
+    let base_scripts = try_join_all(
+        system_names
+            .iter()
+            .map(|name| fetch_base_script(&client, name)),
+    )
+    .await?;
 
     let mut scripts: HashMap<String, Vec<u8>> = base_scripts.into_iter().collect();
     for id in unique_ids {
