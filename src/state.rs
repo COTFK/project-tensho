@@ -204,9 +204,12 @@ pub async fn load_duel(
 
     let duel = core.create_duel(starting_draw_count)?;
 
-    core.load_script(&duel, core.script("constant.lua").unwrap(), "constant.lua");
-    core.load_script(&duel, core.script("utility.lua").unwrap(), "utility.lua");
-
+    for name in ["constant.lua", "utility.lua"] {
+        let script = core
+            .script(name)
+            .ok_or_else(|| anyhow::anyhow!("{name} is not loaded"))?;
+        core.load_script(&duel, &script, name)?;
+    }
     for card_id in main_deck {
         duel.add_card(
             CardOwner::Player,

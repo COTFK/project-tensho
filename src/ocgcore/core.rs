@@ -2,7 +2,7 @@ use std::ffi::CString;
 use std::ffi::c_void;
 use std::rc::Rc;
 
-use anyhow::anyhow;
+use anyhow::{Context, anyhow};
 use ocgcore_ffi::constants::DUEL_MODE_MR5;
 use ocgcore_ffi::types::OCG_Duel;
 use ocgcore_ffi::types::OCG_DuelOptions;
@@ -91,14 +91,20 @@ impl OCGCore {
         Ok(Duel::new(duel, self))
     }
 
-    pub fn load_script(&self, duel: &Duel, script: Vec<u8>, name: &str) -> i32 {
-        let length = script.len() as u32;
-        let script = CString::new(script).unwrap();
-        let script_ptr = script.as_ptr();
-
-        let name = CString::new(name).unwrap();
-        let name_ptr = name.as_ptr();
-
-        unsafe { ocgcore_ffi::OCG_LoadScript(duel.handle(), script_ptr, length, name_ptr) }
+    pub fn load_script(&self, duel: &Duel, script: &[u8], name: &str) -> anyhow::Result<()> {
+        let length = u32::try_from(script.len()).context("Script is too large")?;
+        let script_name = CString::new(name).context("Script name contains a NUL byte")?;
+        let status = unsafe {
+            ocgcore_ffi::OCG_LoadScript(
+                duel.handle(),
+                script.as_ptr().cast(),
+                length,
+                script_name.as_ptr(),
+            )
+        };
+        if status == 0 {
+            return Err(anyhow!("Failed to load script {name}"));
+        }
+        Ok(())
     }
 }
