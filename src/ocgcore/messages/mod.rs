@@ -1,6 +1,7 @@
 mod announce_number;
 mod draw;
 mod idle;
+mod new_phase;
 mod select_card;
 mod select_chain;
 mod select_effect_yes_no;
@@ -16,6 +17,7 @@ mod win;
 pub use announce_number::AnnounceNumberMessageData;
 pub use draw::DrawMessageData;
 pub use idle::IdleMessageData;
+pub use new_phase::NewPhaseMessageData;
 pub use select_card::SelectCardMessageData;
 pub use select_chain::SelectChainMessageData;
 pub use select_effect_yes_no::SelectEffectYNMessageData;
@@ -30,8 +32,8 @@ pub use win::WinMessageData;
 
 use anyhow::Context;
 use ocgcore_ffi::constants::{
-    MSG_ANNOUNCE_NUMBER, MSG_DRAW, MSG_NEW_TURN, MSG_RETRY, MSG_SELECT_CARD, MSG_SELECT_CHAIN,
-    MSG_SELECT_EFFECTYN, MSG_SELECT_IDLECMD, MSG_SELECT_OPTION, MSG_SELECT_PLACE,
+    MSG_ANNOUNCE_NUMBER, MSG_DRAW, MSG_NEW_PHASE, MSG_NEW_TURN, MSG_RETRY, MSG_SELECT_CARD,
+    MSG_SELECT_CHAIN, MSG_SELECT_EFFECTYN, MSG_SELECT_IDLECMD, MSG_SELECT_OPTION, MSG_SELECT_PLACE,
     MSG_SELECT_POSITION, MSG_SELECT_TRIBUTE, MSG_SELECT_UNSELECT_CARD, MSG_SELECT_YESNO,
     MSG_SORT_CARD, MSG_WIN,
 };
@@ -41,6 +43,7 @@ pub enum CoreMessage {
     Unsupported(u8),
     Retry,
     NewTurn,
+    NewPhase(NewPhaseMessageData),
     Win(WinMessageData),
     Idle(IdleMessageData),
     Draw(DrawMessageData),
@@ -65,6 +68,7 @@ impl TryFrom<&[u8]> for CoreMessage {
         match u32::from(message_type) {
             MSG_RETRY => Ok(CoreMessage::Retry),
             MSG_NEW_TURN => Ok(CoreMessage::NewTurn),
+            MSG_NEW_PHASE => Ok(CoreMessage::NewPhase(NewPhaseMessageData::try_from(bytes)?)),
             MSG_WIN => Ok(CoreMessage::Win(WinMessageData::try_from(bytes)?)),
             MSG_SELECT_IDLECMD => Ok(CoreMessage::Idle(IdleMessageData::try_from(bytes)?)),
             MSG_SELECT_EFFECTYN => Ok(CoreMessage::SelectEffectYN(
@@ -102,7 +106,7 @@ impl TryFrom<&[u8]> for CoreMessage {
             _ => {
                 tracing::debug!("Received unhandled message {message_type} with bytes: {bytes:?}");
                 Ok(CoreMessage::Unsupported(message_type))
-            },
+            }
         }
     }
 }

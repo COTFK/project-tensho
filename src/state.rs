@@ -284,7 +284,7 @@ pub fn handle_core_message() -> bool {
         CoreMessage::Retry => {
             panic!("Received Retry - this shouldn't happen.");
         }
-        CoreMessage::NewTurn => return false,
+        CoreMessage::NewTurn | CoreMessage::NewPhase(_) => return false,
         // Continue playing past any win conditions
         CoreMessage::Win(_) => return false,
         CoreMessage::Idle(actions) => {

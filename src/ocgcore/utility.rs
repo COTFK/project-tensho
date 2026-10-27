@@ -9,6 +9,14 @@ pub fn read_u8(raw_bytes: &[u8], cursor: &mut usize, label: &str) -> anyhow::Res
     Ok(value)
 }
 
+pub fn read_u16(raw_bytes: &[u8], cursor: &mut usize, label: &str) -> anyhow::Result<u16> {
+    let bytes = raw_bytes
+        .get(*cursor..*cursor + 2)
+        .with_context(|| format!("Missing {label} at offset {}", *cursor))?;
+    *cursor += 2;
+    Ok(u16::from_le_bytes(bytes.try_into().unwrap()))
+}
+
 pub fn read_u32(raw_bytes: &[u8], cursor: &mut usize, label: &str) -> anyhow::Result<u32> {
     let bytes = raw_bytes
         .get(*cursor..*cursor + 4)
