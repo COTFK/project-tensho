@@ -12,57 +12,18 @@ pub use hand::Hand;
 use dioxus::prelude::*;
 use web_sys::window;
 
-use crate::ocgcore::CardData;
 use crate::ocgcore::Duel;
 use crate::ocgcore::OCGCore;
 use crate::state::UIState;
 use crate::state::handle_right_click;
 use crate::state::load_duel;
 use crate::state::run_game_loop;
-use crate::ui::Animator;
 use crate::ui::LoadingScreen;
-use crate::ui::animation::{
-    ANIMATION_CONTROLLER, AnimationRequest, AnimationTrack, DrawCard, DrawToHand, cancel_animations,
-};
 use crate::ui::components::UIButton;
 use crate::ui::components::svg::FullscreenIcon;
 use crate::ui::components::svg::ResetIcon;
 use field::Field;
 use modal::ModalContainer;
-
-pub fn start_draw_animation(cards: Vec<CardData>, hand_size: usize, opening: bool) {
-    if cards.is_empty() {
-        return;
-    }
-    let Some(first_drawn_index) = hand_size.checked_sub(cards.len()) else {
-        tracing::error!(
-            hand_size,
-            draw_count = cards.len(),
-            "Draw batch exceeds the current hand"
-        );
-        return;
-    };
-    let tracks = cards
-        .into_iter()
-        .zip(first_drawn_index..hand_size)
-        .enumerate()
-        .map(|(draw_index, (card, target_index))| {
-            let (rotation, translate_y) = hand::hand_transform(target_index, hand_size);
-            let animation = DrawToHand::new(rotation, translate_y, draw_index, opening);
-            let delay_ms = animation.delay_ms;
-            AnimationTrack::between(
-                rsx!(DrawCard { card }),
-                Box::new(animation),
-                "main-deck-animation-source",
-                format!("hand-animation-target-{target_index}"),
-            )
-            .delayed(delay_ms)
-            .preserve_source()
-        })
-        .collect();
-
-    ANIMATION_CONTROLLER.with_mut(|controller| controller.enqueue(AnimationRequest::new(tracks)));
-}
 
 #[component]
 pub fn DuelWrapper(
@@ -94,7 +55,6 @@ pub fn DuelWrapper(
             return;
         }
 
-        cancel_animations();
         state.reset();
         duel_context.set(next_duel);
     });
@@ -128,7 +88,6 @@ pub fn DuelScreen(duel_resource: Resource<anyhow::Result<Duel>>) -> Element {
                 class: "fixed top-3 left-3 z-50 w-max h-max p-2",
                 label: "Restart game",
                 onclick: move |_| {
-                    cancel_animations();
                     state.reset();
                     duel_resource.clear();
                     duel_resource.restart();
@@ -149,7 +108,6 @@ pub fn DuelScreen(duel_resource: Resource<anyhow::Result<Duel>>) -> Element {
                 },
                 FullscreenIcon {}
             }
-            Animator {}
             ModalContainer {}
             Field {}
             Hand {}

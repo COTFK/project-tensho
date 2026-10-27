@@ -21,12 +21,10 @@
                 right: 0;
                 padding-right: 10px;
                 user-select: none;
-                /* transition: transform 0.2s ease; */
                 z-index: 2147483647;
             }
 
             .dx-toast .dx-toast-inner {
-                /* transition: right 0.2s ease-out; */
                 position: fixed;
 
                 background-color: #181B20;
@@ -121,20 +119,14 @@
                     toast.addEventListener("click", closeDXToast);
                 }
 
-                // Wait a bit of time so animation plays correctly.
-                setTimeout(
-                    () => {
-                        let ourToastId = currentToastId;
-                        currentTimeout = setTimeout(() => {
-                            if (ourToastId == currentToastId) {
-                                closeDXToast();
-                            }
-                        }, durationMs);
-                    },
-                    100
-                );
-
                 currentToastId += 1;
+                let ourToastId = currentToastId;
+                clearTimeout(currentTimeout);
+                currentTimeout = setTimeout(() => {
+                    if (ourToastId == currentToastId) {
+                        closeDXToast();
+                    }
+                }, durationMs);
             }
 
             // Schedule a toast to be displayed after reload.

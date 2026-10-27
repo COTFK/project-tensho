@@ -7,9 +7,6 @@ use crate::ocgcore::constants::CardLocation;
 use crate::state::SelectedCard;
 use crate::state::UIState;
 use crate::state::send_response;
-use crate::ui::animation::{
-    ANIMATION_CONTROLLER, AnimationCard, AnimationRequest, AnimationTrack, NormalSummon,
-};
 use crate::ui::components::ActionButton;
 use crate::ui::components::Card;
 use crate::ui::components::CardActionMenu;
@@ -17,7 +14,7 @@ use crate::ui::components::svg::BoltShieldIcon;
 use crate::ui::components::svg::LightningTrioIcon;
 use crate::ui::components::svg::SummonIcon;
 
-pub(super) fn hand_transform(index: usize, hand_size: usize) -> (i32, i32) {
+fn hand_transform(index: usize, hand_size: usize) -> (i32, i32) {
     let center = hand_size as i32 - 1;
     let distance = index as i32 * 2 - center;
     let translate_y = (distance.abs() * distance.abs() * 4) / 16;
@@ -29,9 +26,7 @@ pub fn Hand() -> Element {
     let state = use_context::<UIState>();
     let cards = state.hand_contents;
     let mut selected_card = state.selected_card;
-    let animation_controller = ANIMATION_CONTROLLER.read();
-    let animation_blocked = animation_controller.blocks_game_loop();
-    let suppress_actions = !state.effects_to_select_from.is_empty() || animation_blocked;
+    let suppress_actions = !state.effects_to_select_from.is_empty();
     let hand_cards = cards();
     let hand_size = hand_cards.len();
 
@@ -45,27 +40,17 @@ pub fn Hand() -> Element {
                     let rotation = if is_selected { 0 } else { distance };
                     let translate_y = if is_selected { -25 } else { default_translate_y };
                     let stacking_order = if is_selected { hand_size } else { index };
-                    let is_visible = !animation_controller.is_destination_pending(&format!("hand-animation-target-{index}"))
-                        && !animation_controller.is_source_hidden(&format!("{}-{index}", card.code));
-
                     rsx!(
                         div {
                             key: "{card.code}-{index}",
-                            id: "hand-animation-target-{index}",
                             class: "w-[10vw] aspect-[59/86] shrink-0 -mx-[1.1vw] relative",
                             z_index: "{stacking_order}",
                             div {
-                                    id: "{card.code}-{index}",
-                                    class: "absolute inset-0 group",
-                                    transition: "transform 150ms ease-in-out",
-                                    opacity: if is_visible { "1" } else { "0" },
-                                    pointer_events: if is_visible && !animation_blocked { "auto" } else { "none" },
-                                    aria_hidden: if is_visible { "false" } else { "true" },
+                                    class: "absolute inset-0 group [transition:transform_150ms_ease-in-out]",
                                     transform: "translateZ(0) rotateZ({rotation}deg) translateY({translate_y}%)",
-                                    backface_visibility: "hidden",
                                     CardActionMenu {
                                 class: "absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-[110%] flex flex-row items-center justify-center px-10 py-1 md:px-12",
-                                trigger: is_selected && (card.normal_summon_index.is_some() || card.is_activatable_or_chainable || card.spell_trap_set_index.is_some()) && !suppress_actions,
+                                trigger: is_selected && (card.normal_summon_index.is_some() || card.is_activatable_or_chainable || card.spell_trap_set_index.is_some() || card.monster_set_index.is_some()) && !suppress_actions,
                                 if card.normal_summon_index.is_some() {
                                     ActionButton {
                                         label: "Summon",
@@ -73,21 +58,6 @@ pub fn Hand() -> Element {
                                         onclick: move |evt: MouseEvent| {
                                             evt.stop_propagation();
                                             selected_card.set(None);
-                                            ANIMATION_CONTROLLER.with_mut(|controller| {
-                                                controller.enqueue(AnimationRequest::new(vec![AnimationTrack::new(
-                                                    rsx!(AnimationCard {
-                                                        card: CardData {
-                                                            card_code: card.code,
-                                                            controller: CardController::Player,
-                                                            location: CardLocation::Hand,
-                                                            ..CardData::default()
-                                                        },
-                                                        facedown: false,
-                                                    }),
-                                                    Box::new(NormalSummon),
-                                                    format!("{}-{index}", card.code),
-                                                )]));
-                                            });
                                             if let Some(index) = card.normal_summon_index { send_response(Response::NormalSummon { index }); }
                                         },
                                         SummonIcon { }
@@ -137,9 +107,6 @@ pub fn Hand() -> Element {
                                 use_extra_deck_back: false,
                                 onclick:  move |evt: MouseEvent| {
                                     evt.stop_propagation();
-                                    if ANIMATION_CONTROLLER.read().blocks_game_loop() {
-                                        return;
-                                    }
                                     selected_card.set(Some(SelectedCard { location: CardLocation::Hand, index }));
                                 },
                                     }

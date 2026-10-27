@@ -21,8 +21,6 @@ use crate::ocgcore::messages::SelectTributeMessageData;
 use crate::ocgcore::messages::SelectUnselectMessageData;
 use crate::ocgcore::messages::SortCardMessageData;
 use crate::settings::CustomHand;
-use crate::ui::ANIMATION_CONTROLLER;
-use crate::ui::start_draw_animation;
 use crate::utility::ARCHETYPE_SCRIPT;
 use crate::utility::EXTRA_DECK_IDS;
 use crate::utility::MAIN_DECK_IDS;
@@ -48,7 +46,6 @@ define_ui_state!(UIState {
     special_summons: Vec<CardData>,
     activatable_effects: Vec<CardData>,
     waiting_on_input: bool,
-    opening_draw_finished: bool,
     monsters: Vec<Option<CardData>>,
     spell_traps: Vec<Option<CardData>>,
     graveyard: Vec<Option<CardData>>,
@@ -75,28 +72,29 @@ pub fn run_game_loop() {
     let duel = consume_context::<Signal<Option<Duel>>>();
     let duel = duel().expect("Duel context missing active duel");
 
-    let waiting_on_input = (state.waiting_on_input)();
-    let animation_blocked = ANIMATION_CONTROLLER.read().blocks_game_loop();
-    if !waiting_on_input && !animation_blocked {
-        loop {
-            match duel.process() {
-                OCG_DuelStatus::OCG_DUEL_STATUS_AWAITING
-                | OCG_DuelStatus::OCG_DUEL_STATUS_CONTINUE => {
-                    if handle_core_message() {
-                        break;
-                    }
+    if !(state.waiting_on_input)() {
+        process_until_input(|| duel.process(), handle_core_message);
+    }
+}
+
+fn process_until_input(
+    mut process: impl FnMut() -> OCG_DuelStatus,
+    mut handle_message: impl FnMut() -> bool,
+) {
+    loop {
+        match process() {
+            OCG_DuelStatus::OCG_DUEL_STATUS_AWAITING | OCG_DuelStatus::OCG_DUEL_STATUS_CONTINUE => {
+                if handle_message() {
+                    break;
                 }
-                OCG_DuelStatus::OCG_DUEL_STATUS_END => break,
             }
+            OCG_DuelStatus::OCG_DUEL_STATUS_END => break,
         }
     }
 }
 
 pub fn handle_right_click(evt: MouseEvent) {
     evt.prevent_default();
-    if ANIMATION_CONTROLLER.read().blocks_game_loop() {
-        return;
-    }
     let mut state = consume_context::<UIState>();
 
     // Allow to decline chains & activations
@@ -284,10 +282,7 @@ pub fn handle_core_message() -> bool {
         CoreMessage::Retry => {
             panic!("Received Retry - this shouldn't happen.");
         }
-        CoreMessage::NewTurn => {
-            state.opening_draw_finished.set(true);
-            return false;
-        }
+        CoreMessage::NewTurn => return false,
         CoreMessage::Idle(actions) => {
             let normal_summons = actions.normal_summons;
             let special_summons = actions.special_summons;
@@ -297,6 +292,7 @@ pub fn handle_core_message() -> bool {
 
             if !normal_summons.is_empty()
                 || !activatable_effects.is_empty()
+                || !monster_sets.is_empty()
                 || !spell_trap_sets.is_empty()
             {
                 state.hand_contents.with_mut(|hand| {
@@ -358,7 +354,7 @@ pub fn handle_core_message() -> bool {
         CoreMessage::SelectChain(message) => {
             if message.effects.is_empty() {
                 send_response(Response::PassPriority);
-                return true;
+                return false;
             }
 
             state.hand_contents.with_mut(|hand| {
@@ -403,6 +399,7 @@ pub fn handle_core_message() -> bool {
                     .unwrap_or(&String::from("undefined label"))
                     .to_owned(),
             ));
+            state.waiting_on_input.set(true);
         }
         CoreMessage::SelectPosition(message) => {
             state.positions_to_select.set(message.positions);
@@ -428,13 +425,7 @@ pub fn handle_core_message() -> bool {
             state.sort_cards_to_select_from.set(Some(message));
             state.waiting_on_input.set(true);
         }
-        CoreMessage::Draw(message) => {
-            if message.player == CardController::Player as u8 {
-                let opening = !(state.opening_draw_finished)();
-                state.opening_draw_finished.set(true);
-                start_draw_animation(message.cards, (state.hand_contents)().len(), opening);
-            }
-        }
+        CoreMessage::Draw(_) => {}
     }
 
     state
@@ -453,5 +444,55 @@ pub fn handle_core_message() -> bool {
     state
         .banishment
         .set(duel.get_cards(CardLocation::Banishment));
-    true
+    (state.waiting_on_input)()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::Cell;
+
+    #[test]
+    fn processing_continues_after_draw_until_an_input_prompt() {
+        let processed = Cell::new(0);
+        let handled = Cell::new(0);
+
+        process_until_input(
+            || {
+                processed.set(processed.get() + 1);
+                OCG_DuelStatus::OCG_DUEL_STATUS_CONTINUE
+            },
+            || {
+                handled.set(handled.get() + 1);
+                handled.get() == 2
+            },
+        );
+
+        assert_eq!(processed.get(), 2);
+        assert_eq!(handled.get(), 2);
+    }
+
+    #[test]
+    fn processing_continues_after_automatic_response_and_stops_at_duel_end() {
+        let processed = Cell::new(0);
+        let handled = Cell::new(0);
+
+        process_until_input(
+            || {
+                processed.set(processed.get() + 1);
+                if processed.get() == 1 {
+                    OCG_DuelStatus::OCG_DUEL_STATUS_AWAITING
+                } else {
+                    OCG_DuelStatus::OCG_DUEL_STATUS_END
+                }
+            },
+            || {
+                handled.set(handled.get() + 1);
+                false
+            },
+        );
+
+        assert_eq!(processed.get(), 2);
+        assert_eq!(handled.get(), 1);
+    }
 }
