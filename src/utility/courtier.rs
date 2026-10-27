@@ -1,6 +1,6 @@
-use super::COURTIER_API_URL;
 use super::card_database::CardDatabase;
 use super::labels::build_card_label;
+use super::{COURTIER_API_URL, courtier_card_id_batches, courtier_card_id_query};
 use crate::ocgcore::CardType;
 use ocgcore_ffi::constants::{
     ATTRIBUTE_DARK, ATTRIBUTE_DIVINE, ATTRIBUTE_EARTH, ATTRIBUTE_FIRE, ATTRIBUTE_LIGHT,
@@ -14,6 +14,7 @@ use ocgcore_ffi::types::OCG_CardData;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::HashMap;
+use std::collections::HashSet;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
 struct CourtierCardData {
@@ -31,17 +32,30 @@ struct CourtierCardData {
     scale: Option<u32>,
     linkval: Option<u32>,
     linkmarkers: Option<Vec<u32>>,
-    labels: CourtierLabels,
+    labels: Option<CourtierLabels>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
 struct CourtierLabels {
-    name: CourtierLabelName,
+    name: Option<CourtierLabelName>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
 struct CourtierLabelName {
-    en: String,
+    en: Option<String>,
+}
+
+impl CourtierCardData {
+    fn display_name(&self) -> String {
+        self.labels
+            .as_ref()
+            .and_then(|labels| labels.name.as_ref())
+            .and_then(|name| name.en.clone())
+            .unwrap_or_else(|| {
+                tracing::warn!(card = %self.id, "no English label; using card name");
+                self.name.clone()
+            })
+    }
 }
 
 const UNKNOWN_STAT: i32 = -2;
@@ -226,32 +240,33 @@ pub async fn fetch_card_data(
     card_ids: Vec<u32>,
     archetype_script: &[u8],
 ) -> anyhow::Result<CardDatabase> {
-    let url = format!("{COURTIER_API_URL}/card/data");
+    let url = format!("{COURTIER_API_URL}/v1/cards");
 
     let client = reqwest::Client::new();
-    let requested = card_ids.clone();
-    let mut body = HashMap::new();
-    body.insert("card_ids", card_ids);
-
-    let response = client
-        .post(url)
-        .json(&body)
-        .send()
-        .await?
-        .error_for_status()?;
-
-    let card_data = response.json::<Vec<CourtierCardData>>().await?;
+    let mut seen = HashSet::new();
+    let requested: Vec<u32> = card_ids.into_iter().filter(|id| seen.insert(*id)).collect();
 
     let archetypes = parse_archetype_setcodes(std::str::from_utf8(archetype_script)?)?;
 
     let mut db = CardDatabase::new();
 
-    for card in card_data {
-        let setcodes = card_setcodes(&card, &archetypes);
-        let name = card.labels.name.en.clone();
-        let data = OCG_CardData::try_from(card)?;
-        let labels = build_card_label(data.code, name);
-        db.insert(data.code, data, &setcodes, labels);
+    for batch in courtier_card_id_batches(&requested) {
+        let card_data = client
+            .get(&url)
+            .query(&courtier_card_id_query(batch))
+            .send()
+            .await?
+            .error_for_status()?
+            .json::<Vec<CourtierCardData>>()
+            .await?;
+
+        for card in card_data {
+            let setcodes = card_setcodes(&card, &archetypes);
+            let name = card.display_name();
+            let data = OCG_CardData::try_from(card)?;
+            let labels = build_card_label(data.code, name);
+            db.insert(data.code, data, &setcodes, labels);
+        }
     }
 
     let missing: Vec<u32> = requested
@@ -288,9 +303,11 @@ mod tests {
             scale: None,
             linkval: None,
             linkmarkers: None,
-            labels: CourtierLabels {
-                name: CourtierLabelName { en: String::new() },
-            },
+            labels: Some(CourtierLabels {
+                name: Some(CourtierLabelName {
+                    en: Some(String::new()),
+                }),
+            }),
         }
     }
 
@@ -305,7 +322,21 @@ mod tests {
 
         let card: CourtierCardData = serde_json::from_str(json).unwrap();
 
-        assert_eq!(card.labels.name.en, "Fire King Island");
+        assert_eq!(card.display_name(), "Fire King Island");
+    }
+
+    #[test]
+    fn card_labels_can_be_missing_or_null() {
+        for labels in [
+            "",
+            r#", "labels": null"#,
+            r#", "labels": {"name": null}"#,
+            r#", "labels": {"name": {"en": null}}"#,
+        ] {
+            let json = format!(r#"{{"id":"1","name":"Test","type":"Monster"{labels}}}"#);
+            let card: CourtierCardData = serde_json::from_str(&json).unwrap();
+            assert_eq!(card.display_name(), "Test");
+        }
     }
 
     fn spell_with_subtypes(subtypes: Option<Vec<&str>>) -> CourtierCardData {

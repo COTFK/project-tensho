@@ -15,8 +15,8 @@ use crate::ui::components::OptionButton;
 use crate::ui::components::PickerModal;
 use crate::ui::components::svg::LightningTrioIcon;
 use crate::utility::CARD_BACK;
-use crate::utility::COURTIER_API_URL;
 use crate::utility::EXTRA_BACK;
+use crate::utility::card_thumbnail_url;
 
 #[component]
 pub fn Banishment() -> Element {
@@ -43,10 +43,7 @@ pub fn Banishment() -> Element {
                 CARD_BACK.to_string()
             }
         } else {
-            format!(
-                "{COURTIER_API_URL}/card/{:08}/image",
-                (state.banishment)().last().unwrap().unwrap().card_code
-            )
+            card_thumbnail_url((state.banishment)().last().unwrap().unwrap().card_code)
         }
     } else {
         String::new()

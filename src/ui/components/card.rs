@@ -2,8 +2,8 @@ use dioxus::prelude::*;
 
 use crate::ocgcore::CardData;
 use crate::utility::CARD_BACK;
-use crate::utility::COURTIER_API_URL;
 use crate::utility::EXTRA_BACK;
+use crate::utility::card_image_url;
 
 #[component]
 pub fn Card(
@@ -39,7 +39,7 @@ pub fn Card(
                 image_rendering: "smooth",
                 aspect_ratio: "59/86",
                 src: if !facedown {
-                    format!("{COURTIER_API_URL}/card/{:08}/image", card.card_code)
+                    card_image_url(card.card_code)
                 } else {
                     if use_extra_deck_back {
                         EXTRA_BACK.to_string()
