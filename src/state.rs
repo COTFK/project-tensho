@@ -278,6 +278,7 @@ pub fn handle_core_message() -> bool {
     for message in duel.parse_messages() {
         match message {
             CoreMessage::Unsupported(_) | CoreMessage::NewTurn | CoreMessage::Win(_) => {}
+            CoreMessage::Hint(message) => tracing::debug!("Received hint: {message:?}"),
             CoreMessage::Retry => {
                 panic!("Received Retry - this shouldn't happen.");
             }

@@ -33,7 +33,9 @@ pub struct OCGCore {
 mod tests {
     use super::*;
     use crate::ocgcore::constants::{CardLocation, Phase, WinReason, Winner};
-    use crate::ocgcore::messages::{CoreMessage, WinMessageData};
+    use crate::ocgcore::messages::{
+        CoreMessage, Hint, HintMessageData, HintPlayer, WinMessageData,
+    };
     use ocgcore_ffi::constants::{TYPE_MONSTER, TYPE_NORMAL};
     use ocgcore_ffi::enums::OCG_DuelStatus;
     use ocgcore_ffi::types::{OCG_CardData, OCG_NewCardInfo};
@@ -132,6 +134,10 @@ mod tests {
             })
             .collect();
         assert_eq!(phases, [Phase::Draw, Phase::Standby, Phase::Main1]);
+        assert!(messages.contains(&CoreMessage::Hint(HintMessageData {
+            player: HintPlayer::Player,
+            hint: Hint::Event(27),
+        })));
         assert!(matches!(messages.last(), Some(CoreMessage::Idle(_))));
     }
 
