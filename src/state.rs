@@ -282,6 +282,8 @@ pub fn handle_core_message() -> bool {
             panic!("Received Retry - this shouldn't happen.");
         }
         CoreMessage::NewTurn => return false,
+        // Continue playing past any win conditions
+        CoreMessage::Win(_) => return false,
         CoreMessage::Idle(actions) => {
             let normal_summons = actions.normal_summons;
             let special_summons = actions.special_summons;

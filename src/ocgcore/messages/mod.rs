@@ -11,6 +11,7 @@ mod select_tribute;
 mod select_unselect_card;
 mod select_yes_no;
 mod sort_card;
+mod win;
 
 pub use announce_number::AnnounceNumberMessageData;
 pub use draw::DrawMessageData;
@@ -25,12 +26,14 @@ pub use select_tribute::SelectTributeMessageData;
 pub use select_unselect_card::SelectUnselectMessageData;
 pub use select_yes_no::SelectYesNoMessageData;
 pub use sort_card::SortCardMessageData;
+pub use win::WinMessageData;
 
+use anyhow::Context;
 use ocgcore_ffi::constants::{
     MSG_ANNOUNCE_NUMBER, MSG_DRAW, MSG_NEW_TURN, MSG_RETRY, MSG_SELECT_CARD, MSG_SELECT_CHAIN,
     MSG_SELECT_EFFECTYN, MSG_SELECT_IDLECMD, MSG_SELECT_OPTION, MSG_SELECT_PLACE,
     MSG_SELECT_POSITION, MSG_SELECT_TRIBUTE, MSG_SELECT_UNSELECT_CARD, MSG_SELECT_YESNO,
-    MSG_SORT_CARD,
+    MSG_SORT_CARD, MSG_WIN,
 };
 
 #[derive(Hash, Debug, Clone, PartialEq, Eq)]
@@ -38,6 +41,7 @@ pub enum CoreMessage {
     Unsupported(u8),
     Retry,
     NewTurn,
+    Win(WinMessageData),
     Idle(IdleMessageData),
     Draw(DrawMessageData),
     SelectEffectYN(SelectEffectYNMessageData),
@@ -57,10 +61,11 @@ impl TryFrom<&[u8]> for CoreMessage {
     type Error = anyhow::Error;
 
     fn try_from(bytes: &[u8]) -> anyhow::Result<Self, Self::Error> {
-        let message_type = bytes[4];
+        let message_type = *bytes.get(4).context("Missing message type at offset 4")?;
         match u32::from(message_type) {
             MSG_RETRY => Ok(CoreMessage::Retry),
             MSG_NEW_TURN => Ok(CoreMessage::NewTurn),
+            MSG_WIN => Ok(CoreMessage::Win(WinMessageData::try_from(bytes)?)),
             MSG_SELECT_IDLECMD => Ok(CoreMessage::Idle(IdleMessageData::try_from(bytes)?)),
             MSG_SELECT_EFFECTYN => Ok(CoreMessage::SelectEffectYN(
                 SelectEffectYNMessageData::try_from(bytes)?,
