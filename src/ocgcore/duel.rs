@@ -23,6 +23,7 @@ use crate::ocgcore::constants::{CardController, CardOwner};
 use crate::ocgcore::data::CardType;
 use crate::ocgcore::data::HandCard;
 use crate::ocgcore::messages::CoreMessage;
+use crate::ocgcore::messages::parse_messages;
 use ocgcore_ffi::enums::OCG_DuelStatus;
 
 struct DuelInner {
@@ -79,13 +80,15 @@ impl Duel {
         }
     }
 
-    pub fn parse_messages(&self) -> CoreMessage {
+    pub fn parse_messages(&self) -> Vec<CoreMessage> {
         let mut length = 0;
         let messages_ptr =
             unsafe { ocgcore_ffi::OCG_DuelGetMessage(self.inner.handle, &mut length) } as *mut u8;
+        if length == 0 {
+            return Vec::new();
+        }
         let messages = unsafe { std::slice::from_raw_parts(messages_ptr, length as usize) };
-
-        CoreMessage::try_from(messages).unwrap()
+        parse_messages(messages).expect("Invalid core message buffer")
     }
 
     pub fn process(&self) -> OCG_DuelStatus {

@@ -82,13 +82,10 @@ fn process_until_input(
     mut handle_message: impl FnMut() -> bool,
 ) {
     loop {
-        match process() {
-            OCG_DuelStatus::OCG_DUEL_STATUS_AWAITING | OCG_DuelStatus::OCG_DUEL_STATUS_CONTINUE => {
-                if handle_message() {
-                    break;
-                }
-            }
-            OCG_DuelStatus::OCG_DUEL_STATUS_END => break,
+        let status = process();
+        let waiting = handle_message();
+        if waiting || status == OCG_DuelStatus::OCG_DUEL_STATUS_END {
+            break;
         }
     }
 }
@@ -276,160 +273,159 @@ pub fn handle_core_message() -> bool {
     let duel = duel().expect("Duel context missing active duel");
 
     state.hand_contents.set(duel.get_raw_hand());
+    for message in duel.parse_messages() {
+        match message {
+            CoreMessage::Unsupported(_) | CoreMessage::NewTurn | CoreMessage::Win(_) | CoreMessage::NewPhase(_) => {}
+            CoreMessage::Retry => {
+                panic!("Received Retry - this shouldn't happen.");
+            }
+            CoreMessage::Idle(actions) => {
+                let normal_summons = actions.normal_summons;
+                let special_summons = actions.special_summons;
+                let activatable_effects = actions.activatable_effects;
+                let monster_sets = actions.monster_sets;
+                let spell_trap_sets = actions.spell_trap_sets;
 
-    match duel.parse_messages() {
-        CoreMessage::Unsupported(_) => {
-            return false;
-        }
-        CoreMessage::Retry => {
-            panic!("Received Retry - this shouldn't happen.");
-        }
-        CoreMessage::NewTurn | CoreMessage::NewPhase(_) => return false,
-        // Continue playing past any win conditions
-        CoreMessage::Win(_) => return false,
-        CoreMessage::Idle(actions) => {
-            let normal_summons = actions.normal_summons;
-            let special_summons = actions.special_summons;
-            let activatable_effects = actions.activatable_effects;
-            let monster_sets = actions.monster_sets;
-            let spell_trap_sets = actions.spell_trap_sets;
+                if !normal_summons.is_empty()
+                    || !activatable_effects.is_empty()
+                    || !monster_sets.is_empty()
+                    || !spell_trap_sets.is_empty()
+                {
+                    state.hand_contents.with_mut(|hand| {
+                        for summon in &normal_summons {
+                            if summon.location != CardLocation::Hand {
+                                continue;
+                            }
+                            if let Some(hc) =
+                                hand.iter_mut().find(|hc| hc.index as u8 == summon.sequence)
+                            {
+                                hc.normal_summon_index = summon.action_index;
+                            }
+                        }
 
-            if !normal_summons.is_empty()
-                || !activatable_effects.is_empty()
-                || !monster_sets.is_empty()
-                || !spell_trap_sets.is_empty()
-            {
+                        for set in &monster_sets {
+                            if set.location != CardLocation::Hand {
+                                continue;
+                            }
+                            if let Some(hc) =
+                                hand.iter_mut().find(|hc| hc.index as u8 == set.sequence)
+                            {
+                                hc.monster_set_index = set.action_index;
+                            }
+                        }
+
+                        for set in &spell_trap_sets {
+                            if set.location != CardLocation::Hand {
+                                continue;
+                            }
+                            if let Some(hc) =
+                                hand.iter_mut().find(|hc| hc.index as u8 == set.sequence)
+                            {
+                                hc.spell_trap_set_index = set.action_index;
+                            }
+                        }
+
+                        for effect in &activatable_effects {
+                            if effect.location != CardLocation::Hand {
+                                continue;
+                            }
+                            if let Some(hc) =
+                                hand.iter_mut().find(|hc| hc.index as u8 == effect.sequence)
+                            {
+                                hc.activate_index = effect.action_index;
+                                hc.is_activatable_or_chainable = true;
+                            }
+                        }
+                    });
+                }
+
+                state.special_summons.set(special_summons.to_owned());
+                state
+                    .activatable_effects
+                    .set(activatable_effects.to_owned());
+                state.waiting_on_input.set(true);
+            }
+            CoreMessage::SelectPlace(message) => {
+                state.available_zones.set(message.zones);
+                state.waiting_on_input.set(true);
+            }
+            CoreMessage::SelectChain(message) => {
+                if message.effects.is_empty() {
+                    duel.set_response(Response::PassPriority);
+                    state.clear_pending_input();
+                    continue;
+                }
+
                 state.hand_contents.with_mut(|hand| {
-                    for summon in &normal_summons {
-                        if summon.location != CardLocation::Hand {
-                            continue;
-                        }
-                        if let Some(hc) =
-                            hand.iter_mut().find(|hc| hc.index as u8 == summon.sequence)
-                        {
-                            hc.normal_summon_index = summon.action_index;
-                        }
-                    }
-
-                    for set in &monster_sets {
-                        if set.location != CardLocation::Hand {
-                            continue;
-                        }
-                        if let Some(hc) = hand.iter_mut().find(|hc| hc.index as u8 == set.sequence)
-                        {
-                            hc.monster_set_index = set.action_index;
-                        }
-                    }
-
-                    for set in &spell_trap_sets {
-                        if set.location != CardLocation::Hand {
-                            continue;
-                        }
-                        if let Some(hc) = hand.iter_mut().find(|hc| hc.index as u8 == set.sequence)
-                        {
-                            hc.spell_trap_set_index = set.action_index;
-                        }
-                    }
-
-                    for effect in &activatable_effects {
+                    for effect in &message.effects {
                         if effect.location != CardLocation::Hand {
                             continue;
                         }
-                        if let Some(hc) =
+                        if let Some(hand_card) =
                             hand.iter_mut().find(|hc| hc.index as u8 == effect.sequence)
                         {
-                            hc.activate_index = effect.action_index;
-                            hc.is_activatable_or_chainable = true;
+                            hand_card.chain_index = effect.action_index;
+                            hand_card.is_activatable_or_chainable = true;
                         }
                     }
                 });
+
+                state.card_prompting_to_activate.set(message.effects);
+                state.waiting_on_input.set(true);
             }
-
-            state.special_summons.set(special_summons.to_owned());
-            state
-                .activatable_effects
-                .set(activatable_effects.to_owned());
-            state.waiting_on_input.set(true);
-        }
-        CoreMessage::SelectPlace(message) => {
-            state.available_zones.set(message.zones);
-            state.waiting_on_input.set(true);
-        }
-        CoreMessage::SelectChain(message) => {
-            if message.effects.is_empty() {
-                send_response(Response::PassPriority);
-                return false;
+            CoreMessage::SelectEffectYN(message) => {
+                state.card_prompting_to_activate.with_mut(|v| {
+                    v.push(CardData {
+                        card_code: message.0.card_code,
+                        controller: message.0.controller,
+                        location: message.0.location,
+                        sequence: message.0.sequence,
+                        ..Default::default()
+                    })
+                });
+                state.waiting_on_input.set(true);
             }
-
-            state.hand_contents.with_mut(|hand| {
-                for effect in &message.effects {
-                    if effect.location != CardLocation::Hand {
-                        continue;
-                    }
-                    if let Some(hand_card) =
-                        hand.iter_mut().find(|hc| hc.index as u8 == effect.sequence)
-                    {
-                        hand_card.chain_index = effect.action_index;
-                        hand_card.is_activatable_or_chainable = true;
-                    }
-                }
-            });
-
-            state.card_prompting_to_activate.set(message.effects);
-            state.waiting_on_input.set(true);
+            CoreMessage::SelectCard(received_selectables) => {
+                state.selectables.set(Some(received_selectables));
+                state.waiting_on_input.set(true);
+            }
+            CoreMessage::SelectYesNo(message) => {
+                let label = get_card_label(message.card_code).unwrap();
+                state.yes_no_question.set(Some(
+                    label
+                        .optional_strings
+                        .get(&message.string_index)
+                        .unwrap_or(&String::from("undefined label"))
+                        .to_owned(),
+                ));
+                state.waiting_on_input.set(true);
+            }
+            CoreMessage::SelectPosition(message) => {
+                state.positions_to_select.set(message.positions);
+                state.waiting_on_input.set(true);
+            }
+            CoreMessage::SelectUnselectCard(message) => {
+                state.cards_to_select_from.set(Some(message));
+                state.waiting_on_input.set(true);
+            }
+            CoreMessage::SelectTribute(message) => {
+                state.tributes.set(Some(message));
+                state.waiting_on_input.set(true);
+            }
+            CoreMessage::SelectOption(message) => {
+                state.options_to_prompt.set(Some(message));
+                state.waiting_on_input.set(true);
+            }
+            CoreMessage::AnnounceNumber(message) => {
+                state.numbers_to_select_from.set(Some(message));
+                state.waiting_on_input.set(true);
+            }
+            CoreMessage::SortCard(message) => {
+                state.sort_cards_to_select_from.set(Some(message));
+                state.waiting_on_input.set(true);
+            }
+            CoreMessage::Draw(_) => {}
         }
-        CoreMessage::SelectEffectYN(message) => {
-            state.card_prompting_to_activate.with_mut(|v| {
-                v.push(CardData {
-                    card_code: message.0.card_code,
-                    controller: message.0.controller,
-                    location: message.0.location,
-                    sequence: message.0.sequence,
-                    ..Default::default()
-                })
-            });
-            state.waiting_on_input.set(true);
-        }
-        CoreMessage::SelectCard(received_selectables) => {
-            state.selectables.set(Some(received_selectables));
-            state.waiting_on_input.set(true);
-        }
-        CoreMessage::SelectYesNo(message) => {
-            let label = get_card_label(message.card_code).unwrap();
-            state.yes_no_question.set(Some(
-                label
-                    .optional_strings
-                    .get(&message.string_index)
-                    .unwrap_or(&String::from("undefined label"))
-                    .to_owned(),
-            ));
-            state.waiting_on_input.set(true);
-        }
-        CoreMessage::SelectPosition(message) => {
-            state.positions_to_select.set(message.positions);
-            state.waiting_on_input.set(true);
-        }
-        CoreMessage::SelectUnselectCard(message) => {
-            state.cards_to_select_from.set(Some(message));
-            state.waiting_on_input.set(true);
-        }
-        CoreMessage::SelectTribute(message) => {
-            state.tributes.set(Some(message));
-            state.waiting_on_input.set(true);
-        }
-        CoreMessage::SelectOption(message) => {
-            state.options_to_prompt.set(Some(message));
-            state.waiting_on_input.set(true);
-        }
-        CoreMessage::AnnounceNumber(message) => {
-            state.numbers_to_select_from.set(Some(message));
-            state.waiting_on_input.set(true);
-        }
-        CoreMessage::SortCard(message) => {
-            state.sort_cards_to_select_from.set(Some(message));
-            state.waiting_on_input.set(true);
-        }
-        CoreMessage::Draw(_) => {}
     }
 
     state
@@ -497,6 +493,57 @@ mod tests {
         );
 
         assert_eq!(processed.get(), 2);
-        assert_eq!(handled.get(), 1);
+        assert_eq!(handled.get(), 2);
+    }
+
+    #[test]
+    fn dispatches_final_messages_when_duel_ends() {
+        let mut handled = false;
+        process_until_input(
+            || OCG_DuelStatus::OCG_DUEL_STATUS_END,
+            || {
+                handled = true;
+                false
+            },
+        );
+        assert!(handled);
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn handles_real_duel_messages_until_input() {
+        fn app() -> Element {
+            let core = futures::executor::block_on(OCGCore::load(
+                |_| panic!("Unexpected card lookup"),
+                Box::new(|_| None),
+                |_| {},
+            ))
+            .unwrap();
+            let duel = core.create_duel(5).unwrap();
+            duel.start();
+            let state = use_context_provider(UIState::default);
+            use_context_provider(|| Signal::new(Some(duel.clone())));
+
+            let mut phases = Vec::new();
+            for _ in 0..1000 {
+                let status = duel.process();
+                let waiting = handle_core_message();
+                if let Some(phase) = (state.current_phase)() {
+                    if phases.last() != Some(&phase) {
+                        phases.push(phase);
+                    }
+                }
+                if waiting {
+                    break;
+                }
+                assert_ne!(status, OCG_DuelStatus::OCG_DUEL_STATUS_END);
+            }
+            assert!((state.waiting_on_input)());
+            assert_eq!(phases, [Phase::Draw, Phase::Standby, Phase::Main1]);
+            rsx! {}
+        }
+
+        let mut dom = VirtualDom::new(app);
+        dom.rebuild_in_place();
     }
 }

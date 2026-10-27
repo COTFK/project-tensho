@@ -88,11 +88,7 @@ mod tests {
         let mut messages = Vec::new();
         for _ in 0..1000 {
             let status = duel.process();
-            let mut length = 0;
-            unsafe { ocgcore_ffi::OCG_DuelGetMessage(duel.handle(), &mut length) };
-            if length > 0 {
-                messages.push(duel.parse_messages());
-            }
+            messages.extend(duel.parse_messages());
             if status != OCG_DuelStatus::OCG_DUEL_STATUS_CONTINUE {
                 assert_eq!(status, OCG_DuelStatus::OCG_DUEL_STATUS_AWAITING);
                 return messages;

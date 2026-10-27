@@ -110,3 +110,53 @@ impl TryFrom<&[u8]> for CoreMessage {
         }
     }
 }
+
+pub fn parse_messages(bytes: &[u8]) -> anyhow::Result<Vec<CoreMessage>> {
+    let mut remaining = bytes;
+    let mut messages = Vec::new();
+    while !remaining.is_empty() {
+        let length_bytes = remaining.get(..4).context("Missing message length")?;
+        let length = u32::from_le_bytes(length_bytes.try_into()?) as usize;
+        anyhow::ensure!(length > 0, "Invalid empty message");
+        let end = 4usize
+            .checked_add(length)
+            .context("Message length overflow")?;
+        let message = remaining.get(..end).context("Truncated message")?;
+        messages.push(CoreMessage::try_from(message).with_context(|| {
+            format!(
+                "Failed to parse message at offset {}",
+                bytes.len() - remaining.len()
+            )
+        })?);
+        remaining = &remaining[end..];
+    }
+    Ok(messages)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ocgcore::constants::Phase;
+
+    #[test]
+    fn parses_framed_messages_in_order() {
+        let bytes = [1, 0, 0, 0, 2, 3, 0, 0, 0, 41, 1, 0, 3, 0, 0, 0, 41, 0, 2];
+        assert_eq!(
+            parse_messages(&bytes).unwrap(),
+            vec![
+                CoreMessage::Unsupported(2),
+                CoreMessage::NewPhase(NewPhaseMessageData { phase: Phase::Draw }),
+                CoreMessage::NewPhase(NewPhaseMessageData { phase: Phase::End }),
+            ]
+        );
+        assert!(parse_messages(&[]).unwrap().is_empty());
+    }
+
+    #[test]
+    fn rejects_invalid_frames_and_truncated_messages() {
+        assert!(parse_messages(&[0, 0, 0, 0]).is_err());
+        assert!(parse_messages(&[2, 0, 0, 0, 41]).is_err());
+        assert!(parse_messages(&[1, 0, 0]).is_err());
+        assert!(parse_messages(&[2, 0, 0, 0, 41, 1, 1, 0, 0, 0, 2]).is_err());
+    }
+}
