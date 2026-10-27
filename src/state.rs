@@ -275,8 +275,7 @@ pub fn handle_core_message() -> bool {
     state.hand_contents.set(duel.get_raw_hand());
 
     match duel.parse_messages() {
-        CoreMessage::Unsupported(message_type) => {
-            tracing::debug!(message_type, "Skipping unsupported core message");
+        CoreMessage::Unsupported(_) => {
             return false;
         }
         CoreMessage::Retry => {
