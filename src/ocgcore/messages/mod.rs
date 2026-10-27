@@ -2,6 +2,7 @@ mod announce_number;
 mod draw;
 mod hint;
 mod idle;
+pub mod move_card;
 mod new_phase;
 mod select_card;
 mod select_chain;
@@ -19,6 +20,7 @@ pub use announce_number::AnnounceNumberMessageData;
 pub use draw::DrawMessageData;
 pub use hint::{Hint, HintMessageData};
 pub use idle::IdleMessageData;
+pub use move_card::MoveMessageData;
 pub use new_phase::NewPhaseMessageData;
 pub use select_card::SelectCardMessageData;
 pub use select_chain::SelectChainMessageData;
@@ -34,7 +36,7 @@ pub use win::WinMessageData;
 
 use anyhow::Context;
 use ocgcore_ffi::constants::{
-    MSG_ANNOUNCE_NUMBER, MSG_DRAW, MSG_HINT, MSG_NEW_PHASE, MSG_NEW_TURN, MSG_RETRY,
+    MSG_ANNOUNCE_NUMBER, MSG_DRAW, MSG_HINT, MSG_MOVE, MSG_NEW_PHASE, MSG_NEW_TURN, MSG_RETRY,
     MSG_SELECT_CARD, MSG_SELECT_CHAIN, MSG_SELECT_EFFECTYN, MSG_SELECT_IDLECMD, MSG_SELECT_OPTION,
     MSG_SELECT_PLACE, MSG_SELECT_POSITION, MSG_SELECT_TRIBUTE, MSG_SELECT_UNSELECT_CARD,
     MSG_SELECT_YESNO, MSG_SORT_CARD, MSG_WIN,
@@ -46,6 +48,7 @@ pub enum CoreMessage {
     Retry,
     NewTurn,
     Hint(HintMessageData),
+    Move(MoveMessageData),
     NewPhase(NewPhaseMessageData),
     Win(WinMessageData),
     Idle(IdleMessageData),
@@ -72,6 +75,7 @@ impl TryFrom<&[u8]> for CoreMessage {
             MSG_RETRY => Ok(CoreMessage::Retry),
             MSG_NEW_TURN => Ok(CoreMessage::NewTurn),
             MSG_HINT => Ok(CoreMessage::Hint(HintMessageData::try_from(bytes)?)),
+            MSG_MOVE => Ok(CoreMessage::Move(MoveMessageData::try_from(bytes)?)),
             MSG_NEW_PHASE => Ok(CoreMessage::NewPhase(NewPhaseMessageData::try_from(bytes)?)),
             MSG_WIN => Ok(CoreMessage::Win(WinMessageData::try_from(bytes)?)),
             MSG_SELECT_IDLECMD => Ok(CoreMessage::Idle(IdleMessageData::try_from(bytes)?)),

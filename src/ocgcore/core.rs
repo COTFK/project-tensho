@@ -32,7 +32,9 @@ pub struct OCGCore {
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
     use super::*;
+    use crate::ocgcore::Response;
     use crate::ocgcore::constants::{CardLocation, Phase, Player, WinReason, Winner};
+    use crate::ocgcore::messages::move_card::MoveLocation;
     use crate::ocgcore::messages::{CoreMessage, Hint, HintMessageData, WinMessageData};
     use ocgcore_ffi::constants::{TYPE_MONSTER, TYPE_NORMAL};
     use ocgcore_ffi::enums::OCG_DuelStatus;
@@ -138,6 +140,64 @@ mod tests {
             hint: Hint::Event(27),
         })));
         assert!(matches!(messages.last(), Some(CoreMessage::Idle(_))));
+    }
+
+    #[test]
+    fn normal_summon_emits_move_from_hand_to_monster_zone() {
+        let core = test_core();
+        let duel = core.create_duel(5).unwrap();
+        for team in 0..=1 {
+            for code in 1..=10 {
+                let card = OCG_NewCardInfo {
+                    team,
+                    duelist: 0,
+                    code,
+                    con: team,
+                    loc: CardLocation::Deck as u32,
+                    seq: 0,
+                    pos: 0,
+                };
+                unsafe { ocgcore_ffi::OCG_DuelNewCard(duel.handle(), &card) };
+            }
+        }
+        duel.start();
+        let mut summoned_code = None;
+        for _ in 0..1000 {
+            let status = duel.process();
+            for message in duel.parse_messages() {
+                match message {
+                    CoreMessage::Idle(data) if summoned_code.is_none() => {
+                        let card = data.normal_summons.first().expect("No summonable card");
+                        summoned_code = Some(card.card_code);
+                        duel.set_response(Response::NormalSummon {
+                            index: card.action_index.expect("No summon action index"),
+                        });
+                    }
+                    CoreMessage::SelectPlace(data) => {
+                        let zone = data.zones.first().expect("No available zone");
+                        duel.set_response(Response::Place {
+                            controller: data.player,
+                            location: zone.location as u8,
+                            index: zone.sequence,
+                        });
+                    }
+                    CoreMessage::Move(data) if Some(data.card_code) == summoned_code => {
+                        assert_eq!(
+                            data.previous.location,
+                            MoveLocation::Zone(CardLocation::Hand)
+                        );
+                        assert_eq!(
+                            data.current.location,
+                            MoveLocation::Zone(CardLocation::MonsterZone)
+                        );
+                        return;
+                    }
+                    _ => {}
+                }
+            }
+            assert_ne!(status, OCG_DuelStatus::OCG_DUEL_STATUS_END);
+        }
+        panic!("Summon did not emit a move message");
     }
 
     #[test]
