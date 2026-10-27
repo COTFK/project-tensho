@@ -111,6 +111,13 @@ pub fn DuelScreen(duel_resource: Resource<anyhow::Result<Duel>>) -> Element {
             ModalContainer {}
             Field {}
             Hand {}
+            if let Some(phase) = (state.current_phase)() {
+                div {
+                    class: "fixed bottom-3 right-3 z-50 rounded-md bg-gray-950/70 px-2 py-1 font-mono text-gray-200 text-[8px] md:text-xs lg:text-base shadow-lg ring-1 ring-white/10 backdrop-blur-sm pointer-events-none",
+                    title: "Current phase",
+                    "{phase}"
+                }
+            }
         }
     )
 }

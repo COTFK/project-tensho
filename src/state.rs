@@ -13,6 +13,7 @@ use crate::ocgcore::constants::BattlePosition;
 use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
 use crate::ocgcore::constants::CardOwner;
+use crate::ocgcore::constants::Phase;
 use crate::ocgcore::messages::AnnounceNumberMessageData;
 use crate::ocgcore::messages::CoreMessage;
 use crate::ocgcore::messages::SelectCardMessageData;
@@ -40,6 +41,7 @@ pub struct SelectedCard {
 
 define_ui_state!(UIState {
     main_deck_length: u32,
+    current_phase: Option<Phase>,
     extra_deck: Vec<Option<CardData>>,
     hand_contents: Vec<HandCard>,
     selected_card: Option<SelectedCard>,
@@ -275,9 +277,12 @@ pub fn handle_core_message() -> bool {
     state.hand_contents.set(duel.get_raw_hand());
     for message in duel.parse_messages() {
         match message {
-            CoreMessage::Unsupported(_) | CoreMessage::NewTurn | CoreMessage::Win(_) | CoreMessage::NewPhase(_) => {}
+            CoreMessage::Unsupported(_) | CoreMessage::NewTurn | CoreMessage::Win(_) => {}
             CoreMessage::Retry => {
                 panic!("Received Retry - this shouldn't happen.");
+            }
+            CoreMessage::NewPhase(message) => {
+                state.current_phase.set(Some(message.phase));
             }
             CoreMessage::Idle(actions) => {
                 let normal_summons = actions.normal_summons;

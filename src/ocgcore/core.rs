@@ -32,7 +32,7 @@ pub struct OCGCore {
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
     use super::*;
-    use crate::ocgcore::constants::{CardLocation, WinReason, Winner};
+    use crate::ocgcore::constants::{CardLocation, Phase, WinReason, Winner};
     use crate::ocgcore::messages::{CoreMessage, WinMessageData};
     use ocgcore_ffi::constants::{TYPE_MONSTER, TYPE_NORMAL};
     use ocgcore_ffi::enums::OCG_DuelStatus;
@@ -119,6 +119,20 @@ mod tests {
                     .any(|message| matches!(message, CoreMessage::Idle(_)))
             );
         }
+    }
+
+    #[test]
+    fn startup_messages_include_phase_changes_before_idle() {
+        let messages = startup_messages(10, 10);
+        let phases: Vec<_> = messages
+            .iter()
+            .filter_map(|message| match message {
+                CoreMessage::NewPhase(data) => Some(data.phase),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(phases, [Phase::Draw, Phase::Standby, Phase::Main1]);
+        assert!(matches!(messages.last(), Some(CoreMessage::Idle(_))));
     }
 
     #[test]

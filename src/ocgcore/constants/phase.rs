@@ -2,6 +2,7 @@ use ocgcore_ffi::constants::{
     PHASE_BATTLE, PHASE_BATTLE_START, PHASE_BATTLE_STEP, PHASE_DAMAGE, PHASE_DAMAGE_CAL,
     PHASE_DRAW, PHASE_END, PHASE_MAIN1, PHASE_MAIN2, PHASE_STANDBY,
 };
+use std::fmt;
 
 #[derive(Hash, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Phase {
@@ -15,6 +16,23 @@ pub enum Phase {
     Battle,
     Main2,
     End,
+}
+
+impl fmt::Display for Phase {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Draw => "Draw Phase",
+            Self::Standby => "Standby Phase",
+            Self::Main1 => "Main Phase 1",
+            Self::BattleStart => "Battle Phase - Start",
+            Self::BattleStep => "Battle Step",
+            Self::Damage => "Damage Step",
+            Self::DamageCalculation => "Damage Calculation",
+            Self::Battle => "Battle Phase",
+            Self::Main2 => "Main Phase 2",
+            Self::End => "End Phase",
+        })
+    }
 }
 
 impl TryFrom<u16> for Phase {
