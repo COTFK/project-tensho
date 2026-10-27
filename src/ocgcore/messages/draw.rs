@@ -1,7 +1,7 @@
 use crate::ocgcore::CardData;
 use crate::ocgcore::constants::BattlePosition;
-use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
+use crate::ocgcore::constants::Player;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DrawMessageData {
@@ -39,7 +39,7 @@ impl TryFrom<&[u8]> for DrawMessageData {
 
             cards.push(CardData {
                 card_code,
-                controller: CardController::try_from(player)?,
+                controller: Player::try_from(player)?,
                 location: CardLocation::Hand,
                 position: Some(BattlePosition::try_from(raw_position)?),
                 ..Default::default()

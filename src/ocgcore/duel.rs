@@ -19,7 +19,7 @@ use super::constants::CardLocation;
 use crate::ocgcore::CardData;
 use crate::ocgcore::Response;
 use crate::ocgcore::constants::BattlePosition;
-use crate::ocgcore::constants::{CardController, CardOwner};
+use crate::ocgcore::constants::Player;
 use crate::ocgcore::data::CardType;
 use crate::ocgcore::data::HandCard;
 use crate::ocgcore::messages::CoreMessage;
@@ -96,16 +96,11 @@ impl Duel {
         OCG_DuelStatus::try_from(status).unwrap()
     }
 
-    pub fn count_location(&self, team: CardOwner, location: CardLocation) -> u32 {
+    pub fn count_location(&self, team: Player, location: CardLocation) -> u32 {
         unsafe { ocgcore_ffi::OCG_DuelQueryCount(self.inner.handle, team as u8, location as u32) }
     }
 
-    fn query_location(
-        &self,
-        flags: u32,
-        team: CardOwner,
-        location: CardLocation,
-    ) -> Option<Vec<u8>> {
+    fn query_location(&self, flags: u32, team: Player, location: CardLocation) -> Option<Vec<u8>> {
         let query = OCG_QueryInfo {
             flags,
             con: team as u8,
@@ -144,7 +139,7 @@ impl Duel {
     }
 
     pub fn get_cards(&self, location: CardLocation) -> Vec<Option<CardData>> {
-        let orig_buf = match self.query_location(0xFFFFFFFF, CardOwner::Player, location) {
+        let orig_buf = match self.query_location(0xFFFFFFFF, Player::Player, location) {
             Some(js_array) => js_array,
             None => return Vec::new(),
         };
@@ -274,7 +269,7 @@ impl Duel {
                     QUERY_END => {
                         cards.push(Some(CardData {
                             card_code,
-                            controller: CardController::Player,
+                            controller: Player::Player,
                             location,
                             position,
                             sequence: current_sequence,
@@ -313,9 +308,9 @@ impl Duel {
 
     pub fn add_card(
         &self,
-        owner: CardOwner,
+        owner: Player,
         code: u32,
-        controller: CardController,
+        controller: Player,
         location: CardLocation,
         index: u32,
         position: u32,

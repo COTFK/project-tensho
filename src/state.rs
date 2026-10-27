@@ -10,10 +10,9 @@ use crate::ocgcore::OCGCore;
 use crate::ocgcore::Response;
 use crate::ocgcore::Zone;
 use crate::ocgcore::constants::BattlePosition;
-use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
-use crate::ocgcore::constants::CardOwner;
 use crate::ocgcore::constants::Phase;
+use crate::ocgcore::constants::Player;
 use crate::ocgcore::messages::AnnounceNumberMessageData;
 use crate::ocgcore::messages::CoreMessage;
 use crate::ocgcore::messages::SelectCardMessageData;
@@ -211,9 +210,9 @@ pub async fn load_duel(
     }
     for card_id in main_deck {
         duel.add_card(
-            CardOwner::Player,
+            Player::Player,
             card_id,
-            CardController::Player,
+            Player::Player,
             CardLocation::Deck,
             0,
             0,
@@ -222,9 +221,9 @@ pub async fn load_duel(
 
     for card_id in EXTRA_DECK_IDS {
         duel.add_card(
-            CardOwner::Player,
+            Player::Player,
             card_id,
-            CardController::Player,
+            Player::Player,
             CardLocation::ExtraDeck,
             0,
             10,
@@ -436,7 +435,7 @@ pub fn handle_core_message() -> bool {
 
     state
         .main_deck_length
-        .set(duel.count_location(CardOwner::Player, CardLocation::Deck));
+        .set(duel.count_location(Player::Player, CardLocation::Deck));
     state
         .extra_deck
         .set(duel.get_cards(CardLocation::ExtraDeck));

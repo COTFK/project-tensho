@@ -1,6 +1,6 @@
 use crate::ocgcore::CardData;
-use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
+use crate::ocgcore::constants::Player;
 use ocgcore_ffi::constants::LOCATION_OVERLAY;
 
 #[derive(Hash, Debug, Clone, PartialEq, Eq)]
@@ -45,9 +45,9 @@ impl TryFrom<&[u8]> for SelectCardMessageData {
             // 2. Controller Alignment
             let controller_byte = raw_bytes[offset + 4];
             let controller = if controller_byte == 0 {
-                CardController::Player
+                Player::Player
             } else {
-                CardController::_Opponent
+                Player::Opponent
             };
 
             // 3. Bitmask Location Extraction

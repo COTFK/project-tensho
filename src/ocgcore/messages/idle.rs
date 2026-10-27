@@ -1,5 +1,5 @@
-use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
+use crate::ocgcore::constants::Player;
 use crate::ocgcore::data::CardData;
 use crate::ocgcore::utility::read_u8;
 use crate::ocgcore::utility::read_u32;
@@ -87,11 +87,7 @@ impl TryFrom<&[u8]> for IdleMessageData {
             read_block_common(raw_bytes, &mut cursor, "normal_summons", |raw, c, idx| {
                 Ok(CardData {
                     card_code: read_u32(raw, c, "normal_summons.card_code")?,
-                    controller: CardController::try_from(read_u8(
-                        raw,
-                        c,
-                        "normal_summons.controller",
-                    )?)?,
+                    controller: Player::try_from(read_u8(raw, c, "normal_summons.controller")?)?,
                     location: CardLocation::try_from(read_u8(raw, c, "normal_summons.location")?)?,
                     sequence: read_u32(raw, c, "normal_summons.index")? as u8,
                     action_index: Some(idx as u8),
@@ -103,11 +99,7 @@ impl TryFrom<&[u8]> for IdleMessageData {
             read_block_common(raw_bytes, &mut cursor, "special_summons", |raw, c, idx| {
                 Ok(CardData {
                     card_code: read_u32(raw, c, "special_summons.card_code")?,
-                    controller: CardController::try_from(read_u8(
-                        raw,
-                        c,
-                        "special_summons.controller",
-                    )?)?,
+                    controller: Player::try_from(read_u8(raw, c, "special_summons.controller")?)?,
                     location: CardLocation::try_from(read_u8(raw, c, "special_summons.location")?)?,
                     sequence: read_u32(raw, c, "special_summons.index")? as u8,
                     action_index: Some(idx as u8),
@@ -119,11 +111,7 @@ impl TryFrom<&[u8]> for IdleMessageData {
             read_block_common(raw_bytes, &mut cursor, "battle_positions", |raw, c, idx| {
                 Ok(CardData {
                     card_code: read_u32(raw, c, "battle_positions.card_code")?,
-                    controller: CardController::try_from(read_u8(
-                        raw,
-                        c,
-                        "battle_positions.controller",
-                    )?)?,
+                    controller: Player::try_from(read_u8(raw, c, "battle_positions.controller")?)?,
                     location: CardLocation::try_from(read_u8(
                         raw,
                         c,
@@ -139,11 +127,7 @@ impl TryFrom<&[u8]> for IdleMessageData {
             read_block_common(raw_bytes, &mut cursor, "monster_sets", |raw, c, idx| {
                 Ok(CardData {
                     card_code: read_u32(raw, c, "monster_sets.card_code")?,
-                    controller: CardController::try_from(read_u8(
-                        raw,
-                        c,
-                        "monster_sets.controller",
-                    )?)?,
+                    controller: Player::try_from(read_u8(raw, c, "monster_sets.controller")?)?,
                     location: CardLocation::try_from(read_u8(raw, c, "monster_sets.location")?)?,
                     sequence: read_u32(raw, c, "monster_sets.index")? as u8,
                     action_index: Some(idx as u8),
@@ -155,11 +139,7 @@ impl TryFrom<&[u8]> for IdleMessageData {
             read_block_common(raw_bytes, &mut cursor, "spell_trap_sets", |raw, c, idx| {
                 Ok(CardData {
                     card_code: read_u32(raw, c, "spell_trap_sets.card_code")?,
-                    controller: CardController::try_from(read_u8(
-                        raw,
-                        c,
-                        "spell_trap_sets.controller",
-                    )?)?,
+                    controller: Player::try_from(read_u8(raw, c, "spell_trap_sets.controller")?)?,
                     location: CardLocation::try_from(read_u8(raw, c, "spell_trap_sets.location")?)?,
                     sequence: read_u32(raw, c, "spell_trap_sets.index")? as u8,
                     action_index: Some(idx as u8),
@@ -183,7 +163,7 @@ impl TryFrom<&[u8]> for IdleMessageData {
 
                 Ok(CardData {
                     card_code,
-                    controller: CardController::try_from(controller)?,
+                    controller: Player::try_from(controller)?,
                     location: CardLocation::try_from(location)?,
                     sequence,
                     action_index: Some(idx as u8),

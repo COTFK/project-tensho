@@ -1,8 +1,8 @@
 use bitflags::bitflags;
 
 use super::constants::BattlePosition;
-use super::constants::CardController;
 use super::constants::CardLocation;
+use super::constants::Player;
 
 #[derive(Hash, Debug, PartialEq, Eq, Clone, Copy)]
 pub struct HandCard {
@@ -26,7 +26,7 @@ pub struct Zone {
 pub struct CardData {
     pub action_index: Option<u8>,
     pub card_code: u32,
-    pub controller: CardController,
+    pub controller: Player,
     pub location: CardLocation,
     pub position: Option<BattlePosition>,
     pub sequence: u8,

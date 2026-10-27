@@ -17,7 +17,7 @@ mod win;
 
 pub use announce_number::AnnounceNumberMessageData;
 pub use draw::DrawMessageData;
-pub use hint::{Hint, HintMessageData, HintPlayer};
+pub use hint::{Hint, HintMessageData};
 pub use idle::IdleMessageData;
 pub use new_phase::NewPhaseMessageData;
 pub use select_card::SelectCardMessageData;

@@ -1,7 +1,7 @@
 use crate::ocgcore::CardData;
 use crate::ocgcore::constants::BattlePosition;
-use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
+use crate::ocgcore::constants::Player;
 use crate::ocgcore::utility::read_u8;
 use crate::ocgcore::utility::read_u32;
 use ocgcore_ffi::constants::MSG_SELECT_UNSELECT_CARD;
@@ -92,7 +92,7 @@ impl TryFrom<&[u8]> for SelectUnselectMessageData {
 
             select_cards.push(CardData {
                 card_code,
-                controller: CardController::try_from(controller)?,
+                controller: Player::try_from(controller)?,
                 location: CardLocation::try_from(location)?,
                 position: BattlePosition::try_from(position).ok(),
                 sequence: sequence as u8,
@@ -121,7 +121,7 @@ impl TryFrom<&[u8]> for SelectUnselectMessageData {
 
             unselect_cards.push(CardData {
                 card_code,
-                controller: CardController::try_from(controller)?,
+                controller: Player::try_from(controller)?,
                 location: CardLocation::try_from(location)?,
                 position: BattlePosition::try_from(position).ok(),
                 sequence: sequence as u8,

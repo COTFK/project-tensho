@@ -1,6 +1,6 @@
 use crate::ocgcore::CardData;
-use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
+use crate::ocgcore::constants::Player;
 
 #[derive(Hash, Debug, Clone, PartialEq, Eq)]
 pub struct SelectTributeMessageData {
@@ -45,7 +45,7 @@ impl TryFrom<&[u8]> for SelectTributeMessageData {
 
             candidates.push(CardData {
                 card_code,
-                controller: CardController::try_from(controller)?,
+                controller: Player::try_from(controller)?,
                 location: CardLocation::try_from(location)?,
                 sequence,
                 action_index: Some(index as u8),

@@ -23,6 +23,7 @@ impl TryFrom<&[u8]> for WinMessageData {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ocgcore::constants::Player;
     use crate::ocgcore::messages::CoreMessage;
 
     #[test]
@@ -31,7 +32,7 @@ mod tests {
         assert_eq!(
             CoreMessage::try_from(bytes.as_slice()).unwrap(),
             CoreMessage::Win(WinMessageData {
-                winner: Winner::Player,
+                winner: Winner::Player(Player::Player),
                 reason: WinReason::DeckOut,
             })
         );
@@ -52,8 +53,8 @@ mod tests {
     #[test]
     fn parses_all_winners() {
         for (value, winner) in [
-            (0, Winner::Player),
-            (1, Winner::Opponent),
+            (0, Winner::Player(Player::Player)),
+            (1, Winner::Player(Player::Opponent)),
             (2, Winner::Draw),
         ] {
             let bytes = [3, 0, 0, 0, 5, value, 1];

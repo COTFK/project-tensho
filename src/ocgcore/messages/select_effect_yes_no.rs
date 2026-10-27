@@ -1,6 +1,6 @@
 use crate::ocgcore::CardData;
-use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
+use crate::ocgcore::constants::Player;
 
 #[derive(Hash, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SelectEffectYNMessageData(pub CardData);
@@ -11,7 +11,7 @@ impl TryFrom<&[u8]> for SelectEffectYNMessageData {
     fn try_from(bytes: &[u8]) -> anyhow::Result<Self, Self::Error> {
         let _player = bytes[5];
         let card_code = u32::from_le_bytes([bytes[6], bytes[7], bytes[8], bytes[9]]);
-        let controller = CardController::try_from(bytes[10])?;
+        let controller = Player::try_from(bytes[10])?;
         let location = CardLocation::try_from(bytes[11]).unwrap();
         let sequence = bytes[12];
 

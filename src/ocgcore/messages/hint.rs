@@ -1,26 +1,9 @@
+use crate::ocgcore::constants::Player;
 use crate::ocgcore::utility::{read_u8, read_u32, read_u64};
 use ocgcore_ffi::constants::{
     HINT_ATTRIB, HINT_CARD, HINT_CODE, HINT_EFFECT, HINT_EVENT, HINT_MESSAGE, HINT_NUMBER,
     HINT_OPSELECTED, HINT_RACE, HINT_SELECTMSG, HINT_ZONE,
 };
-
-#[derive(Hash, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum HintPlayer {
-    Player,
-    Opponent,
-}
-
-impl TryFrom<u8> for HintPlayer {
-    type Error = anyhow::Error;
-
-    fn try_from(value: u8) -> anyhow::Result<Self> {
-        match value {
-            0 => Ok(Self::Player),
-            1 => Ok(Self::Opponent),
-            _ => anyhow::bail!("Received invalid hint player: {value}"),
-        }
-    }
-}
 
 #[derive(Hash, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Hint {
@@ -59,7 +42,7 @@ impl Hint {
 
 #[derive(Hash, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct HintMessageData {
-    pub player: HintPlayer,
+    pub player: Player,
     pub hint: Hint,
 }
 
@@ -72,7 +55,7 @@ impl TryFrom<&[u8]> for HintMessageData {
         anyhow::ensure!(length == 11, "Invalid hint message length: {length}");
         read_u8(bytes, &mut cursor, "message type")?;
         let kind = read_u8(bytes, &mut cursor, "hint type")?;
-        let player = HintPlayer::try_from(read_u8(bytes, &mut cursor, "hint player")?)?;
+        let player = Player::try_from(read_u8(bytes, &mut cursor, "hint player")?)?;
         let value = read_u64(bytes, &mut cursor, "hint value")?;
         Ok(Self {
             player,
@@ -98,7 +81,7 @@ mod tests {
         assert_eq!(
             CoreMessage::try_from(bytes.as_slice()).unwrap(),
             CoreMessage::Hint(HintMessageData {
-                player: HintPlayer::Player,
+                player: Player::Player,
                 hint: Hint::Event(27),
             })
         );
@@ -123,7 +106,7 @@ mod tests {
             assert_eq!(
                 CoreMessage::try_from(bytes(kind as u8, 1, value).as_slice()).unwrap(),
                 CoreMessage::Hint(HintMessageData {
-                    player: HintPlayer::Opponent,
+                    player: Player::Opponent,
                     hint,
                 })
             );
@@ -176,7 +159,7 @@ mod tests {
             [
                 CoreMessage::NewPhase(_),
                 CoreMessage::Hint(HintMessageData {
-                    player: HintPlayer::Player,
+                    player: Player::Player,
                     hint: Hint::Event(27),
                 })
             ]

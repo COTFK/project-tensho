@@ -2,8 +2,8 @@ use dioxus::prelude::*;
 
 use crate::ocgcore::CardData;
 use crate::ocgcore::Response;
-use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
+use crate::ocgcore::constants::Player;
 use crate::state::SelectedCard;
 use crate::state::UIState;
 use crate::state::send_response;
@@ -93,7 +93,7 @@ pub fn Hand() -> Element {
                                     Card {
                                 card: CardData {
                                     card_code: card.code,
-                                    controller: CardController::Player,
+                                    controller: Player::Player,
                                     location: CardLocation::Hand,
                                     ..CardData::default()
                                 },

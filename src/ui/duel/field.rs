@@ -9,8 +9,8 @@ use crate::ocgcore::CardData;
 use crate::ocgcore::CardType;
 use crate::ocgcore::Response;
 use crate::ocgcore::constants::BattlePosition;
-use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
+use crate::ocgcore::constants::Player;
 use crate::state::SelectedCard;
 use crate::state::UIState;
 use crate::state::send_response;
@@ -78,7 +78,7 @@ fn Zone(index: u8, location: CardLocation, card: Option<CardData>) -> Element {
                 }
 
                 send_response(Response::Place {
-                    controller: CardController::Player as u8,
+                    controller: Player::Player as u8,
                     location: location as u8,
                     index,
                 });

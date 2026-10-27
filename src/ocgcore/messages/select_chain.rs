@@ -1,5 +1,5 @@
-use crate::ocgcore::constants::CardController;
 use crate::ocgcore::constants::CardLocation;
+use crate::ocgcore::constants::Player;
 use crate::ocgcore::data::CardData;
 
 #[derive(Hash, Debug, Clone, PartialEq, Eq)]
@@ -26,7 +26,7 @@ impl TryFrom<&[u8]> for SelectChainMessageData {
                     bytes[offset + 3],
                 ]);
 
-                let controller = CardController::try_from(bytes[offset + 4])?;
+                let controller = Player::try_from(bytes[offset + 4])?;
                 let location = CardLocation::try_from(bytes[offset + 5])?;
                 let sequence = bytes[offset + 6];
 

@@ -32,10 +32,8 @@ pub struct OCGCore {
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
     use super::*;
-    use crate::ocgcore::constants::{CardLocation, Phase, WinReason, Winner};
-    use crate::ocgcore::messages::{
-        CoreMessage, Hint, HintMessageData, HintPlayer, WinMessageData,
-    };
+    use crate::ocgcore::constants::{CardLocation, Phase, Player, WinReason, Winner};
+    use crate::ocgcore::messages::{CoreMessage, Hint, HintMessageData, WinMessageData};
     use ocgcore_ffi::constants::{TYPE_MONSTER, TYPE_NORMAL};
     use ocgcore_ffi::enums::OCG_DuelStatus;
     use ocgcore_ffi::types::{OCG_CardData, OCG_NewCardInfo};
@@ -101,9 +99,10 @@ mod tests {
 
     #[test]
     fn sandbox_continues_after_either_player_decks_out() {
-        for (player_cards, opponent_cards, winner) in
-            [(5, 0, Winner::Player), (0, 5, Winner::Opponent)]
-        {
+        for (player_cards, opponent_cards, winner) in [
+            (5, 0, Winner::Player(Player::Player)),
+            (0, 5, Winner::Player(Player::Opponent)),
+        ] {
             let messages = startup_messages(player_cards, opponent_cards);
             let win_index = messages
                 .iter()
@@ -135,7 +134,7 @@ mod tests {
             .collect();
         assert_eq!(phases, [Phase::Draw, Phase::Standby, Phase::Main1]);
         assert!(messages.contains(&CoreMessage::Hint(HintMessageData {
-            player: HintPlayer::Player,
+            player: Player::Player,
             hint: Hint::Event(27),
         })));
         assert!(matches!(messages.last(), Some(CoreMessage::Idle(_))));
