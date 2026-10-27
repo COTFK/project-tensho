@@ -29,6 +29,113 @@ pub struct OCGCore {
     _context: Rc<DuelContext>,
 }
 
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use super::*;
+    use crate::ocgcore::constants::{CardLocation, WinReason, Winner};
+    use crate::ocgcore::messages::{CoreMessage, WinMessageData};
+    use ocgcore_ffi::constants::{TYPE_MONSTER, TYPE_NORMAL};
+    use ocgcore_ffi::enums::OCG_DuelStatus;
+    use ocgcore_ffi::types::{OCG_CardData, OCG_NewCardInfo};
+
+    fn test_card_data(code: u32) -> OCG_CardData {
+        static EMPTY_SETCODES: [u16; 1] = [0];
+        OCG_CardData {
+            code,
+            alias: 0,
+            setcodes: EMPTY_SETCODES.as_ptr().cast_mut(),
+            r#type: TYPE_MONSTER | TYPE_NORMAL,
+            level: 4,
+            attribute: 1,
+            race: 1,
+            attack: 1000,
+            defense: 1000,
+            lscale: 0,
+            rscale: 0,
+            link_marker: 0,
+        }
+    }
+
+    fn test_core() -> OCGCore {
+        futures::executor::block_on(OCGCore::load(
+            test_card_data,
+            Box::new(|_| None),
+            |message| tracing::error!("{message}"),
+        ))
+        .unwrap()
+    }
+
+    fn startup_messages(player_cards: u32, opponent_cards: u32) -> Vec<CoreMessage> {
+        let core = test_core();
+        let duel = core.create_duel(5).unwrap();
+
+        for (team, count) in [(0, player_cards), (1, opponent_cards)] {
+            for code in 1..=count {
+                let card = OCG_NewCardInfo {
+                    team,
+                    duelist: 0,
+                    code,
+                    con: team,
+                    loc: CardLocation::Deck as u32,
+                    seq: 0,
+                    pos: 0,
+                };
+                unsafe { ocgcore_ffi::OCG_DuelNewCard(duel.handle(), &card) };
+            }
+        }
+
+        duel.start();
+        let mut messages = Vec::new();
+        for _ in 0..1000 {
+            let status = duel.process();
+            let mut length = 0;
+            unsafe { ocgcore_ffi::OCG_DuelGetMessage(duel.handle(), &mut length) };
+            if length > 0 {
+                messages.push(duel.parse_messages());
+            }
+            if status != OCG_DuelStatus::OCG_DUEL_STATUS_CONTINUE {
+                assert_eq!(status, OCG_DuelStatus::OCG_DUEL_STATUS_AWAITING);
+                return messages;
+            }
+        }
+        panic!("Duel did not reach an input prompt or end");
+    }
+
+    #[test]
+    fn sandbox_continues_after_either_player_decks_out() {
+        for (player_cards, opponent_cards, winner) in
+            [(5, 0, Winner::Player), (0, 5, Winner::Opponent)]
+        {
+            let messages = startup_messages(player_cards, opponent_cards);
+            let win_index = messages
+                .iter()
+                .position(|message| {
+                    *message
+                        == CoreMessage::Win(WinMessageData {
+                            winner,
+                            reason: WinReason::DeckOut,
+                        })
+                })
+                .expect("Expected a deck-out win");
+            assert!(
+                messages[win_index + 1..]
+                    .iter()
+                    .any(|message| matches!(message, CoreMessage::Idle(_)))
+            );
+        }
+    }
+
+    #[test]
+    fn script_loading_reports_lua_errors() {
+        let core = test_core();
+        let duel = core.create_duel(5).unwrap();
+        assert!(
+            core.load_script(&duel, b"error('test')", "test.lua")
+                .is_err()
+        );
+    }
+}
+
 impl OCGCore {
     pub async fn load(
         card_reader: CardReaderFn,
