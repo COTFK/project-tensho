@@ -177,24 +177,32 @@ mod tests {
                     73,
                     CoreMessage::ChainSolved(ChainLinkMessageData { chain_link }),
                 ),
+                (
+                    76,
+                    CoreMessage::ChainDisabled(ChainLinkMessageData { chain_link }),
+                ),
             ] {
                 let bytes = [2, 0, 0, 0, message_type, chain_link];
                 assert_eq!(CoreMessage::try_from(bytes.as_slice()).unwrap(), expected);
             }
         }
         assert_eq!(
-            parse_messages(&[2, 0, 0, 0, 71, 1, 2, 0, 0, 0, 72, 1, 2, 0, 0, 0, 73, 2]).unwrap(),
+            parse_messages(&[
+                2, 0, 0, 0, 71, 1, 2, 0, 0, 0, 72, 1, 2, 0, 0, 0, 76, 1, 2, 0, 0, 0, 73, 1,
+            ])
+            .unwrap(),
             vec![
                 CoreMessage::Chained(ChainLinkMessageData { chain_link: 1 }),
                 CoreMessage::ChainSolving(ChainLinkMessageData { chain_link: 1 }),
-                CoreMessage::ChainSolved(ChainLinkMessageData { chain_link: 2 }),
+                CoreMessage::ChainDisabled(ChainLinkMessageData { chain_link: 1 }),
+                CoreMessage::ChainSolved(ChainLinkMessageData { chain_link: 1 }),
             ]
         );
     }
 
     #[test]
     fn rejects_invalid_chain_link_messages() {
-        for message_type in [71, 72, 73] {
+        for message_type in [71, 72, 73, 76] {
             let bytes = [2, 0, 0, 0, message_type, 1];
             for length in 0..bytes.len() {
                 assert!(CoreMessage::try_from(&bytes[..length]).is_err());
