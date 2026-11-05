@@ -41,7 +41,7 @@ use ocgcore_ffi::constants::{
     MSG_ANNOUNCE_NUMBER, MSG_DRAW, MSG_HINT, MSG_MOVE, MSG_NEW_PHASE, MSG_NEW_TURN, MSG_RETRY,
     MSG_SELECT_CARD, MSG_SELECT_CHAIN, MSG_SELECT_EFFECTYN, MSG_SELECT_IDLECMD, MSG_SELECT_OPTION,
     MSG_SELECT_PLACE, MSG_SELECT_POSITION, MSG_SELECT_TRIBUTE, MSG_SELECT_UNSELECT_CARD,
-    MSG_SELECT_YESNO, MSG_SORT_CARD, MSG_SUMMONING, MSG_WIN,
+    MSG_SELECT_YESNO, MSG_SORT_CARD, MSG_SUMMONED, MSG_SUMMONING, MSG_WIN,
 };
 
 #[derive(Hash, Debug, Clone, PartialEq, Eq)]
@@ -52,6 +52,7 @@ pub enum CoreMessage {
     Hint(HintMessageData),
     Move(MoveMessageData),
     Summoning(SummoningMessageData),
+    Summoned,
     NewPhase(NewPhaseMessageData),
     Win(WinMessageData),
     Idle(IdleMessageData),
@@ -82,6 +83,11 @@ impl TryFrom<&[u8]> for CoreMessage {
             MSG_SUMMONING => Ok(CoreMessage::Summoning(SummoningMessageData::try_from(
                 bytes,
             )?)),
+            MSG_SUMMONED => {
+                let length = u32::from_le_bytes(bytes[..4].try_into()?);
+                anyhow::ensure!(length == 1, "Invalid summoned message length: {length}");
+                Ok(CoreMessage::Summoned)
+            }
             MSG_NEW_PHASE => Ok(CoreMessage::NewPhase(NewPhaseMessageData::try_from(bytes)?)),
             MSG_WIN => Ok(CoreMessage::Win(WinMessageData::try_from(bytes)?)),
             MSG_SELECT_IDLECMD => Ok(CoreMessage::Idle(IdleMessageData::try_from(bytes)?)),
@@ -172,5 +178,30 @@ mod tests {
         assert!(parse_messages(&[2, 0, 0, 0, 41]).is_err());
         assert!(parse_messages(&[1, 0, 0]).is_err());
         assert!(parse_messages(&[2, 0, 0, 0, 41, 1, 1, 0, 0, 0, 2]).is_err());
+    }
+
+    #[test]
+    fn parses_summoned_and_rejects_invalid_lengths() {
+        let bytes = [1, 0, 0, 0, 61];
+        assert_eq!(
+            CoreMessage::try_from(bytes.as_slice()).unwrap(),
+            CoreMessage::Summoned
+        );
+        for length in 0..bytes.len() {
+            assert!(CoreMessage::try_from(&bytes[..length]).is_err());
+        }
+        for length in [0u32, 2, u32::MAX] {
+            let mut invalid = bytes;
+            invalid[..4].copy_from_slice(&length.to_le_bytes());
+            assert!(CoreMessage::try_from(invalid.as_slice()).is_err());
+        }
+        assert_eq!(
+            parse_messages(&[1, 0, 0, 0, 61, 3, 0, 0, 0, 41, 1, 0]).unwrap(),
+            vec![
+                CoreMessage::Summoned,
+                CoreMessage::NewPhase(NewPhaseMessageData { phase: Phase::Draw }),
+            ]
+        );
+        assert!(parse_messages(&[2, 0, 0, 0, 61, 0]).is_err());
     }
 }

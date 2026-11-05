@@ -143,7 +143,7 @@ mod tests {
     }
 
     #[test]
-    fn normal_summon_emits_move_and_summoning() {
+    fn normal_summon_emits_move_summoning_and_summoned() {
         let core = test_core();
         let duel = core.create_duel(5).unwrap();
         for team in 0..=1 {
@@ -164,6 +164,7 @@ mod tests {
         let mut summoned_code = None;
         let mut moved_location = None;
         let mut summoning_location = None;
+        let mut summoned = false;
         for _ in 0..1000 {
             let status = duel.process();
             for message in duel.parse_messages() {
@@ -197,16 +198,22 @@ mod tests {
                     CoreMessage::Summoning(data) if Some(data.card_code) == summoned_code => {
                         summoning_location = Some(data.location);
                     }
+                    CoreMessage::Summoned => {
+                        assert!(summoning_location.is_some());
+                        summoned = true;
+                    }
                     _ => {}
                 }
             }
-            if let (Some(moved), Some(summoning)) = (moved_location, summoning_location) {
+            if let (Some(moved), Some(summoning), true) =
+                (moved_location, summoning_location, summoned)
+            {
                 assert_eq!(summoning, moved);
                 return;
             }
             assert_ne!(status, OCG_DuelStatus::OCG_DUEL_STATUS_END);
         }
-        panic!("Summon did not emit both move and summoning messages");
+        panic!("Summon did not emit move, summoning, and summoned messages");
     }
 
     #[test]

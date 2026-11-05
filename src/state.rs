@@ -280,6 +280,7 @@ pub fn handle_core_message() -> bool {
             CoreMessage::Hint(message) => tracing::debug!("Received hint: {message:?}"),
             CoreMessage::Move(message) => tracing::debug!("Received move: {message:?}"),
             CoreMessage::Summoning(message) => tracing::debug!("Received summoning: {message:?}"),
+            CoreMessage::Summoned => tracing::debug!("Received summoned"),
             CoreMessage::Retry => {
                 panic!("Received Retry - this shouldn't happen.");
             }
