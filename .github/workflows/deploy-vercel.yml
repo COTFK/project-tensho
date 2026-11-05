@@ -60,9 +60,6 @@ jobs:
           version: ${{env.EM_VERSION}}
           actions-cache-folder: ${{env.EM_CACHE_FOLDER}}
 
-      - name: Diagnose web compilation
-        run: cargo build --target wasm32-unknown-unknown --release --locked
-
       - name: Bundle web app
         run: dx bundle --platform web --release --debug-symbols=false --out-dir bundle --verbose --trace
 
