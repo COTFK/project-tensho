@@ -1,7 +1,6 @@
-use anyhow::Context;
-
 use crate::ocgcore::location_info::CardLocationInfo;
-use crate::ocgcore::utility::{read_u8, read_u32};
+
+use super::card_locations::read_card_locations;
 
 #[derive(Hash, Debug, Clone, PartialEq, Eq)]
 pub struct BecomeTargetMessageData {
@@ -12,28 +11,9 @@ impl TryFrom<&[u8]> for BecomeTargetMessageData {
     type Error = anyhow::Error;
 
     fn try_from(bytes: &[u8]) -> anyhow::Result<Self> {
-        let mut cursor = 0;
-        let length = read_u32(bytes, &mut cursor, "message length")?;
-        read_u8(bytes, &mut cursor, "message type")?;
-        let count = read_u32(bytes, &mut cursor, "target count")?;
-        let expected_length = count
-            .checked_mul(10)
-            .and_then(|size| size.checked_add(5))
-            .context("Target count exceeds message size")?;
-        anyhow::ensure!(
-            length == expected_length,
-            "Invalid become target message length: {length}, expected {expected_length}"
-        );
-        let end = usize::try_from(length)?
-            .checked_add(4)
-            .context("Become target message length overflow")?;
-        anyhow::ensure!(bytes.len() >= end, "Truncated become target message");
-
-        let mut targets = Vec::with_capacity(count as usize);
-        for _ in 0..count {
-            targets.push(CardLocationInfo::read(bytes, &mut cursor)?);
-        }
-        Ok(Self { targets })
+        Ok(Self {
+            targets: read_card_locations(bytes, "become target")?,
+        })
     }
 }
 

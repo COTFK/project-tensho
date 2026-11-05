@@ -282,6 +282,9 @@ pub fn handle_core_message() -> bool {
                 tracing::debug!("Received become target: {message:?}")
             }
             CoreMessage::CardHint(message) => tracing::debug!("Received card hint: {message:?}"),
+            CoreMessage::CardSelected(message) => {
+                tracing::debug!("Received card selected: {message:?}")
+            }
             CoreMessage::ConfirmCards(message) => {
                 tracing::debug!("Received confirm cards: {message:?}")
             }
