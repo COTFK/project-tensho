@@ -8,6 +8,7 @@ fn main() {
     println!("cargo:rerun-if-env-changed=GIT_HASH");
     println!("cargo:rerun-if-env-changed=GITHUB_SHA");
     println!("cargo:rerun-if-env-changed=VERCEL_GIT_COMMIT_SHA");
+    println!("cargo:rerun-if-env-changed=COURTIER_API_URL");
     println!("cargo:rerun-if-changed=.git/HEAD");
     println!("cargo:rerun-if-changed=.git/index");
 
@@ -23,6 +24,10 @@ fn main() {
         .unwrap_or_else(|| "unknown".to_string());
 
     let courtier_url = std::env::var("COURTIER_API_URL").expect("COURTIER_API_URL should be set");
+    assert!(
+        !courtier_url.trim().is_empty(),
+        "COURTIER_API_URL should not be empty"
+    );
 
     println!("cargo:rustc-env=GIT_HASH={git_hash}");
     println!("cargo:rustc-env=COURTIER_API_URL={courtier_url}");
