@@ -52,7 +52,7 @@ impl CourtierCardData {
             .and_then(|labels| labels.name.as_ref())
             .and_then(|name| name.en.clone())
             .unwrap_or_else(|| {
-                tracing::warn!(card = %self.id, "no English label; using card name");
+                tracing::debug!(card = %self.id, "no English label; using card name");
                 self.name.clone()
             })
     }

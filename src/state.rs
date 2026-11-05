@@ -13,6 +13,7 @@ use crate::ocgcore::constants::BattlePosition;
 use crate::ocgcore::constants::CardLocation;
 use crate::ocgcore::constants::Phase;
 use crate::ocgcore::constants::Player;
+use crate::ocgcore::log_core_message;
 use crate::ocgcore::messages::AnnounceNumberMessageData;
 use crate::ocgcore::messages::CoreMessage;
 use crate::ocgcore::messages::SelectCardMessageData;
@@ -158,7 +159,7 @@ pub async fn load_core(scripts: Scripts) -> anyhow::Result<OCGCore> {
     OCGCore::load(
         get_card_data,
         Box::new(move |name: &str| scripts.get(name).cloned()),
-        |text| tracing::info!(text),
+        log_core_message,
     )
     .await
 }
@@ -277,43 +278,43 @@ pub fn handle_core_message() -> bool {
     for message in duel.parse_messages() {
         match message {
             CoreMessage::Unsupported(_) | CoreMessage::NewTurn | CoreMessage::Win(_) => {}
-            CoreMessage::Hint(message) => tracing::debug!("Received hint: {message:?}"),
+            CoreMessage::Hint(message) => tracing::trace!("Received hint: {message:?}"),
             CoreMessage::BecomeTarget(message) => {
-                tracing::debug!("Received become target: {message:?}")
+                tracing::trace!("Received become target: {message:?}")
             }
-            CoreMessage::CardHint(message) => tracing::debug!("Received card hint: {message:?}"),
+            CoreMessage::CardHint(message) => tracing::trace!("Received card hint: {message:?}"),
             CoreMessage::CardSelected(message) => {
-                tracing::debug!("Received card selected: {message:?}")
+                tracing::trace!("Received card selected: {message:?}")
             }
             CoreMessage::ConfirmCards(message) => {
-                tracing::debug!("Received confirm cards: {message:?}")
+                tracing::trace!("Received confirm cards: {message:?}")
             }
             CoreMessage::ShuffleDeck(message) => {
-                tracing::debug!("Received shuffle deck: {message:?}")
+                tracing::trace!("Received shuffle deck: {message:?}")
             }
             CoreMessage::ShuffleHand(message) => {
-                tracing::debug!("Received shuffle hand: {message:?}")
+                tracing::trace!("Received shuffle hand: {message:?}")
             }
-            CoreMessage::Move(message) => tracing::debug!("Received move: {message:?}"),
-            CoreMessage::SetCard(message) => tracing::debug!("Received set card: {message:?}"),
-            CoreMessage::Summoning(message) => tracing::debug!("Received summoning: {message:?}"),
+            CoreMessage::Move(message) => tracing::trace!("Received move: {message:?}"),
+            CoreMessage::SetCard(message) => tracing::trace!("Received set card: {message:?}"),
+            CoreMessage::Summoning(message) => tracing::trace!("Received summoning: {message:?}"),
             CoreMessage::SpecialSummoning(message) => {
-                tracing::debug!("Received special summoning: {message:?}")
+                tracing::trace!("Received special summoning: {message:?}")
             }
-            CoreMessage::Summoned => tracing::debug!("Received summoned"),
-            CoreMessage::SpecialSummoned => tracing::debug!("Received special summoned"),
-            CoreMessage::Chaining(message) => tracing::debug!("Received chaining: {message:?}"),
-            CoreMessage::Chained(message) => tracing::debug!("Received chained: {message:?}"),
+            CoreMessage::Summoned => tracing::trace!("Received summoned"),
+            CoreMessage::SpecialSummoned => tracing::trace!("Received special summoned"),
+            CoreMessage::Chaining(message) => tracing::trace!("Received chaining: {message:?}"),
+            CoreMessage::Chained(message) => tracing::trace!("Received chained: {message:?}"),
             CoreMessage::ChainSolving(message) => {
-                tracing::debug!("Received chain solving: {message:?}")
+                tracing::trace!("Received chain solving: {message:?}")
             }
             CoreMessage::ChainSolved(message) => {
-                tracing::debug!("Received chain solved: {message:?}")
+                tracing::trace!("Received chain solved: {message:?}")
             }
             CoreMessage::ChainDisabled(message) => {
-                tracing::debug!("Received chain disabled: {message:?}")
+                tracing::trace!("Received chain disabled: {message:?}")
             }
-            CoreMessage::ChainEnd => tracing::debug!("Received chain end"),
+            CoreMessage::ChainEnd => tracing::trace!("Received chain end"),
             CoreMessage::Retry => {
                 panic!("Received Retry - this shouldn't happen.");
             }
@@ -557,7 +558,7 @@ mod tests {
             let core = futures::executor::block_on(OCGCore::load(
                 |_| panic!("Unexpected card lookup"),
                 Box::new(|_| None),
-                |_| {},
+                |_, _| {},
             ))
             .unwrap();
             let duel = core.create_duel(5).unwrap();

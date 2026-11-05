@@ -68,7 +68,7 @@ pub fn get_card_data(code: u32) -> OCG_CardData {
     CARD_DATABASE
         .with(|cache| cache.borrow().get(code).map(|card| card.data))
         .unwrap_or_else(|| {
-            tracing::warn!(code, "engine requested card data that is not cached");
+            tracing::error!(code, "engine requested card data that is not cached");
             OCG_CardData {
                 code,
                 alias: 0,

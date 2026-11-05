@@ -62,7 +62,7 @@ mod tests {
         futures::executor::block_on(OCGCore::load(
             test_card_data,
             Box::new(|_| None),
-            |message| tracing::error!("{message}"),
+            super::super::callbacks::log_core_message,
         ))
         .unwrap()
     }

@@ -200,7 +200,7 @@ impl TryFrom<&[u8]> for CoreMessage {
                 AnnounceNumberMessageData::try_from(bytes)?,
             )),
             _ => {
-                tracing::debug!("Received unhandled message {message_type} with bytes: {bytes:?}");
+                tracing::error!("Received unhandled message {message_type} with bytes: {bytes:?}");
                 Ok(CoreMessage::Unsupported(message_type))
             }
         }

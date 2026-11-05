@@ -8,6 +8,7 @@ pub mod messages;
 mod response;
 mod utility;
 
+pub(crate) use callbacks::log_core_message;
 pub use core::OCGCore;
 pub use data::CardData;
 pub use data::CardType;
