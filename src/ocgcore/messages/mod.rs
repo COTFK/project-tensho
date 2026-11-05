@@ -1,6 +1,7 @@
 mod announce_number;
 pub mod card_hint;
 mod chaining;
+pub mod confirm_cards;
 mod draw;
 mod hint;
 mod idle;
@@ -22,6 +23,7 @@ mod win;
 pub use announce_number::AnnounceNumberMessageData;
 pub use card_hint::CardHintMessageData;
 pub use chaining::{ChainLinkMessageData, ChainingMessageData};
+pub use confirm_cards::ConfirmCardsMessageData;
 pub use draw::DrawMessageData;
 pub use hint::{Hint, HintMessageData};
 pub use idle::IdleMessageData;
@@ -43,11 +45,11 @@ pub use win::WinMessageData;
 use anyhow::Context;
 use ocgcore_ffi::constants::{
     MSG_ANNOUNCE_NUMBER, MSG_CARD_HINT, MSG_CHAIN_SOLVED, MSG_CHAIN_SOLVING, MSG_CHAINED,
-    MSG_CHAINING, MSG_DRAW, MSG_HINT, MSG_MOVE, MSG_NEW_PHASE, MSG_NEW_TURN, MSG_RETRY,
-    MSG_SELECT_CARD, MSG_SELECT_CHAIN, MSG_SELECT_EFFECTYN, MSG_SELECT_IDLECMD, MSG_SELECT_OPTION,
-    MSG_SELECT_PLACE, MSG_SELECT_POSITION, MSG_SELECT_TRIBUTE, MSG_SELECT_UNSELECT_CARD,
-    MSG_SELECT_YESNO, MSG_SORT_CARD, MSG_SPSUMMONED, MSG_SPSUMMONING, MSG_SUMMONED, MSG_SUMMONING,
-    MSG_WIN,
+    MSG_CHAINING, MSG_CONFIRM_CARDS, MSG_DRAW, MSG_HINT, MSG_MOVE, MSG_NEW_PHASE, MSG_NEW_TURN,
+    MSG_RETRY, MSG_SELECT_CARD, MSG_SELECT_CHAIN, MSG_SELECT_EFFECTYN, MSG_SELECT_IDLECMD,
+    MSG_SELECT_OPTION, MSG_SELECT_PLACE, MSG_SELECT_POSITION, MSG_SELECT_TRIBUTE,
+    MSG_SELECT_UNSELECT_CARD, MSG_SELECT_YESNO, MSG_SORT_CARD, MSG_SPSUMMONED, MSG_SPSUMMONING,
+    MSG_SUMMONED, MSG_SUMMONING, MSG_WIN,
 };
 
 #[derive(Hash, Debug, Clone, PartialEq, Eq)]
@@ -57,6 +59,7 @@ pub enum CoreMessage {
     NewTurn,
     Hint(HintMessageData),
     CardHint(CardHintMessageData),
+    ConfirmCards(ConfirmCardsMessageData),
     Move(MoveMessageData),
     Summoning(SummoningMessageData),
     SpecialSummoning(SummoningMessageData),
@@ -93,6 +96,9 @@ impl TryFrom<&[u8]> for CoreMessage {
             MSG_NEW_TURN => Ok(CoreMessage::NewTurn),
             MSG_HINT => Ok(CoreMessage::Hint(HintMessageData::try_from(bytes)?)),
             MSG_CARD_HINT => Ok(CoreMessage::CardHint(CardHintMessageData::try_from(bytes)?)),
+            MSG_CONFIRM_CARDS => Ok(CoreMessage::ConfirmCards(
+                ConfirmCardsMessageData::try_from(bytes)?,
+            )),
             MSG_MOVE => Ok(CoreMessage::Move(MoveMessageData::try_from(bytes)?)),
             MSG_SUMMONING => Ok(CoreMessage::Summoning(SummoningMessageData::try_from(
                 bytes,
