@@ -278,6 +278,9 @@ pub fn handle_core_message() -> bool {
         match message {
             CoreMessage::Unsupported(_) | CoreMessage::NewTurn | CoreMessage::Win(_) => {}
             CoreMessage::Hint(message) => tracing::debug!("Received hint: {message:?}"),
+            CoreMessage::BecomeTarget(message) => {
+                tracing::debug!("Received become target: {message:?}")
+            }
             CoreMessage::CardHint(message) => tracing::debug!("Received card hint: {message:?}"),
             CoreMessage::ConfirmCards(message) => {
                 tracing::debug!("Received confirm cards: {message:?}")

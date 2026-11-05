@@ -1,4 +1,5 @@
 mod announce_number;
+mod become_target;
 mod card_event;
 pub mod card_hint;
 mod chaining;
@@ -25,6 +26,7 @@ mod summoning;
 mod win;
 
 pub use announce_number::AnnounceNumberMessageData;
+pub use become_target::BecomeTargetMessageData;
 pub use card_hint::CardHintMessageData;
 pub use chaining::{ChainLinkMessageData, ChainingMessageData};
 pub use confirm_cards::ConfirmCardsMessageData;
@@ -51,9 +53,9 @@ pub use win::WinMessageData;
 
 use anyhow::Context;
 use ocgcore_ffi::constants::{
-    MSG_ANNOUNCE_NUMBER, MSG_CARD_HINT, MSG_CHAIN_END, MSG_CHAIN_SOLVED, MSG_CHAIN_SOLVING,
-    MSG_CHAINED, MSG_CHAINING, MSG_CONFIRM_CARDS, MSG_DRAW, MSG_HINT, MSG_MOVE, MSG_NEW_PHASE,
-    MSG_NEW_TURN, MSG_RETRY, MSG_SELECT_CARD, MSG_SELECT_CHAIN, MSG_SELECT_EFFECTYN,
+    MSG_ANNOUNCE_NUMBER, MSG_BECOME_TARGET, MSG_CARD_HINT, MSG_CHAIN_END, MSG_CHAIN_SOLVED,
+    MSG_CHAIN_SOLVING, MSG_CHAINED, MSG_CHAINING, MSG_CONFIRM_CARDS, MSG_DRAW, MSG_HINT, MSG_MOVE,
+    MSG_NEW_PHASE, MSG_NEW_TURN, MSG_RETRY, MSG_SELECT_CARD, MSG_SELECT_CHAIN, MSG_SELECT_EFFECTYN,
     MSG_SELECT_IDLECMD, MSG_SELECT_OPTION, MSG_SELECT_PLACE, MSG_SELECT_POSITION,
     MSG_SELECT_TRIBUTE, MSG_SELECT_UNSELECT_CARD, MSG_SELECT_YESNO, MSG_SET, MSG_SHUFFLE_DECK,
     MSG_SHUFFLE_HAND, MSG_SORT_CARD, MSG_SPSUMMONED, MSG_SPSUMMONING, MSG_SUMMONED, MSG_SUMMONING,
@@ -66,6 +68,7 @@ pub enum CoreMessage {
     Retry,
     NewTurn,
     Hint(HintMessageData),
+    BecomeTarget(BecomeTargetMessageData),
     CardHint(CardHintMessageData),
     ConfirmCards(ConfirmCardsMessageData),
     ShuffleDeck(ShuffleDeckMessageData),
@@ -107,6 +110,9 @@ impl TryFrom<&[u8]> for CoreMessage {
             MSG_RETRY => Ok(CoreMessage::Retry),
             MSG_NEW_TURN => Ok(CoreMessage::NewTurn),
             MSG_HINT => Ok(CoreMessage::Hint(HintMessageData::try_from(bytes)?)),
+            MSG_BECOME_TARGET => Ok(CoreMessage::BecomeTarget(
+                BecomeTargetMessageData::try_from(bytes)?,
+            )),
             MSG_CARD_HINT => Ok(CoreMessage::CardHint(CardHintMessageData::try_from(bytes)?)),
             MSG_CONFIRM_CARDS => Ok(CoreMessage::ConfirmCards(
                 ConfirmCardsMessageData::try_from(bytes)?,
