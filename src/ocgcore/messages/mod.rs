@@ -44,7 +44,7 @@ use ocgcore_ffi::constants::{
     MSG_MOVE, MSG_NEW_PHASE, MSG_NEW_TURN, MSG_RETRY, MSG_SELECT_CARD, MSG_SELECT_CHAIN,
     MSG_SELECT_EFFECTYN, MSG_SELECT_IDLECMD, MSG_SELECT_OPTION, MSG_SELECT_PLACE,
     MSG_SELECT_POSITION, MSG_SELECT_TRIBUTE, MSG_SELECT_UNSELECT_CARD, MSG_SELECT_YESNO,
-    MSG_SORT_CARD, MSG_SUMMONED, MSG_SUMMONING, MSG_WIN,
+    MSG_SORT_CARD, MSG_SPSUMMONING, MSG_SUMMONED, MSG_SUMMONING, MSG_WIN,
 };
 
 #[derive(Hash, Debug, Clone, PartialEq, Eq)]
@@ -55,6 +55,7 @@ pub enum CoreMessage {
     Hint(HintMessageData),
     Move(MoveMessageData),
     Summoning(SummoningMessageData),
+    SpecialSummoning(SummoningMessageData),
     Summoned,
     Chaining(ChainingMessageData),
     Chained(ChainLinkMessageData),
@@ -89,6 +90,9 @@ impl TryFrom<&[u8]> for CoreMessage {
             MSG_SUMMONING => Ok(CoreMessage::Summoning(SummoningMessageData::try_from(
                 bytes,
             )?)),
+            MSG_SPSUMMONING => Ok(CoreMessage::SpecialSummoning(
+                SummoningMessageData::try_from(bytes)?,
+            )),
             MSG_SUMMONED => {
                 let length = u32::from_le_bytes(bytes[..4].try_into()?);
                 anyhow::ensure!(length == 1, "Invalid summoned message length: {length}");
