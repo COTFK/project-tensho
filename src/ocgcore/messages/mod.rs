@@ -16,6 +16,7 @@ mod select_position;
 mod select_tribute;
 mod select_unselect_card;
 mod select_yes_no;
+mod shuffle_deck;
 mod shuffle_hand;
 mod sort_card;
 mod summoning;
@@ -39,6 +40,7 @@ pub use select_position::SelectPositionMessageData;
 pub use select_tribute::SelectTributeMessageData;
 pub use select_unselect_card::SelectUnselectMessageData;
 pub use select_yes_no::SelectYesNoMessageData;
+pub use shuffle_deck::ShuffleDeckMessageData;
 pub use shuffle_hand::ShuffleHandMessageData;
 pub use sort_card::SortCardMessageData;
 pub use summoning::SummoningMessageData;
@@ -50,8 +52,8 @@ use ocgcore_ffi::constants::{
     MSG_CHAINING, MSG_CONFIRM_CARDS, MSG_DRAW, MSG_HINT, MSG_MOVE, MSG_NEW_PHASE, MSG_NEW_TURN,
     MSG_RETRY, MSG_SELECT_CARD, MSG_SELECT_CHAIN, MSG_SELECT_EFFECTYN, MSG_SELECT_IDLECMD,
     MSG_SELECT_OPTION, MSG_SELECT_PLACE, MSG_SELECT_POSITION, MSG_SELECT_TRIBUTE,
-    MSG_SELECT_UNSELECT_CARD, MSG_SELECT_YESNO, MSG_SHUFFLE_HAND, MSG_SORT_CARD, MSG_SPSUMMONED,
-    MSG_SPSUMMONING, MSG_SUMMONED, MSG_SUMMONING, MSG_WIN,
+    MSG_SELECT_UNSELECT_CARD, MSG_SELECT_YESNO, MSG_SHUFFLE_DECK, MSG_SHUFFLE_HAND, MSG_SORT_CARD,
+    MSG_SPSUMMONED, MSG_SPSUMMONING, MSG_SUMMONED, MSG_SUMMONING, MSG_WIN,
 };
 
 #[derive(Hash, Debug, Clone, PartialEq, Eq)]
@@ -62,6 +64,7 @@ pub enum CoreMessage {
     Hint(HintMessageData),
     CardHint(CardHintMessageData),
     ConfirmCards(ConfirmCardsMessageData),
+    ShuffleDeck(ShuffleDeckMessageData),
     ShuffleHand(ShuffleHandMessageData),
     Move(MoveMessageData),
     Summoning(SummoningMessageData),
@@ -102,6 +105,9 @@ impl TryFrom<&[u8]> for CoreMessage {
             MSG_CONFIRM_CARDS => Ok(CoreMessage::ConfirmCards(
                 ConfirmCardsMessageData::try_from(bytes)?,
             )),
+            MSG_SHUFFLE_DECK => Ok(CoreMessage::ShuffleDeck(ShuffleDeckMessageData::try_from(
+                bytes,
+            )?)),
             MSG_SHUFFLE_HAND => Ok(CoreMessage::ShuffleHand(ShuffleHandMessageData::try_from(
                 bytes,
             )?)),

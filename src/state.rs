@@ -282,6 +282,9 @@ pub fn handle_core_message() -> bool {
             CoreMessage::ConfirmCards(message) => {
                 tracing::debug!("Received confirm cards: {message:?}")
             }
+            CoreMessage::ShuffleDeck(message) => {
+                tracing::debug!("Received shuffle deck: {message:?}")
+            }
             CoreMessage::ShuffleHand(message) => {
                 tracing::debug!("Received shuffle hand: {message:?}")
             }
