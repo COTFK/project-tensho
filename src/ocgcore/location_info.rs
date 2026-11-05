@@ -25,6 +25,41 @@ pub enum CardLocationKind {
     Overlay { host: Option<CardLocation> },
 }
 
+impl CardLocationKind {
+    pub(super) fn from_wire(raw_location: u8) -> anyhow::Result<Self> {
+        let overlay = raw_location & LOCATION_OVERLAY as u8 != 0;
+        let base_location = raw_location & !(LOCATION_OVERLAY as u8);
+        Ok(match (overlay, base_location) {
+            (false, 0) => Self::None,
+            (true, 0) => Self::Overlay { host: None },
+            (true, base) => {
+                Self::Overlay {
+                    host: Some(CardLocation::try_from(base).with_context(|| {
+                        format!("Invalid card location byte: {raw_location:#04x}")
+                    })?),
+                }
+            }
+            (false, base) => Self::Known(
+                CardLocation::try_from(base)
+                    .with_context(|| format!("Invalid card location byte: {raw_location:#04x}"))?,
+            ),
+        })
+    }
+}
+
+pub(super) fn read_controller(
+    bytes: &[u8],
+    cursor: &mut usize,
+    label: &str,
+) -> anyhow::Result<Option<Player>> {
+    let controller = read_u8(bytes, cursor, label)?;
+    if u32::from(controller) == PLAYER_NONE {
+        Ok(None)
+    } else {
+        Ok(Some(Player::try_from(controller)?))
+    }
+}
+
 #[derive(Hash, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum CardLocationPosition {
     Position(CardPositionFlags),
@@ -41,32 +76,12 @@ pub struct CardLocationInfo {
 
 impl CardLocationInfo {
     pub(super) fn read(bytes: &[u8], cursor: &mut usize) -> anyhow::Result<Self> {
-        let controller = read_u8(bytes, cursor, "card controller")?;
-        let controller = if u32::from(controller) == PLAYER_NONE {
-            None
-        } else {
-            Some(Player::try_from(controller)?)
-        };
+        let controller = read_controller(bytes, cursor, "card controller")?;
         let raw_location = read_u8(bytes, cursor, "card location")?;
         let sequence = read_u32(bytes, cursor, "card sequence")?;
         let raw_position = read_u32(bytes, cursor, "card position")?;
         let overlay = raw_location & LOCATION_OVERLAY as u8 != 0;
-        let base_location = raw_location & !(LOCATION_OVERLAY as u8);
-        let location = match (overlay, base_location) {
-            (false, 0) => CardLocationKind::None,
-            (true, 0) => CardLocationKind::Overlay { host: None },
-            (true, base) => {
-                CardLocationKind::Overlay {
-                    host: Some(CardLocation::try_from(base).with_context(|| {
-                        format!("Invalid card location byte: {raw_location:#04x}")
-                    })?),
-                }
-            }
-            (false, base) => CardLocationKind::Known(
-                CardLocation::try_from(base)
-                    .with_context(|| format!("Invalid card location byte: {raw_location:#04x}"))?,
-            ),
-        };
+        let location = CardLocationKind::from_wire(raw_location)?;
         let position = if overlay {
             CardLocationPosition::OverlaySequence(raw_position)
         } else {
