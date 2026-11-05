@@ -40,8 +40,8 @@ pub use win::WinMessageData;
 
 use anyhow::Context;
 use ocgcore_ffi::constants::{
-    MSG_ANNOUNCE_NUMBER, MSG_CHAIN_SOLVING, MSG_CHAINED, MSG_CHAINING, MSG_DRAW, MSG_HINT,
-    MSG_MOVE, MSG_NEW_PHASE, MSG_NEW_TURN, MSG_RETRY, MSG_SELECT_CARD, MSG_SELECT_CHAIN,
+    MSG_ANNOUNCE_NUMBER, MSG_CHAIN_SOLVED, MSG_CHAIN_SOLVING, MSG_CHAINED, MSG_CHAINING, MSG_DRAW,
+    MSG_HINT, MSG_MOVE, MSG_NEW_PHASE, MSG_NEW_TURN, MSG_RETRY, MSG_SELECT_CARD, MSG_SELECT_CHAIN,
     MSG_SELECT_EFFECTYN, MSG_SELECT_IDLECMD, MSG_SELECT_OPTION, MSG_SELECT_PLACE,
     MSG_SELECT_POSITION, MSG_SELECT_TRIBUTE, MSG_SELECT_UNSELECT_CARD, MSG_SELECT_YESNO,
     MSG_SORT_CARD, MSG_SPSUMMONED, MSG_SPSUMMONING, MSG_SUMMONED, MSG_SUMMONING, MSG_WIN,
@@ -61,6 +61,7 @@ pub enum CoreMessage {
     Chaining(ChainingMessageData),
     Chained(ChainLinkMessageData),
     ChainSolving(ChainLinkMessageData),
+    ChainSolved(ChainLinkMessageData),
     NewPhase(NewPhaseMessageData),
     Win(WinMessageData),
     Idle(IdleMessageData),
@@ -106,6 +107,9 @@ impl TryFrom<&[u8]> for CoreMessage {
             MSG_CHAINING => Ok(CoreMessage::Chaining(ChainingMessageData::try_from(bytes)?)),
             MSG_CHAINED => Ok(CoreMessage::Chained(ChainLinkMessageData::try_from(bytes)?)),
             MSG_CHAIN_SOLVING => Ok(CoreMessage::ChainSolving(ChainLinkMessageData::try_from(
+                bytes,
+            )?)),
+            MSG_CHAIN_SOLVED => Ok(CoreMessage::ChainSolved(ChainLinkMessageData::try_from(
                 bytes,
             )?)),
             MSG_NEW_PHASE => Ok(CoreMessage::NewPhase(NewPhaseMessageData::try_from(bytes)?)),

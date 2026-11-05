@@ -290,6 +290,9 @@ pub fn handle_core_message() -> bool {
             CoreMessage::ChainSolving(message) => {
                 tracing::debug!("Received chain solving: {message:?}")
             }
+            CoreMessage::ChainSolved(message) => {
+                tracing::debug!("Received chain solved: {message:?}")
+            }
             CoreMessage::Retry => {
                 panic!("Received Retry - this shouldn't happen.");
             }
