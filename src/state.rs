@@ -279,6 +279,7 @@ pub fn handle_core_message() -> bool {
             CoreMessage::Unsupported(_) | CoreMessage::NewTurn | CoreMessage::Win(_) => {}
             CoreMessage::Hint(message) => tracing::debug!("Received hint: {message:?}"),
             CoreMessage::Move(message) => tracing::debug!("Received move: {message:?}"),
+            CoreMessage::Summoning(message) => tracing::debug!("Received summoning: {message:?}"),
             CoreMessage::Retry => {
                 panic!("Received Retry - this shouldn't happen.");
             }

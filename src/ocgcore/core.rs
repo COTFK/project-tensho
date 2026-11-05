@@ -34,7 +34,7 @@ mod tests {
     use super::*;
     use crate::ocgcore::Response;
     use crate::ocgcore::constants::{CardLocation, Phase, Player, WinReason, Winner};
-    use crate::ocgcore::messages::move_card::MoveLocation;
+    use crate::ocgcore::location_info::CardLocationKind;
     use crate::ocgcore::messages::{CoreMessage, Hint, HintMessageData, WinMessageData};
     use ocgcore_ffi::constants::{TYPE_MONSTER, TYPE_NORMAL};
     use ocgcore_ffi::enums::OCG_DuelStatus;
@@ -143,7 +143,7 @@ mod tests {
     }
 
     #[test]
-    fn normal_summon_emits_move_from_hand_to_monster_zone() {
+    fn normal_summon_emits_move_and_summoning() {
         let core = test_core();
         let duel = core.create_duel(5).unwrap();
         for team in 0..=1 {
@@ -162,6 +162,8 @@ mod tests {
         }
         duel.start();
         let mut summoned_code = None;
+        let mut moved_location = None;
+        let mut summoning_location = None;
         for _ in 0..1000 {
             let status = duel.process();
             for message in duel.parse_messages() {
@@ -184,20 +186,27 @@ mod tests {
                     CoreMessage::Move(data) if Some(data.card_code) == summoned_code => {
                         assert_eq!(
                             data.previous.location,
-                            MoveLocation::Zone(CardLocation::Hand)
+                            CardLocationKind::Known(CardLocation::Hand)
                         );
                         assert_eq!(
                             data.current.location,
-                            MoveLocation::Zone(CardLocation::MonsterZone)
+                            CardLocationKind::Known(CardLocation::MonsterZone)
                         );
-                        return;
+                        moved_location = Some(data.current);
+                    }
+                    CoreMessage::Summoning(data) if Some(data.card_code) == summoned_code => {
+                        summoning_location = Some(data.location);
                     }
                     _ => {}
                 }
             }
+            if let (Some(moved), Some(summoning)) = (moved_location, summoning_location) {
+                assert_eq!(summoning, moved);
+                return;
+            }
             assert_ne!(status, OCG_DuelStatus::OCG_DUEL_STATUS_END);
         }
-        panic!("Summon did not emit a move message");
+        panic!("Summon did not emit both move and summoning messages");
     }
 
     #[test]

@@ -14,6 +14,7 @@ mod select_tribute;
 mod select_unselect_card;
 mod select_yes_no;
 mod sort_card;
+mod summoning;
 mod win;
 
 pub use announce_number::AnnounceNumberMessageData;
@@ -32,6 +33,7 @@ pub use select_tribute::SelectTributeMessageData;
 pub use select_unselect_card::SelectUnselectMessageData;
 pub use select_yes_no::SelectYesNoMessageData;
 pub use sort_card::SortCardMessageData;
+pub use summoning::SummoningMessageData;
 pub use win::WinMessageData;
 
 use anyhow::Context;
@@ -39,7 +41,7 @@ use ocgcore_ffi::constants::{
     MSG_ANNOUNCE_NUMBER, MSG_DRAW, MSG_HINT, MSG_MOVE, MSG_NEW_PHASE, MSG_NEW_TURN, MSG_RETRY,
     MSG_SELECT_CARD, MSG_SELECT_CHAIN, MSG_SELECT_EFFECTYN, MSG_SELECT_IDLECMD, MSG_SELECT_OPTION,
     MSG_SELECT_PLACE, MSG_SELECT_POSITION, MSG_SELECT_TRIBUTE, MSG_SELECT_UNSELECT_CARD,
-    MSG_SELECT_YESNO, MSG_SORT_CARD, MSG_WIN,
+    MSG_SELECT_YESNO, MSG_SORT_CARD, MSG_SUMMONING, MSG_WIN,
 };
 
 #[derive(Hash, Debug, Clone, PartialEq, Eq)]
@@ -49,6 +51,7 @@ pub enum CoreMessage {
     NewTurn,
     Hint(HintMessageData),
     Move(MoveMessageData),
+    Summoning(SummoningMessageData),
     NewPhase(NewPhaseMessageData),
     Win(WinMessageData),
     Idle(IdleMessageData),
@@ -76,6 +79,9 @@ impl TryFrom<&[u8]> for CoreMessage {
             MSG_NEW_TURN => Ok(CoreMessage::NewTurn),
             MSG_HINT => Ok(CoreMessage::Hint(HintMessageData::try_from(bytes)?)),
             MSG_MOVE => Ok(CoreMessage::Move(MoveMessageData::try_from(bytes)?)),
+            MSG_SUMMONING => Ok(CoreMessage::Summoning(SummoningMessageData::try_from(
+                bytes,
+            )?)),
             MSG_NEW_PHASE => Ok(CoreMessage::NewPhase(NewPhaseMessageData::try_from(bytes)?)),
             MSG_WIN => Ok(CoreMessage::Win(WinMessageData::try_from(bytes)?)),
             MSG_SELECT_IDLECMD => Ok(CoreMessage::Idle(IdleMessageData::try_from(bytes)?)),

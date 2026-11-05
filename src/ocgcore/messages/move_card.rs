@@ -1,14 +1,13 @@
 use bitflags::bitflags;
 use ocgcore_ffi::constants::{
-    LOCATION_OVERLAY, PLAYER_NONE, POS_FACEDOWN_ATTACK, POS_FACEDOWN_DEFENSE, POS_FACEUP_ATTACK,
-    POS_FACEUP_DEFENSE, REASON_ADJUST, REASON_BATTLE, REASON_COST, REASON_DESTROY, REASON_DISCARD,
-    REASON_DISSUMMON, REASON_DRAW, REASON_EFFECT, REASON_FLIP, REASON_FUSION, REASON_LINK,
-    REASON_LOST_TARGET, REASON_MATERIAL, REASON_RDAMAGE, REASON_REDIRECT, REASON_RELEASE,
-    REASON_REPLACE, REASON_RETURN, REASON_RITUAL, REASON_RRECOVER, REASON_RULE, REASON_SPSUMMON,
-    REASON_SUMMON, REASON_SYNCHRO, REASON_TEMPORARY, REASON_XYZ,
+    REASON_ADJUST, REASON_BATTLE, REASON_COST, REASON_DESTROY, REASON_DISCARD, REASON_DISSUMMON,
+    REASON_DRAW, REASON_EFFECT, REASON_FLIP, REASON_FUSION, REASON_LINK, REASON_LOST_TARGET,
+    REASON_MATERIAL, REASON_RDAMAGE, REASON_REDIRECT, REASON_RELEASE, REASON_REPLACE,
+    REASON_RETURN, REASON_RITUAL, REASON_RRECOVER, REASON_RULE, REASON_SPSUMMON, REASON_SUMMON,
+    REASON_SYNCHRO, REASON_TEMPORARY, REASON_XYZ,
 };
 
-use crate::ocgcore::constants::{CardLocation, Player};
+use crate::ocgcore::location_info::CardLocationInfo;
 use crate::ocgcore::utility::{read_u8, read_u32};
 
 bitflags! {
@@ -42,81 +41,13 @@ bitflags! {
         const LINK = REASON_LINK;
     }
 
-    #[derive(Hash, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-    pub struct MovePosition: u32 {
-        const FACE_UP_ATTACK = POS_FACEUP_ATTACK;
-        const FACE_DOWN_ATTACK = POS_FACEDOWN_ATTACK;
-        const FACE_UP_DEFENSE = POS_FACEUP_DEFENSE;
-        const FACE_DOWN_DEFENSE = POS_FACEDOWN_DEFENSE;
-    }
-}
-
-#[derive(Hash, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum MoveLocation {
-    None,
-    Zone(CardLocation),
-    Overlay { host: Option<CardLocation> },
-    Unknown(u8),
-}
-
-#[derive(Hash, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum MoveLocationPosition {
-    Position(MovePosition),
-    OverlaySequence(u32),
-}
-
-#[derive(Hash, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct MoveLocationInfo {
-    pub controller: Option<Player>,
-    pub location: MoveLocation,
-    pub sequence: u32,
-    pub position: MoveLocationPosition,
-}
-
-impl MoveLocationInfo {
-    fn read(bytes: &[u8], cursor: &mut usize) -> anyhow::Result<Self> {
-        let controller = read_u8(bytes, cursor, "move controller")?;
-        let controller = if u32::from(controller) == PLAYER_NONE {
-            None
-        } else {
-            Some(Player::try_from(controller)?)
-        };
-        let raw_location = read_u8(bytes, cursor, "move location")?;
-        let sequence = read_u32(bytes, cursor, "move sequence")?;
-        let raw_position = read_u32(bytes, cursor, "move position")?;
-        let overlay = raw_location & LOCATION_OVERLAY as u8 != 0;
-        let base_location = raw_location & !(LOCATION_OVERLAY as u8);
-        let location = match (overlay, base_location) {
-            (false, 0) => MoveLocation::None,
-            (true, 0) => MoveLocation::Overlay { host: None },
-            (true, base) => match CardLocation::try_from(base) {
-                Ok(host) => MoveLocation::Overlay { host: Some(host) },
-                Err(_) => MoveLocation::Unknown(raw_location),
-            },
-            (false, base) => match CardLocation::try_from(base) {
-                Ok(location) => MoveLocation::Zone(location),
-                Err(_) => MoveLocation::Unknown(raw_location),
-            },
-        };
-        let position = if overlay {
-            MoveLocationPosition::OverlaySequence(raw_position)
-        } else {
-            MoveLocationPosition::Position(MovePosition::from_bits_retain(raw_position))
-        };
-        Ok(Self {
-            controller,
-            location,
-            sequence,
-            position,
-        })
-    }
 }
 
 #[derive(Hash, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct MoveMessageData {
     pub card_code: u32,
-    pub previous: MoveLocationInfo,
-    pub current: MoveLocationInfo,
+    pub previous: CardLocationInfo,
+    pub current: CardLocationInfo,
     pub reason: MoveReason,
 }
 
@@ -129,8 +60,8 @@ impl TryFrom<&[u8]> for MoveMessageData {
         anyhow::ensure!(length == 29, "Invalid move message length: {length}");
         read_u8(bytes, &mut cursor, "message type")?;
         let card_code = read_u32(bytes, &mut cursor, "card code")?;
-        let previous = MoveLocationInfo::read(bytes, &mut cursor)?;
-        let current = MoveLocationInfo::read(bytes, &mut cursor)?;
+        let previous = CardLocationInfo::read(bytes, &mut cursor)?;
+        let current = CardLocationInfo::read(bytes, &mut cursor)?;
         let reason = MoveReason::from_bits_retain(read_u32(bytes, &mut cursor, "move reason")?);
         Ok(Self {
             card_code,
@@ -144,8 +75,12 @@ impl TryFrom<&[u8]> for MoveMessageData {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ocgcore::constants::{CardLocation, Player};
+    use crate::ocgcore::location_info::{
+        CardLocationKind, CardLocationPosition, CardPositionFlags,
+    };
     use crate::ocgcore::messages::{CoreMessage, parse_messages};
-    use ocgcore_ffi::constants::LOCATION_MZONE;
+    use ocgcore_ffi::constants::{LOCATION_MZONE, LOCATION_OVERLAY, PLAYER_NONE};
 
     const SAMPLE: [u8; 33] = [
         29, 0, 0, 0, 50, 136, 86, 166, 2, 0, 2, 3, 0, 0, 0, 10, 0, 0, 0, 0, 4, 2, 0, 0, 0, 1, 0, 0,
@@ -158,19 +93,19 @@ mod tests {
             CoreMessage::try_from(SAMPLE.as_slice()).unwrap(),
             CoreMessage::Move(MoveMessageData {
                 card_code: 44_455_560,
-                previous: MoveLocationInfo {
+                previous: CardLocationInfo {
                     controller: Some(Player::Player),
-                    location: MoveLocation::Zone(CardLocation::Hand),
+                    location: CardLocationKind::Known(CardLocation::Hand),
                     sequence: 3,
-                    position: MoveLocationPosition::Position(
-                        MovePosition::FACE_DOWN_ATTACK | MovePosition::FACE_DOWN_DEFENSE,
+                    position: CardLocationPosition::Position(
+                        CardPositionFlags::FACE_DOWN_ATTACK | CardPositionFlags::FACE_DOWN_DEFENSE,
                     ),
                 },
-                current: MoveLocationInfo {
+                current: CardLocationInfo {
                     controller: Some(Player::Player),
-                    location: MoveLocation::Zone(CardLocation::MonsterZone),
+                    location: CardLocationKind::Known(CardLocation::MonsterZone),
                     sequence: 2,
-                    position: MoveLocationPosition::Position(MovePosition::FACE_UP_ATTACK),
+                    position: CardLocationPosition::Position(CardPositionFlags::FACE_UP_ATTACK),
                 },
                 reason: MoveReason::RULE | MoveReason::DRAW,
             })
@@ -178,7 +113,7 @@ mod tests {
     }
 
     #[test]
-    fn handles_overlay_absent_and_unknown_wire_values() {
+    fn handles_overlay_absent_and_unknown_flags() {
         let mut bytes = SAMPLE;
         bytes[5..9].copy_from_slice(&0u32.to_le_bytes());
         bytes[9] = 1;
@@ -193,19 +128,19 @@ mod tests {
         assert_eq!(message.previous.controller, Some(Player::Opponent));
         assert_eq!(
             message.previous.location,
-            MoveLocation::Overlay {
+            CardLocationKind::Overlay {
                 host: Some(CardLocation::MonsterZone)
             }
         );
         assert_eq!(
             message.previous.position,
-            MoveLocationPosition::OverlaySequence(0x1234_5678)
+            CardLocationPosition::OverlaySequence(0x1234_5678)
         );
         assert_eq!(message.current.controller, None);
-        assert_eq!(message.current.location, MoveLocation::None);
+        assert_eq!(message.current.location, CardLocationKind::None);
         assert_eq!(
             message.current.position,
-            MoveLocationPosition::Position(MovePosition::from_bits_retain(0x8000_0000))
+            CardLocationPosition::Position(CardPositionFlags::from_bits_retain(0x8000_0000))
         );
         assert_eq!(message.reason.bits(), 0x8000_0040);
 
@@ -213,16 +148,19 @@ mod tests {
         let message = MoveMessageData::try_from(bytes.as_slice()).unwrap();
         assert_eq!(
             message.previous.location,
-            MoveLocation::Overlay {
+            CardLocationKind::Overlay {
                 host: Some(CardLocation::Graveyard)
             }
         );
-        bytes[10] = 0xff;
+        bytes[10] = LOCATION_OVERLAY as u8;
         let message = MoveMessageData::try_from(bytes.as_slice()).unwrap();
-        assert_eq!(message.previous.location, MoveLocation::Unknown(0xff));
+        assert_eq!(
+            message.previous.location,
+            CardLocationKind::Overlay { host: None }
+        );
         assert_eq!(
             message.previous.position,
-            MoveLocationPosition::OverlaySequence(0x1234_5678)
+            CardLocationPosition::OverlaySequence(0x1234_5678)
         );
     }
 
@@ -242,6 +180,17 @@ mod tests {
         bytes = SAMPLE;
         bytes[19] = 255;
         assert!(CoreMessage::try_from(bytes.as_slice()).is_err());
+        for offset in [10, 20] {
+            for location in [0x0c, 0x8c, 0xff] {
+                let mut bytes = SAMPLE;
+                bytes[offset] = location;
+                let error = CoreMessage::try_from(bytes.as_slice()).unwrap_err();
+                assert!(
+                    format!("{error:#}").contains(&format!("{location:#04x}")),
+                    "error did not include raw location: {error:#}"
+                );
+            }
+        }
     }
 
     #[test]
