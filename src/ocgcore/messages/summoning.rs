@@ -1,5 +1,6 @@
 use crate::ocgcore::location_info::CardLocationInfo;
-use crate::ocgcore::utility::{read_u8, read_u32};
+
+use super::card_event::read_card_event;
 
 #[derive(Hash, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SummoningMessageData {
@@ -11,12 +12,7 @@ impl TryFrom<&[u8]> for SummoningMessageData {
     type Error = anyhow::Error;
 
     fn try_from(bytes: &[u8]) -> anyhow::Result<Self> {
-        let mut cursor = 0;
-        let length = read_u32(bytes, &mut cursor, "message length")?;
-        anyhow::ensure!(length == 15, "Invalid summoning message length: {length}");
-        read_u8(bytes, &mut cursor, "message type")?;
-        let card_code = read_u32(bytes, &mut cursor, "card code")?;
-        let location = CardLocationInfo::read(bytes, &mut cursor)?;
+        let (card_code, location) = read_card_event(bytes, "summoning")?;
         Ok(Self {
             card_code,
             location,
