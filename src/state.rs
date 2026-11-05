@@ -284,6 +284,7 @@ pub fn handle_core_message() -> bool {
                 tracing::debug!("Received special summoning: {message:?}")
             }
             CoreMessage::Summoned => tracing::debug!("Received summoned"),
+            CoreMessage::SpecialSummoned => tracing::debug!("Received special summoned"),
             CoreMessage::Chaining(message) => tracing::debug!("Received chaining: {message:?}"),
             CoreMessage::Chained(message) => tracing::debug!("Received chained: {message:?}"),
             CoreMessage::ChainSolving(message) => {

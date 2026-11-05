@@ -145,12 +145,14 @@ mod tests {
     fn parses_multiple_framed_messages() {
         let mut bytes = SAMPLE.to_vec();
         bytes.extend(SPECIAL_SAMPLE);
+        bytes.extend([1, 0, 0, 0, 63]);
         bytes.extend([3, 0, 0, 0, 41, 1, 0]);
         assert!(matches!(
             parse_messages(&bytes).unwrap().as_slice(),
             [
                 CoreMessage::Summoning(_),
                 CoreMessage::SpecialSummoning(_),
+                CoreMessage::SpecialSummoned,
                 CoreMessage::NewPhase(_)
             ]
         ));
