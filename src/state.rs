@@ -282,6 +282,10 @@ pub fn handle_core_message() -> bool {
             CoreMessage::Summoning(message) => tracing::debug!("Received summoning: {message:?}"),
             CoreMessage::Summoned => tracing::debug!("Received summoned"),
             CoreMessage::Chaining(message) => tracing::debug!("Received chaining: {message:?}"),
+            CoreMessage::Chained(message) => tracing::debug!("Received chained: {message:?}"),
+            CoreMessage::ChainSolving(message) => {
+                tracing::debug!("Received chain solving: {message:?}")
+            }
             CoreMessage::Retry => {
                 panic!("Received Retry - this shouldn't happen.");
             }
