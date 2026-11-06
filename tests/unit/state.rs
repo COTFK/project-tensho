@@ -4,7 +4,7 @@ use std::cell::Cell;
 #[test]
 #[cfg(not(target_arch = "wasm32"))]
 fn card_layer_initializer_matches_native_decks_and_custom_hand() {
-    use crate::ui::card_layer::CardLayer;
+    use crate::ui::card_layer::{CardLayer, CardPlacement};
     use ocgcore_ffi::constants::{TYPE_FUSION, TYPE_MONSTER, TYPE_NORMAL};
     use ocgcore_ffi::types::OCG_CardData;
 
@@ -65,7 +65,7 @@ fn card_layer_initializer_matches_native_decks_and_custom_hand() {
             layer
                 .cards()
                 .iter()
-                .filter(|card| card.address.location == location)
+                .filter(|card| matches!(card.placement, CardPlacement::Zone(address) if address.location == location))
                 .map(|card| card.code)
                 .collect::<Vec<_>>(),
             duel.get_cards(location)

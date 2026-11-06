@@ -4,7 +4,7 @@ use crate::ocgcore::Response;
 use crate::ocgcore::constants::{BattlePosition, CardLocation, Phase, Player, WinReason, Winner};
 use crate::ocgcore::location_info::CardLocationKind;
 use crate::ocgcore::messages::{CoreMessage, Hint, HintMessageData, WinMessageData};
-use crate::ui::card_layer::{CardAddress, CardLayer};
+use crate::ui::card_layer::{CardAddress, CardLayer, CardPlacement};
 use ocgcore_ffi::constants::{POS_FACEUP_ATTACK, TYPE_MONSTER, TYPE_NORMAL};
 use ocgcore_ffi::enums::OCG_DuelStatus;
 use ocgcore_ffi::types::{OCG_CardData, OCG_NewCardInfo};
@@ -259,10 +259,8 @@ fn normal_summon_emits_move_summoning_and_summoned() {
                             layer
                                 .cards()
                                 .iter()
-                                .filter(|card| {
-                                    card.address.controller == Player::Player
-                                        && card.address.location == location
-                                })
+                                .filter(|card| matches!(card.placement, CardPlacement::Zone(address)
+                                    if address.controller == Player::Player && address.location == location))
                                 .count(),
                             duel.count_location(Player::Player, location) as usize
                         );
@@ -335,6 +333,287 @@ fn normal_summon_emits_move_summoning_and_summoned() {
         assert_ne!(status, OCG_DuelStatus::OCG_DUEL_STATUS_END);
     }
     panic!("Summon did not emit move, summoning, and summoned messages");
+}
+
+#[test]
+fn tracks_native_overlay_moves_and_host_removal() {
+    let core = test_core();
+    let duel = core.create_duel(5).unwrap();
+    let mut layer = CardLayer::default();
+    for (team, player) in [(0, Player::Player), (1, Player::Opponent)] {
+        for code in 1..=10 {
+            let card = OCG_NewCardInfo {
+                team,
+                duelist: 0,
+                code,
+                con: team,
+                loc: CardLocation::Deck as u32,
+                seq: 0,
+                pos: 0,
+            };
+            unsafe { ocgcore_ffi::OCG_DuelNewCard(duel.handle(), &card) };
+            layer
+                .insert(
+                    CardAddress {
+                        controller: player,
+                        location: CardLocation::Deck,
+                        sequence: code - 1,
+                    },
+                    code,
+                )
+                .unwrap();
+        }
+    }
+    let field = |sequence| CardAddress {
+        controller: Player::Player,
+        location: CardLocation::MonsterZone,
+        sequence,
+    };
+    for (code, sequence) in [(100, 0), (101, 1), (102, 2)] {
+        duel.add_card(
+            Player::Player,
+            code,
+            Player::Player,
+            CardLocation::MonsterZone,
+            sequence,
+            POS_FACEUP_ATTACK,
+        );
+        layer.insert(field(sequence), code).unwrap();
+    }
+    let host = layer.card_at(field(0)).unwrap().id;
+    let first = layer.card_at(field(1)).unwrap().id;
+    let second = layer.card_at(field(2)).unwrap().id;
+    core.load_script(
+        &duel,
+        br#"
+        local effect = Effect.GlobalEffect()
+        effect:SetType(0x0802)
+        effect:SetCode(1113)
+        effect:SetOperation(function()
+            local host = Duel.GetFieldCard(0, 4, 0)
+            local first = Duel.GetFieldCard(0, 4, 1)
+            local second = Duel.GetFieldCard(0, 4, 2)
+            Duel.Overlay(host, first)
+            Duel.Overlay(host, second)
+            Duel.MoveSequence(host, 3)
+            Duel.SendtoGrave(first, 0x40)
+            Duel.SendtoGrave(host, 0x40)
+        end)
+        Duel.RegisterEffect(effect, 0)
+    "#,
+        "overlay-test.lua",
+    )
+    .unwrap();
+
+    duel.start();
+    let mut attached = 0;
+    let mut detached = 0;
+    let mut host_moved = false;
+    for _ in 0..1000 {
+        let status = duel.process();
+        for message in duel.parse_messages() {
+            if matches!(message, CoreMessage::Draw(_) | CoreMessage::Move(_)) {
+                layer.apply(&message).unwrap();
+            }
+            if let CoreMessage::Move(data) = message {
+                match (data.previous.location, data.current.location) {
+                    (_, CardLocationKind::Overlay { .. }) => {
+                        attached += 1;
+                        let expected = if data.card_code == 101 { first } else { second };
+                        assert_eq!(layer.material_at(host, attached - 1).unwrap().id, expected);
+                    }
+                    (
+                        CardLocationKind::Overlay { .. },
+                        CardLocationKind::Known(CardLocation::Graveyard),
+                    ) => {
+                        detached += 1;
+                        let expected = if data.card_code == 101 { first } else { second };
+                        assert_eq!(
+                            layer
+                                .card_at(CardAddress {
+                                    controller: Player::Player,
+                                    location: CardLocation::Graveyard,
+                                    sequence: data.current.sequence,
+                                })
+                                .unwrap()
+                                .id,
+                            expected
+                        );
+                    }
+                    (
+                        CardLocationKind::Known(CardLocation::MonsterZone),
+                        CardLocationKind::Known(CardLocation::MonsterZone),
+                    ) if data.card_code == 100 => {
+                        assert_eq!(layer.card_at(field(3)).unwrap().id, host);
+                        assert_eq!(layer.material_at(host, 0).unwrap().id, first);
+                        assert_eq!(layer.material_at(host, 1).unwrap().id, second);
+                        let query = ocgcore_ffi::types::OCG_QueryInfo {
+                            flags: ocgcore_ffi::constants::QUERY_OVERLAY_CARD,
+                            con: Player::Player as u8,
+                            loc: CardLocation::MonsterZone as u32,
+                            seq: 3,
+                            overlay_seq: 0,
+                        };
+                        let mut length = 0;
+                        let ptr = unsafe {
+                            ocgcore_ffi::OCG_DuelQuery(duel.handle(), &mut length, &query)
+                        };
+                        assert!(!ptr.is_null());
+                        let bytes = unsafe {
+                            std::slice::from_raw_parts(ptr.cast::<u8>(), length as usize)
+                        };
+                        let mut cursor = 0;
+                        assert_eq!(
+                            crate::ocgcore::utility::read_u16(bytes, &mut cursor, "length")
+                                .unwrap(),
+                            16
+                        );
+                        assert_eq!(
+                            crate::ocgcore::utility::read_u32(bytes, &mut cursor, "flag").unwrap(),
+                            ocgcore_ffi::constants::QUERY_OVERLAY_CARD
+                        );
+                        let count =
+                            crate::ocgcore::utility::read_u32(bytes, &mut cursor, "count").unwrap();
+                        assert_eq!(count, 2);
+                        for sequence in 0..count {
+                            let code =
+                                crate::ocgcore::utility::read_u32(bytes, &mut cursor, "code")
+                                    .unwrap();
+                            assert_eq!(layer.material_at(host, sequence).unwrap().code, code);
+                        }
+                        host_moved = true;
+                    }
+                    _ => {}
+                }
+            }
+        }
+        if matches!(status, OCG_DuelStatus::OCG_DUEL_STATUS_AWAITING) {
+            assert_eq!(attached, 2);
+            assert_eq!(detached, 2);
+            assert!(host_moved);
+            let grave = duel.get_cards(CardLocation::Graveyard);
+            for (sequence, core_card) in grave.iter().enumerate() {
+                assert_eq!(
+                    layer
+                        .card_at(CardAddress {
+                            controller: Player::Player,
+                            location: CardLocation::Graveyard,
+                            sequence: sequence as u32,
+                        })
+                        .unwrap()
+                        .code,
+                    core_card.unwrap().card_code
+                );
+            }
+            assert_eq!(grave.len(), 3);
+            assert!(layer.material_at(host, 0).is_none());
+            return;
+        }
+        assert_ne!(status, OCG_DuelStatus::OCG_DUEL_STATUS_END);
+    }
+    panic!("Overlay test did not reach an input prompt");
+}
+
+#[test]
+fn tracks_native_material_after_token_host_disappears() {
+    fn card_data(code: u32) -> OCG_CardData {
+        let mut data = test_card_data(code);
+        if code == 100 {
+            data.r#type |= ocgcore_ffi::constants::TYPE_TOKEN;
+        }
+        data
+    }
+
+    let core = futures::executor::block_on(OCGCore::load(
+        card_data,
+        Box::new(|_| None),
+        super::super::callbacks::log_core_message,
+    ))
+    .unwrap();
+    let duel = core.create_duel(0).unwrap();
+    let mut layer = CardLayer::default();
+    let field = |sequence| CardAddress {
+        controller: Player::Player,
+        location: CardLocation::MonsterZone,
+        sequence,
+    };
+    for (code, sequence) in [(100, 0), (101, 1)] {
+        duel.add_card(
+            Player::Player,
+            code,
+            Player::Player,
+            CardLocation::MonsterZone,
+            sequence,
+            POS_FACEUP_ATTACK,
+        );
+        layer.insert(field(sequence), code).unwrap();
+    }
+    let host = layer.card_at(field(0)).unwrap().id;
+    let material = layer.card_at(field(1)).unwrap().id;
+    core.load_script(
+        &duel,
+        br#"
+        local effect = Effect.GlobalEffect()
+        effect:SetType(0x0802)
+        effect:SetCode(1113)
+        effect:SetOperation(function()
+            local host = Duel.GetFieldCard(0, 4, 0)
+            local material = Duel.GetFieldCard(0, 4, 1)
+            Duel.Overlay(host, material)
+            Duel.SendtoGrave(host, 0x40)
+        end)
+        Duel.RegisterEffect(effect, 0)
+    "#,
+        "overlay-token-test.lua",
+    )
+    .unwrap();
+
+    duel.start();
+    let mut host_disappeared = false;
+    let mut material_detached = false;
+    for _ in 0..1000 {
+        let status = duel.process();
+        for message in duel.parse_messages() {
+            if let CoreMessage::Move(data) = &message {
+                layer.apply(&message).unwrap();
+                if data.card_code == 100 && data.current.location == CardLocationKind::None {
+                    host_disappeared = true;
+                    assert_eq!(layer.material_at(host, 0).unwrap().id, material);
+                }
+                if data.card_code == 101
+                    && data.previous.location == (CardLocationKind::Overlay { host: None })
+                {
+                    assert!(data.previous.controller.is_none());
+                    assert!(host_disappeared);
+                    assert_eq!(
+                        layer
+                            .card_at(CardAddress {
+                                controller: Player::Player,
+                                location: CardLocation::Graveyard,
+                                sequence: data.current.sequence,
+                            })
+                            .unwrap()
+                            .id,
+                        material
+                    );
+                    material_detached = true;
+                }
+            }
+        }
+        if matches!(status, OCG_DuelStatus::OCG_DUEL_STATUS_AWAITING) {
+            assert!(material_detached);
+            assert_eq!(
+                duel.get_cards(CardLocation::Graveyard)[0]
+                    .unwrap()
+                    .card_code,
+                101
+            );
+            assert!(layer.material_at(host, 0).is_none());
+            return;
+        }
+        assert_ne!(status, OCG_DuelStatus::OCG_DUEL_STATUS_END);
+    }
+    panic!("Token overlay test did not reach an input prompt");
 }
 
 #[test]

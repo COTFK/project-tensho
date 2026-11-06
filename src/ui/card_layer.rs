@@ -15,10 +15,16 @@ pub(crate) struct CardAddress {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CardPlacement {
+    Zone(CardAddress),
+    Overlay { host: CardId, sequence: u32 },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Card {
     pub id: CardId,
     pub code: u32,
-    pub address: CardAddress,
+    pub placement: CardPlacement,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -55,7 +61,11 @@ impl CardLayer {
         );
         let id = CardId(self.next_id);
         self.next_id = self.next_id.checked_add(1).context("Card IDs exhausted")?;
-        self.cards.push(Card { id, code, address });
+        self.cards.push(Card {
+            id,
+            code,
+            placement: CardPlacement::Zone(address),
+        });
         Ok(id)
     }
 
@@ -64,7 +74,15 @@ impl CardLayer {
     }
 
     pub fn card_at(&self, address: CardAddress) -> Option<&Card> {
-        self.cards.iter().find(|card| card.address == address)
+        self.cards
+            .iter()
+            .find(|card| card.placement == CardPlacement::Zone(address))
+    }
+
+    pub fn material_at(&self, host: CardId, sequence: u32) -> Option<&Card> {
+        self.cards
+            .iter()
+            .find(|card| card.placement == CardPlacement::Overlay { host, sequence })
     }
 
     pub fn apply(&mut self, message: &CoreMessage) -> anyhow::Result<()> {
@@ -79,13 +97,14 @@ impl CardLayer {
     }
 
     fn apply_move(&mut self, message: &MoveMessageData) -> anyhow::Result<()> {
-        let previous = Self::address_from(message.previous)?;
-        let current = Self::address_from(message.current)?;
+        let previous = self.placement_from(message.previous)?;
         ensure!(
-            previous.is_some() || current.is_some(),
+            previous.is_some() || message.current.location != CardLocationKind::None,
             "Move has no card location"
         );
-        self.move_card(previous, current, message.card_code)
+        let card = previous.map(|place| self.remove_card(place)).transpose()?;
+        let current = self.placement_from(message.current)?;
+        self.place_moved_card(card, current, message.card_code)
     }
 
     fn apply_draw(&mut self, message: &DrawMessageData) -> anyhow::Result<()> {
@@ -104,47 +123,80 @@ impl CardLayer {
                 location: CardLocation::Hand,
                 sequence: hand_len,
             };
-            self.move_card(Some(previous), Some(current), drawn.code)?;
+            let card = self.remove_card(CardPlacement::Zone(previous))?;
+            self.place_moved_card(Some(card), Some(CardPlacement::Zone(current)), drawn.code)?;
         }
         Ok(())
     }
 
-    fn address_from(info: CardLocationInfo) -> anyhow::Result<Option<CardAddress>> {
+    fn placement_from(&self, info: CardLocationInfo) -> anyhow::Result<Option<CardPlacement>> {
         match info.location {
             CardLocationKind::None => Ok(None),
-            CardLocationKind::Overlay { .. } => {
-                anyhow::bail!("Overlay moves are not supported yet")
-            }
             CardLocationKind::Known(location) => {
                 let controller = info.controller.context("Card location has no controller")?;
                 let CardLocationPosition::Position(_) = info.position else {
                     anyhow::bail!("Non-overlay card has an overlay sequence");
                 };
-                Ok(Some(CardAddress {
+                Ok(Some(CardPlacement::Zone(CardAddress {
                     controller,
                     location,
                     sequence: info.sequence,
-                }))
+                })))
+            }
+            CardLocationKind::Overlay { host } => {
+                let CardLocationPosition::OverlaySequence(sequence) = info.position else {
+                    anyhow::bail!("Overlay card has no material sequence");
+                };
+                let host = match host {
+                    Some(location) => {
+                        let address = CardAddress {
+                            controller: info
+                                .controller
+                                .context("Overlay host has no controller")?,
+                            location,
+                            sequence: info.sequence,
+                        };
+                        self.card_at(address).context("Overlay host not found")?.id
+                    }
+                    None => {
+                        ensure!(
+                            info.controller.is_none(),
+                            "Absent overlay host has a controller"
+                        );
+                        let mut hosts = self.cards.iter().filter_map(|card| match card.placement {
+                            CardPlacement::Overlay { host, .. }
+                                if !self.cards.iter().any(|other| other.id == host) =>
+                            {
+                                Some(host)
+                            }
+                            _ => None,
+                        });
+                        let host = hosts.next().context("Absent overlay host not found")?;
+                        ensure!(
+                            hosts.all(|other| other == host),
+                            "Absent overlay host is ambiguous"
+                        );
+                        host
+                    }
+                };
+                Ok(Some(CardPlacement::Overlay { host, sequence }))
             }
         }
     }
 
-    fn move_card(
+    fn place_moved_card(
         &mut self,
-        previous: Option<CardAddress>,
-        current: Option<CardAddress>,
+        before: Option<Card>,
+        current: Option<CardPlacement>,
         code: u32,
     ) -> anyhow::Result<()> {
-        let before = previous
-            .map(|address| self.remove_card(address))
-            .transpose()?;
         if let Some(card) = before {
             ensure!(
                 card.code == 0 || code == 0 || card.code == code,
                 "Move card code does not match the card at its source"
             );
         }
-        if let Some(address) = current {
+        if let Some(placement) = current {
             let id = match before {
                 Some(card) => card.id,
                 None => {
@@ -158,69 +210,133 @@ impl CardLayer {
             } else {
                 code
             };
-            self.place_card(Card { id, code, address })?;
+            self.place_card(Card {
+                id,
+                code,
+                placement,
+            })?;
         }
         Ok(())
     }
 
-    fn remove_card(&mut self, address: CardAddress) -> anyhow::Result<Card> {
+    fn remove_card(&mut self, placement: CardPlacement) -> anyhow::Result<Card> {
         let index = self
             .cards
             .iter()
-            .position(|card| card.address == address)
+            .position(|card| card.placement == placement)
             .context("No card at move source")?;
-        if Self::is_pile(address.location) {
-            self.pile_len(address.controller, address.location)?;
+        match placement {
+            CardPlacement::Zone(address) if Self::is_pile(address.location) => {
+                self.pile_len(address.controller, address.location)?;
+            }
+            CardPlacement::Overlay { host, .. } => {
+                self.material_len(host)?;
+            }
+            _ => {}
         }
         let removed = self.cards.remove(index);
-        if Self::is_pile(address.location) {
-            for card in &mut self.cards {
-                if card.address.controller == address.controller
-                    && card.address.location == address.location
-                    && card.address.sequence > address.sequence
+        for card in &mut self.cards {
+            match (&mut card.placement, placement) {
+                (CardPlacement::Zone(other), CardPlacement::Zone(address))
+                    if Self::is_pile(address.location)
+                        && other.controller == address.controller
+                        && other.location == address.location
+                        && other.sequence > address.sequence =>
                 {
-                    card.address.sequence -= 1;
+                    other.sequence -= 1;
                 }
+                (
+                    CardPlacement::Overlay {
+                        host: other_host,
+                        sequence: other_sequence,
+                    },
+                    CardPlacement::Overlay { host, sequence },
+                ) if *other_host == host && *other_sequence > sequence => {
+                    *other_sequence -= 1;
+                }
+                _ => {}
             }
         }
         Ok(removed)
     }
 
     fn place_card(&mut self, card: Card) -> anyhow::Result<()> {
-        let address = card.address;
-        if Self::is_pile(address.location) {
-            let len = self.pile_len(address.controller, address.location)?;
-            ensure!(
-                address.sequence <= len,
-                "Move destination is outside the pile"
-            );
-            len.checked_add(1).context("Pile sequence overflow")?;
-            for other in &mut self.cards {
-                if other.address.controller == address.controller
-                    && other.address.location == address.location
-                    && other.address.sequence >= address.sequence
-                {
-                    other.address.sequence += 1;
+        match card.placement {
+            CardPlacement::Zone(address) if Self::is_pile(address.location) => {
+                let len = self.pile_len(address.controller, address.location)?;
+                ensure!(
+                    address.sequence <= len,
+                    "Move destination is outside the pile"
+                );
+                len.checked_add(1).context("Pile sequence overflow")?;
+                for other in &mut self.cards {
+                    if let CardPlacement::Zone(other) = &mut other.placement {
+                        if other.controller == address.controller
+                            && other.location == address.location
+                            && other.sequence >= address.sequence
+                        {
+                            other.sequence += 1;
+                        }
+                    }
                 }
             }
-        } else {
-            ensure!(
-                self.card_at(address).is_none(),
-                "Move destination is occupied"
-            );
+            CardPlacement::Zone(address) => {
+                ensure!(
+                    self.card_at(address).is_none(),
+                    "Move destination is occupied"
+                );
+            }
+            CardPlacement::Overlay { host, sequence } => {
+                ensure!(
+                    self.cards.iter().any(|other| other.id == host
+                        && matches!(other.placement, CardPlacement::Zone(_))),
+                    "Overlay destination has no host"
+                );
+                ensure!(
+                    !self.cards.iter().any(|other| matches!(other.placement, CardPlacement::Overlay { host, .. } if host == card.id)),
+                    "An overlay material cannot retain its own materials"
+                );
+                let len = self.material_len(host)?;
+                ensure!(
+                    sequence == len,
+                    "Overlay destination must append to materials"
+                );
+                len.checked_add(1).context("Overlay sequence overflow")?;
+            }
         }
         self.cards.push(card);
         Ok(())
     }
 
     fn pile_len(&self, controller: Player, location: CardLocation) -> anyhow::Result<u32> {
-        let mut cards = self.cards.iter().filter(|card| {
-            card.address.controller == controller && card.address.location == location
+        let mut sequences = self.cards.iter().filter_map(|card| match card.placement {
+            CardPlacement::Zone(address)
+                if address.controller == controller && address.location == location =>
+            {
+                Some(address.sequence)
+            }
+            _ => None,
         });
-        let len = u32::try_from(cards.clone().count()).context("Pile is too large")?;
+        let len = u32::try_from(sequences.clone().count()).context("Pile is too large")?;
         ensure!(
-            cards.all(|card| card.address.sequence < len),
+            sequences.all(|sequence| sequence < len),
             "Pile sequences are not contiguous"
+        );
+        Ok(len)
+    }
+
+    fn material_len(&self, host: CardId) -> anyhow::Result<u32> {
+        let mut sequences = self.cards.iter().filter_map(|card| match card.placement {
+            CardPlacement::Overlay {
+                host: card_host,
+                sequence,
+            } if card_host == host => Some(sequence),
+            _ => None,
+        });
+        let len = u32::try_from(sequences.clone().count()).context("Too many overlay materials")?;
+        ensure!(
+            sequences.all(|sequence| sequence < len),
+            "Overlay sequences are not contiguous"
         );
         Ok(len)
     }
