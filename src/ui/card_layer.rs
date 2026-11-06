@@ -4,7 +4,9 @@ use crate::ocgcore::constants::{CardLocation, Player};
 use crate::ocgcore::location_info::{
     CardLocationInfo, CardLocationKind, CardLocationPosition, CardPositionFlags,
 };
-use crate::ocgcore::messages::{CoreMessage, DrawMessageData, MoveMessageData, SwapMessageData};
+use crate::ocgcore::messages::{
+    CoreMessage, DrawMessageData, MoveMessageData, RemoveCardsMessageData, SwapMessageData,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct CardId(u64);
@@ -94,6 +96,7 @@ impl CardLayer {
         match message {
             CoreMessage::Move(message) => next.apply_move(message)?,
             CoreMessage::Swap(message) => next.apply_swap(message)?,
+            CoreMessage::RemoveCards(message) => next.apply_remove_cards(message)?,
             CoreMessage::Draw(message) => next.apply_draw(message)?,
             CoreMessage::PositionChange(message) => next.update_appearance(
                 CardPlacement::Zone(CardAddress {
@@ -141,6 +144,42 @@ impl CardLayer {
         ensure!(first != second, "Swap locations are identical");
         self.cards[first].placement = second_placement;
         self.cards[second].placement = first_placement;
+        Ok(())
+    }
+
+    fn apply_remove_cards(&mut self, message: &RemoveCardsMessageData) -> anyhow::Result<()> {
+        // Full chunks can be continuations of an unmarked, larger removal group.
+        ensure!(
+            message.cards.len() < 255,
+            "Cannot resolve a full removal chunk without knowing its group boundaries"
+        );
+        let mut ids = Vec::with_capacity(message.cards.len());
+        for &info in &message.cards {
+            ensure!(
+                !matches!(info.location, CardLocationKind::Overlay { .. }),
+                "Direct overlay removal does not remove the material from the core"
+            );
+            let placement = self
+                .placement_from(info)?
+                .context("Removal target has no location")?;
+            let id = self
+                .cards
+                .iter()
+                .find(|card| card.placement == placement)
+                .context("No card at removal location")?
+                .id;
+            ensure!(!ids.contains(&id), "Duplicate removal target");
+            ids.push(id);
+        }
+        for id in ids {
+            let placement = self
+                .cards
+                .iter()
+                .find(|card| card.id == id)
+                .context("Removal target disappeared")?
+                .placement;
+            self.remove_card(placement)?;
+        }
         Ok(())
     }
 

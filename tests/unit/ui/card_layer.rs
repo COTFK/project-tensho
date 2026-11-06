@@ -3,7 +3,8 @@ use crate::ocgcore::location_info::CardPositionFlags;
 use crate::ocgcore::messages::draw::DrawCard;
 use crate::ocgcore::messages::move_card::MoveReason;
 use crate::ocgcore::messages::{
-    PositionChangeMessageData, SetCardMessageData, SummoningMessageData, SwapMessageData,
+    PositionChangeMessageData, RemoveCardsMessageData, SetCardMessageData, SummoningMessageData,
+    SwapMessageData,
 };
 
 fn address(controller: Player, location: CardLocation, sequence: u32) -> CardAddress {
@@ -94,6 +95,127 @@ fn position_change(
         previous_position,
         current_position,
     })
+}
+
+#[test]
+fn removes_pre_removal_locations_and_compacts_piles() {
+    let player = Player::Player;
+    let grave = |sequence| address(player, CardLocation::Graveyard, sequence);
+    let hand = |sequence| address(player, CardLocation::Hand, sequence);
+    let field = address(player, CardLocation::MonsterZone, 0);
+    let mut layer = CardLayer::default();
+    let grave_ids: Vec<_> = (0..5)
+        .map(|sequence| layer.insert(grave(sequence), 100 + sequence).unwrap())
+        .collect();
+    let hand_ids: Vec<_> = (0..3)
+        .map(|sequence| layer.insert(hand(sequence), 200 + sequence).unwrap())
+        .collect();
+    let field_id = layer.insert(field, 300).unwrap();
+    layer
+        .apply(&CoreMessage::RemoveCards(RemoveCardsMessageData {
+            cards: vec![
+                location(Some(grave(1))),
+                location(Some(grave(3))),
+                location(Some(hand(0))),
+                location(Some(field)),
+                location(Some(hand(2))),
+            ],
+        }))
+        .unwrap();
+    for (sequence, id) in [grave_ids[0], grave_ids[2], grave_ids[4]]
+        .into_iter()
+        .enumerate()
+    {
+        assert_eq!(layer.card_at(grave(sequence as u32)).unwrap().id, id);
+    }
+    assert_eq!(layer.card_at(hand(0)).unwrap().id, hand_ids[1]);
+    assert!(layer.card_at(field).is_none());
+    assert!(!layer.cards().iter().any(|card| card.id == field_id));
+}
+
+#[test]
+fn retains_unlisted_materials_after_removing_the_host() {
+    let host = address(Player::Player, CardLocation::MonsterZone, 0);
+    let hand = address(Player::Player, CardLocation::Hand, 0);
+    let grave = address(Player::Player, CardLocation::Graveyard, 0);
+    let mut layer = CardLayer::default();
+    let host_id = layer.insert(host, 100).unwrap();
+    let material_id = layer.insert(hand, 101).unwrap();
+    layer
+        .apply(&overlay_move(
+            location(Some(hand)),
+            overlay(Some(host), 0),
+            101,
+        ))
+        .unwrap();
+    layer
+        .apply(&CoreMessage::RemoveCards(RemoveCardsMessageData {
+            cards: vec![location(Some(host))],
+        }))
+        .unwrap();
+    assert!(layer.card_at(host).is_none());
+    assert_eq!(layer.material_at(host_id, 0).unwrap().id, material_id);
+    layer
+        .apply(&overlay_move(overlay(None, 0), location(Some(grave)), 101))
+        .unwrap();
+    assert_eq!(layer.card_at(grave).unwrap().id, material_id);
+    assert!(layer.material_at(host_id, 0).is_none());
+}
+
+#[test]
+fn rejects_invalid_and_ambiguous_removals_atomically() {
+    let host = address(Player::Player, CardLocation::MonsterZone, 0);
+    let hand = address(Player::Player, CardLocation::Hand, 0);
+    let missing = address(Player::Player, CardLocation::MonsterZone, 1);
+    let mut layer = CardLayer::default();
+    layer.insert(host, 100).unwrap();
+    layer.insert(hand, 101).unwrap();
+    layer
+        .apply(&overlay_move(
+            location(Some(hand)),
+            overlay(Some(host), 0),
+            101,
+        ))
+        .unwrap();
+    let before = layer.clone();
+    for cards in [
+        vec![location(Some(host)), location(Some(host))],
+        vec![location(Some(host)), location(Some(missing))],
+        vec![location(Some(host)), location(None)],
+        vec![location(Some(host)), overlay(Some(host), 0)],
+        vec![location(Some(host)); 255],
+        vec![location(Some(host)); 256],
+    ] {
+        let error = layer
+            .apply(&CoreMessage::RemoveCards(RemoveCardsMessageData { cards }))
+            .unwrap_err();
+        assert!(!error.to_string().is_empty());
+        assert_eq!(layer, before);
+    }
+    layer
+        .apply(&CoreMessage::RemoveCards(RemoveCardsMessageData {
+            cards: vec![],
+        }))
+        .unwrap();
+    assert_eq!(layer, before);
+}
+
+#[test]
+fn supports_a_removal_message_of_254_cards() {
+    let mut layer = CardLayer::default();
+    let locations: Vec<_> = (0..254)
+        .map(|sequence| {
+            let address = address(Player::Player, CardLocation::Graveyard, sequence);
+            layer.insert(address, sequence + 1).unwrap();
+            location(Some(address))
+        })
+        .collect();
+    layer
+        .apply(&CoreMessage::RemoveCards(RemoveCardsMessageData {
+            cards: locations,
+        }))
+        .unwrap();
+    assert!(layer.cards().is_empty());
 }
 
 #[test]
