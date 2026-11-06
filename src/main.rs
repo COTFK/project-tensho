@@ -14,11 +14,6 @@ use crate::ui::RotateDeviceOverlay;
 use crate::utility::BUILD_VERSION;
 use crate::utility::GIT_HASH;
 
-static _TAILWIND: Asset = asset!(
-    "/assets/tailwind.css",
-    AssetOptions::builder().with_hash_suffix(false)
-);
-
 #[derive(Clone, Debug, PartialEq, Routable)]
 enum Route {
     #[route("/?:hand")]
@@ -28,7 +23,7 @@ enum Route {
 fn main() {
     dioxus::LaunchBuilder::new()
         .with_cfg(desktop!(dioxus::desktop::Config::new().with_custom_head(
-            format!("<link rel=\"stylesheet\" href=\"{_TAILWIND}\">")
+            format!("<script src=\"https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4\"></script>")
         )))
         .launch(|| rsx! { Router::<Route> {} });
 }
