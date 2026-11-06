@@ -35,8 +35,8 @@ pub fn Card(
             img {
                 class: "relative w-full",
                 loading: "eager",
-                decoding: "async",
-                image_rendering: "smooth",
+                decoding: "sync",
+                image_rendering: "auto",
                 aspect_ratio: "59/86",
                 src: if !facedown {
                     card_image_url(card.card_code)
