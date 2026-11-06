@@ -195,18 +195,19 @@ mod tests {
     }
 
     #[test]
-    fn unhandled_message_bytes_are_only_logged_at_trace() {
+    fn unhandled_message_logs_type_and_bytes_at_error() {
         let subscriber = RecordingSubscriber::default();
         let events = subscriber.events.clone();
         tracing::subscriber::with_default(subscriber, || {
             crate::ocgcore::messages::parse_messages(&[1, 0, 0, 0, 255]).unwrap();
         });
         let events = events.lock().unwrap();
-        assert_eq!(events.len(), 2);
-        assert_eq!(events[0].0, Level::DEBUG);
-        assert_eq!(events[0].1.message, "Received unhandled message");
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].0, Level::ERROR);
+        assert_eq!(
+            events[0].1.message,
+            "Received unhandled message 255 with bytes: [1, 0, 0, 0, 255]"
+        );
         assert_eq!(events[0].1.bytes, None);
-        assert_eq!(events[1].0, Level::TRACE);
-        assert_eq!(events[1].1.bytes.as_deref(), Some("[1, 0, 0, 0, 255]"));
     }
 }
