@@ -515,6 +515,287 @@ fn tracks_native_overlay_moves_and_host_removal() {
 }
 
 #[test]
+fn tracks_native_bulk_removal_and_later_material_move() {
+    let core = test_core();
+    let duel = core.create_duel(0).unwrap();
+    let address = |location, sequence| CardAddress {
+        controller: Player::Player,
+        location,
+        sequence,
+    };
+    let mut layer = CardLayer::default();
+    let mut grave_ids = Vec::new();
+    for (code, sequence) in [(1, 0), (2, 1), (3, 2)] {
+        duel.add_card(
+            Player::Player,
+            code,
+            Player::Player,
+            CardLocation::Graveyard,
+            sequence,
+            POS_FACEUP_ATTACK,
+        );
+        grave_ids.push(
+            layer
+                .insert(address(CardLocation::Graveyard, sequence), code)
+                .unwrap(),
+        );
+    }
+    let mut field_ids = Vec::new();
+    for (code, sequence) in [(100, 0), (101, 1)] {
+        duel.add_card(
+            Player::Player,
+            code,
+            Player::Player,
+            CardLocation::MonsterZone,
+            sequence,
+            POS_FACEUP_ATTACK,
+        );
+        field_ids.push(
+            layer
+                .insert(address(CardLocation::MonsterZone, sequence), code)
+                .unwrap(),
+        );
+    }
+    core.load_script(
+        &duel,
+        br#"
+        local effect = Effect.GlobalEffect()
+        effect:SetType(0x0802)
+        effect:SetCode(1113)
+        effect:SetOperation(function()
+            local host = Duel.GetFieldCard(0, 4, 0)
+            local material = Duel.GetFieldCard(0, 4, 1)
+            Duel.Overlay(host, material)
+            local group = Group.CreateGroup()
+            group:AddCard(Duel.GetFieldCard(0, 16, 0))
+            group:AddCard(Duel.GetFieldCard(0, 16, 2))
+            group:AddCard(host)
+            Duel.RemoveCards(group)
+            Duel.SendtoGrave(material, 0x40)
+        end)
+        Duel.RegisterEffect(effect, 0)
+    "#,
+        "bulk-remove-test.lua",
+    )
+    .unwrap();
+
+    duel.start();
+    let mut removed = false;
+    let mut material_moved = false;
+    for _ in 0..1000 {
+        let status = duel.process();
+        for message in duel.parse_messages() {
+            if matches!(message, CoreMessage::Move(_) | CoreMessage::RemoveCards(_)) {
+                layer.apply(&message).unwrap();
+            }
+            match message {
+                CoreMessage::RemoveCards(data) => {
+                    assert_eq!(data.cards.len(), 3);
+                    assert_eq!(
+                        layer
+                            .card_at(address(CardLocation::Graveyard, 0))
+                            .unwrap()
+                            .id,
+                        grave_ids[1]
+                    );
+                    assert!(
+                        layer
+                            .card_at(address(CardLocation::MonsterZone, 0))
+                            .is_none()
+                    );
+                    assert_eq!(layer.material_at(field_ids[0], 0).unwrap().id, field_ids[1]);
+                    removed = true;
+                }
+                CoreMessage::Move(data)
+                    if data.card_code == 101
+                        && data.previous.location == (CardLocationKind::Overlay { host: None }) =>
+                {
+                    assert!(removed);
+                    assert_eq!(
+                        layer
+                            .card_at(address(CardLocation::Graveyard, data.current.sequence))
+                            .unwrap()
+                            .id,
+                        field_ids[1]
+                    );
+                    material_moved = true;
+                }
+                _ => {}
+            }
+        }
+        if matches!(status, OCG_DuelStatus::OCG_DUEL_STATUS_AWAITING) {
+            assert!(removed);
+            assert!(material_moved);
+            assert!(layer.material_at(field_ids[0], 0).is_none());
+            let core_cards = duel.get_cards(CardLocation::Graveyard);
+            assert_eq!(core_cards.len(), 2);
+            for (sequence, core_card) in core_cards.iter().enumerate() {
+                assert_eq!(
+                    layer
+                        .card_at(address(CardLocation::Graveyard, sequence as u32))
+                        .unwrap()
+                        .code,
+                    core_card.unwrap().card_code
+                );
+            }
+            return;
+        }
+        assert_ne!(status, OCG_DuelStatus::OCG_DUEL_STATUS_END);
+    }
+    panic!("Bulk removal test did not reach an input prompt");
+}
+
+#[test]
+fn rejects_native_full_removal_chunk() {
+    let core = test_core();
+    let duel = core.create_duel(0).unwrap();
+    let mut layer = CardLayer::default();
+    for sequence in 0..255 {
+        let code = sequence + 1;
+        duel.add_card(
+            Player::Player,
+            code,
+            Player::Player,
+            CardLocation::Graveyard,
+            sequence,
+            POS_FACEUP_ATTACK,
+        );
+        layer
+            .insert(
+                CardAddress {
+                    controller: Player::Player,
+                    location: CardLocation::Graveyard,
+                    sequence,
+                },
+                code,
+            )
+            .unwrap();
+    }
+    core.load_script(
+        &duel,
+        br#"
+        local effect = Effect.GlobalEffect()
+        effect:SetType(0x0802)
+        effect:SetCode(1113)
+        effect:SetOperation(function()
+            Duel.RemoveCards(Duel.GetFieldGroup(0, 16, 0))
+        end)
+        Duel.RegisterEffect(effect, 0)
+    "#,
+        "remove-full-chunk-test.lua",
+    )
+    .unwrap();
+
+    duel.start();
+    for _ in 0..1000 {
+        let status = duel.process();
+        for message in duel.parse_messages() {
+            if let CoreMessage::RemoveCards(data) = &message {
+                assert_eq!(data.cards.len(), 255);
+                let before = layer.clone();
+                let error = layer.apply(&message).unwrap_err();
+                assert!(error.to_string().contains("group boundaries"));
+                assert_eq!(layer, before);
+                return;
+            }
+        }
+        assert_ne!(status, OCG_DuelStatus::OCG_DUEL_STATUS_END);
+    }
+    panic!("Core did not emit a full removal chunk");
+}
+
+#[test]
+fn rejects_native_direct_overlay_removal() {
+    let core = test_core();
+    let duel = core.create_duel(0).unwrap();
+    let field = |sequence| CardAddress {
+        controller: Player::Player,
+        location: CardLocation::MonsterZone,
+        sequence,
+    };
+    let mut layer = CardLayer::default();
+    for (code, sequence) in [(100, 0), (101, 1)] {
+        duel.add_card(
+            Player::Player,
+            code,
+            Player::Player,
+            CardLocation::MonsterZone,
+            sequence,
+            POS_FACEUP_ATTACK,
+        );
+        layer.insert(field(sequence), code).unwrap();
+    }
+    let host = layer.card_at(field(0)).unwrap().id;
+    let material = layer.card_at(field(1)).unwrap().id;
+    core.load_script(
+        &duel,
+        br#"
+        local effect = Effect.GlobalEffect()
+        effect:SetType(0x0802)
+        effect:SetCode(1113)
+        effect:SetOperation(function()
+            local host = Duel.GetFieldCard(0, 4, 0)
+            local material = Duel.GetFieldCard(0, 4, 1)
+            Duel.Overlay(host, material)
+            Duel.RemoveCards(material)
+        end)
+        Duel.RegisterEffect(effect, 0)
+    "#,
+        "remove-material-test.lua",
+    )
+    .unwrap();
+
+    duel.start();
+    for _ in 0..1000 {
+        let status = duel.process();
+        for message in duel.parse_messages() {
+            match &message {
+                CoreMessage::Move(_) => layer.apply(&message).unwrap(),
+                CoreMessage::RemoveCards(_) => {
+                    let before = layer.clone();
+                    let error = layer.apply(&message).unwrap_err();
+                    assert!(
+                        error
+                            .to_string()
+                            .contains("does not remove the material from the core")
+                    );
+                    assert_eq!(layer, before);
+                    assert_eq!(layer.material_at(host, 0).unwrap().id, material);
+                    let query = ocgcore_ffi::types::OCG_QueryInfo {
+                        flags: ocgcore_ffi::constants::QUERY_OVERLAY_CARD,
+                        con: Player::Player as u8,
+                        loc: CardLocation::MonsterZone as u32,
+                        seq: 0,
+                        overlay_seq: 0,
+                    };
+                    let mut length = 0;
+                    let ptr =
+                        unsafe { ocgcore_ffi::OCG_DuelQuery(duel.handle(), &mut length, &query) };
+                    assert!(!ptr.is_null());
+                    let bytes =
+                        unsafe { std::slice::from_raw_parts(ptr.cast::<u8>(), length as usize) };
+                    let mut cursor = 0;
+                    crate::ocgcore::utility::read_u16(bytes, &mut cursor, "length").unwrap();
+                    crate::ocgcore::utility::read_u32(bytes, &mut cursor, "flag").unwrap();
+                    assert_eq!(
+                        crate::ocgcore::utility::read_u32(bytes, &mut cursor, "count").unwrap(),
+                        1
+                    );
+                    assert_eq!(
+                        crate::ocgcore::utility::read_u32(bytes, &mut cursor, "code").unwrap(),
+                        101
+                    );
+                    return;
+                }
+                _ => {}
+            }
+        }
+        assert_ne!(status, OCG_DuelStatus::OCG_DUEL_STATUS_END);
+    }
+    panic!("Core did not emit a direct overlay removal");
+}
+
+#[test]
 fn tracks_native_material_after_token_host_disappears() {
     fn card_data(code: u32) -> OCG_CardData {
         let mut data = test_card_data(code);

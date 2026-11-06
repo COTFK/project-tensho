@@ -297,6 +297,9 @@ pub fn handle_core_message() -> bool {
             }
             CoreMessage::Move(message) => tracing::trace!("Received move: {message:?}"),
             CoreMessage::Swap(message) => tracing::trace!("Received swap: {message:?}"),
+            CoreMessage::RemoveCards(message) => {
+                tracing::trace!("Received remove cards: {message:?}")
+            }
             CoreMessage::PositionChange(message) => {
                 tracing::trace!("Received position change: {message:?}")
             }

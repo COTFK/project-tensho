@@ -92,10 +92,14 @@ collisions.
 
 ### 7. Track bulk card removal
 
-Decode bulk removal messages and clean up the card list and relationships.
+Decode bulk removal messages and apply unambiguous removals atomically.
+Retain materials of removed hosts for later core messages. Reject full
+255-card chunks and direct material removals: chunk boundaries are not
+identified, and the core does not actually detach directly removed materials.
 
 - Depends on: 4.
-- Test: multiple removals, sequence shifts, and dangling overlay references.
+- Test: multiple removals, sequence shifts, retained materials, and explicit
+  rejection of ambiguous chunks and direct material removals.
 - Commit: `feat(tracker): track bulk card removal`
 
 ### 8. Handle hidden shuffles

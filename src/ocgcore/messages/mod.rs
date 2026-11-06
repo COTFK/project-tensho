@@ -12,6 +12,7 @@ mod idle;
 pub mod move_card;
 mod new_phase;
 mod position_change;
+mod remove_cards;
 mod select_card;
 mod select_chain;
 mod select_effect_yes_no;
@@ -41,6 +42,7 @@ pub use idle::IdleMessageData;
 pub use move_card::MoveMessageData;
 pub use new_phase::NewPhaseMessageData;
 pub use position_change::PositionChangeMessageData;
+pub use remove_cards::RemoveCardsMessageData;
 pub use select_card::SelectCardMessageData;
 pub use select_chain::SelectChainMessageData;
 pub use select_effect_yes_no::SelectEffectYNMessageData;
@@ -63,8 +65,8 @@ use ocgcore_ffi::constants::{
     MSG_ANNOUNCE_NUMBER, MSG_BECOME_TARGET, MSG_CARD_HINT, MSG_CARD_SELECTED, MSG_CHAIN_DISABLED,
     MSG_CHAIN_END, MSG_CHAIN_SOLVED, MSG_CHAIN_SOLVING, MSG_CHAINED, MSG_CHAINING,
     MSG_CONFIRM_CARDS, MSG_DRAW, MSG_FLIPSUMMONED, MSG_FLIPSUMMONING, MSG_HINT, MSG_MOVE,
-    MSG_NEW_PHASE, MSG_NEW_TURN, MSG_POS_CHANGE, MSG_RETRY, MSG_SELECT_CARD, MSG_SELECT_CHAIN,
-    MSG_SELECT_EFFECTYN, MSG_SELECT_IDLECMD, MSG_SELECT_OPTION, MSG_SELECT_PLACE,
+    MSG_NEW_PHASE, MSG_NEW_TURN, MSG_POS_CHANGE, MSG_REMOVE_CARDS, MSG_RETRY, MSG_SELECT_CARD,
+    MSG_SELECT_CHAIN, MSG_SELECT_EFFECTYN, MSG_SELECT_IDLECMD, MSG_SELECT_OPTION, MSG_SELECT_PLACE,
     MSG_SELECT_POSITION, MSG_SELECT_TRIBUTE, MSG_SELECT_UNSELECT_CARD, MSG_SELECT_YESNO, MSG_SET,
     MSG_SHUFFLE_DECK, MSG_SHUFFLE_HAND, MSG_SORT_CARD, MSG_SPSUMMONED, MSG_SPSUMMONING,
     MSG_SUMMONED, MSG_SUMMONING, MSG_SWAP, MSG_WIN,
@@ -84,6 +86,7 @@ pub enum CoreMessage {
     ShuffleHand(ShuffleHandMessageData),
     Move(MoveMessageData),
     Swap(SwapMessageData),
+    RemoveCards(RemoveCardsMessageData),
     PositionChange(PositionChangeMessageData),
     SetCard(SetCardMessageData),
     Summoning(SummoningMessageData),
@@ -142,6 +145,9 @@ impl TryFrom<&[u8]> for CoreMessage {
             )?)),
             MSG_MOVE => Ok(CoreMessage::Move(MoveMessageData::try_from(bytes)?)),
             MSG_SWAP => Ok(CoreMessage::Swap(SwapMessageData::try_from(bytes)?)),
+            MSG_REMOVE_CARDS => Ok(CoreMessage::RemoveCards(RemoveCardsMessageData::try_from(
+                bytes,
+            )?)),
             MSG_POS_CHANGE => Ok(CoreMessage::PositionChange(
                 PositionChangeMessageData::try_from(bytes)?,
             )),
