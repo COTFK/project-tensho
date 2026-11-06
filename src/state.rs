@@ -296,13 +296,20 @@ pub fn handle_core_message() -> bool {
                 tracing::trace!("Received shuffle hand: {message:?}")
             }
             CoreMessage::Move(message) => tracing::trace!("Received move: {message:?}"),
+            CoreMessage::PositionChange(message) => {
+                tracing::trace!("Received position change: {message:?}")
+            }
             CoreMessage::SetCard(message) => tracing::trace!("Received set card: {message:?}"),
             CoreMessage::Summoning(message) => tracing::trace!("Received summoning: {message:?}"),
             CoreMessage::SpecialSummoning(message) => {
                 tracing::trace!("Received special summoning: {message:?}")
             }
+            CoreMessage::FlipSummoning(message) => {
+                tracing::trace!("Received flip summoning: {message:?}")
+            }
             CoreMessage::Summoned => tracing::trace!("Received summoned"),
             CoreMessage::SpecialSummoned => tracing::trace!("Received special summoned"),
+            CoreMessage::FlipSummoned => tracing::trace!("Received flip summoned"),
             CoreMessage::Chaining(message) => tracing::trace!("Received chaining: {message:?}"),
             CoreMessage::Chained(message) => tracing::trace!("Received chained: {message:?}"),
             CoreMessage::ChainSolving(message) => {

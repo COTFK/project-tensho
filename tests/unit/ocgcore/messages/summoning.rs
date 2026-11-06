@@ -127,3 +127,35 @@ fn parses_multiple_framed_messages() {
         ]
     ));
 }
+
+#[test]
+fn parses_flip_summon_messages_and_rejects_malformed_frames() {
+    let mut flip = SAMPLE;
+    flip[4] = ocgcore_ffi::constants::MSG_FLIPSUMMONING as u8;
+    assert!(matches!(
+        CoreMessage::try_from(flip.as_slice()).unwrap(),
+        CoreMessage::FlipSummoning(SummoningMessageData {
+            card_code: 90_681_088,
+            ..
+        })
+    ));
+    for length in 0..flip.len() {
+        assert!(CoreMessage::try_from(&flip[..length]).is_err());
+    }
+    for length in [0u32, 14, 16, u32::MAX] {
+        let mut invalid = flip;
+        invalid[..4].copy_from_slice(&length.to_le_bytes());
+        assert!(CoreMessage::try_from(invalid.as_slice()).is_err());
+    }
+    let end = [1, 0, 0, 0, ocgcore_ffi::constants::MSG_FLIPSUMMONED as u8];
+    for length in 0..end.len() {
+        assert!(CoreMessage::try_from(&end[..length]).is_err());
+    }
+    assert!(CoreMessage::try_from([2, 0, 0, 0, end[4], 0].as_slice()).is_err());
+    let mut bytes = flip.to_vec();
+    bytes.extend(end);
+    assert!(matches!(
+        parse_messages(&bytes).unwrap().as_slice(),
+        [CoreMessage::FlipSummoning(_), CoreMessage::FlipSummoned]
+    ));
+}

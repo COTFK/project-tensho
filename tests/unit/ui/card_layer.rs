@@ -2,6 +2,9 @@ use super::*;
 use crate::ocgcore::location_info::CardPositionFlags;
 use crate::ocgcore::messages::draw::DrawCard;
 use crate::ocgcore::messages::move_card::MoveReason;
+use crate::ocgcore::messages::{
+    PositionChangeMessageData, SetCardMessageData, SummoningMessageData,
+};
 
 fn address(controller: Player, location: CardLocation, sequence: u32) -> CardAddress {
     CardAddress {
@@ -75,6 +78,194 @@ fn codes(layer: &CardLayer, player: Player, location: CardLocation) -> Vec<u32> 
                 .code
         })
         .collect()
+}
+
+fn position_change(
+    address: CardAddress,
+    code: u32,
+    previous_position: CardPositionFlags,
+    current_position: CardPositionFlags,
+) -> CoreMessage {
+    CoreMessage::PositionChange(PositionChangeMessageData {
+        card_code: code,
+        controller: address.controller,
+        location: address.location,
+        sequence: address.sequence,
+        previous_position,
+        current_position,
+    })
+}
+
+#[test]
+fn tracks_positions_and_reveals_without_replacing_identity() {
+    let field = address(Player::Player, CardLocation::MonsterZone, 2);
+    let mut layer = CardLayer::default();
+    let id = layer.insert(field, 0).unwrap();
+    assert_eq!(layer.card_at(field).unwrap().position, None);
+
+    let mut info = location(Some(field));
+    info.position = CardLocationPosition::Position(CardPositionFlags::FACE_DOWN_DEFENSE);
+    layer
+        .apply(&CoreMessage::SetCard(SetCardMessageData {
+            card_code: 0,
+            location: info,
+        }))
+        .unwrap();
+    let set = layer.card_at(field).unwrap();
+    assert_eq!(set.id, id);
+    assert_eq!(set.code, 0);
+    assert_eq!(set.position, Some(CardPositionFlags::FACE_DOWN_DEFENSE));
+
+    layer
+        .apply(&position_change(
+            field,
+            42,
+            CardPositionFlags::FACE_DOWN_DEFENSE,
+            CardPositionFlags::FACE_UP_DEFENSE,
+        ))
+        .unwrap();
+    let revealed = layer.card_at(field).unwrap();
+    assert_eq!(revealed.id, id);
+    assert_eq!(revealed.code, 42);
+    assert_eq!(revealed.position, Some(CardPositionFlags::FACE_UP_DEFENSE));
+
+    layer
+        .apply(&position_change(
+            field,
+            0,
+            CardPositionFlags::FACE_UP_DEFENSE,
+            CardPositionFlags::FACE_UP_ATTACK,
+        ))
+        .unwrap();
+    layer
+        .apply(&position_change(
+            field,
+            0,
+            CardPositionFlags::FACE_UP_ATTACK,
+            CardPositionFlags::FACE_DOWN_DEFENSE,
+        ))
+        .unwrap();
+    let hidden = layer.card_at(field).unwrap();
+    assert_eq!(hidden.id, id);
+    assert_eq!(hidden.code, 42);
+    assert_eq!(hidden.position, Some(CardPositionFlags::FACE_DOWN_DEFENSE));
+}
+
+#[test]
+fn sets_move_draw_and_overlay_positions_from_the_messages() {
+    let deck = address(Player::Player, CardLocation::Deck, 0);
+    let hand = address(Player::Player, CardLocation::Hand, 0);
+    let field = address(Player::Player, CardLocation::MonsterZone, 0);
+    let host = address(Player::Player, CardLocation::MonsterZone, 1);
+    let mut layer = CardLayer::from_decks(&[42], &[]).unwrap();
+    let id = layer.card_at(deck).unwrap().id;
+    let host_id = layer.insert(host, 99).unwrap();
+    layer.apply(&draw(Player::Player, &[42])).unwrap();
+    assert_eq!(
+        layer.card_at(hand).unwrap().position,
+        Some(CardPositionFlags::FACE_DOWN_ATTACK | CardPositionFlags::FACE_DOWN_DEFENSE)
+    );
+    let mut destination = location(Some(field));
+    destination.position = CardLocationPosition::Position(CardPositionFlags::FACE_DOWN_DEFENSE);
+    layer
+        .apply(&overlay_move(location(Some(hand)), destination, 42))
+        .unwrap();
+    assert_eq!(
+        layer.card_at(field).unwrap().position,
+        Some(CardPositionFlags::FACE_DOWN_DEFENSE)
+    );
+    layer
+        .apply(&overlay_move(
+            location(Some(field)),
+            overlay(Some(host), 0),
+            42,
+        ))
+        .unwrap();
+    assert_eq!(layer.material_at(host_id, 0).unwrap().id, id);
+    assert_eq!(layer.material_at(host_id, 0).unwrap().position, None);
+    let mut destination = location(Some(field));
+    destination.position = CardLocationPosition::Position(CardPositionFlags::FACE_UP_DEFENSE);
+    layer
+        .apply(&overlay_move(overlay(Some(host), 0), destination, 42))
+        .unwrap();
+    assert_eq!(
+        layer.card_at(field).unwrap().position,
+        Some(CardPositionFlags::FACE_UP_DEFENSE)
+    );
+}
+
+#[test]
+fn summoning_notifications_update_appearance_without_replacing_card() {
+    let field = address(Player::Opponent, CardLocation::MonsterZone, 5);
+    let mut layer = CardLayer::default();
+    let id = layer.insert(field, 0).unwrap();
+    let mut info = location(Some(field));
+    info.position = CardLocationPosition::Position(CardPositionFlags::FACE_DOWN_DEFENSE);
+    layer
+        .apply(&CoreMessage::SpecialSummoning(SummoningMessageData {
+            card_code: 0,
+            location: info,
+        }))
+        .unwrap();
+    assert_eq!(layer.card_at(field).unwrap().code, 0);
+    assert_eq!(
+        layer.card_at(field).unwrap().position,
+        Some(CardPositionFlags::FACE_DOWN_DEFENSE)
+    );
+    info.position = CardLocationPosition::Position(CardPositionFlags::FACE_UP_ATTACK);
+    layer
+        .apply(&CoreMessage::FlipSummoning(SummoningMessageData {
+            card_code: 42,
+            location: info,
+        }))
+        .unwrap();
+    assert_eq!(layer.card_at(field).unwrap().id, id);
+    assert_eq!(layer.card_at(field).unwrap().code, 42);
+    assert_eq!(
+        layer.card_at(field).unwrap().position,
+        Some(CardPositionFlags::FACE_UP_ATTACK)
+    );
+    layer
+        .apply(&CoreMessage::Summoning(SummoningMessageData {
+            card_code: 42,
+            location: info,
+        }))
+        .unwrap();
+    assert_eq!(layer.card_at(field).unwrap().id, id);
+}
+
+#[test]
+fn rejects_invalid_appearance_updates_atomically() {
+    let field = address(Player::Player, CardLocation::MonsterZone, 0);
+    let missing = address(Player::Player, CardLocation::MonsterZone, 1);
+    let mut layer = CardLayer::default();
+    layer.insert(field, 42).unwrap();
+    let initial = layer.clone();
+    for message in [
+        position_change(
+            field,
+            99,
+            CardPositionFlags::FACE_UP_ATTACK,
+            CardPositionFlags::FACE_DOWN_DEFENSE,
+        ),
+        position_change(
+            missing,
+            42,
+            CardPositionFlags::FACE_UP_ATTACK,
+            CardPositionFlags::FACE_DOWN_DEFENSE,
+        ),
+        CoreMessage::SetCard(SetCardMessageData {
+            card_code: 42,
+            location: location(None),
+        }),
+        CoreMessage::FlipSummoning(SummoningMessageData {
+            card_code: 42,
+            location: overlay(Some(field), 0),
+        }),
+    ] {
+        assert!(layer.apply(&message).is_err(), "{message:?}");
+        assert_eq!(layer, initial);
+    }
 }
 
 #[test]

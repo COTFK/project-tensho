@@ -2,7 +2,7 @@ use super::*;
 use crate::ocgcore::CardType;
 use crate::ocgcore::Response;
 use crate::ocgcore::constants::{BattlePosition, CardLocation, Phase, Player, WinReason, Winner};
-use crate::ocgcore::location_info::CardLocationKind;
+use crate::ocgcore::location_info::{CardLocationKind, CardPositionFlags};
 use crate::ocgcore::messages::{CoreMessage, Hint, HintMessageData, WinMessageData};
 use crate::ui::card_layer::{CardAddress, CardLayer, CardPlacement};
 use ocgcore_ffi::constants::{POS_FACEUP_ATTACK, TYPE_MONSTER, TYPE_NORMAL};
@@ -614,6 +614,154 @@ fn tracks_native_material_after_token_host_disappears() {
         assert_ne!(status, OCG_DuelStatus::OCG_DUEL_STATUS_END);
     }
     panic!("Token overlay test did not reach an input prompt");
+}
+
+#[test]
+fn tracks_native_position_changes_and_reveals() {
+    let core = test_core();
+    let duel = core.create_duel(0).unwrap();
+    let field = CardAddress {
+        controller: Player::Player,
+        location: CardLocation::MonsterZone,
+        sequence: 0,
+    };
+    duel.add_card(
+        Player::Player,
+        100,
+        Player::Player,
+        CardLocation::MonsterZone,
+        0,
+        POS_FACEUP_ATTACK,
+    );
+    let mut layer = CardLayer::default();
+    let id = layer.insert(field, 100).unwrap();
+    core.load_script(
+        &duel,
+        br#"
+        local effect = Effect.GlobalEffect()
+        effect:SetType(0x0802)
+        effect:SetCode(1113)
+        effect:SetOperation(function()
+            local card = Duel.GetFieldCard(0, 4, 0)
+            Duel.ChangePosition(card, 4)
+            Duel.ChangePosition(card, 8)
+            Duel.ChangePosition(card, 1)
+        end)
+        Duel.RegisterEffect(effect, 0)
+    "#,
+        "position-test.lua",
+    )
+    .unwrap();
+
+    duel.start();
+    let mut changes = Vec::new();
+    for _ in 0..1000 {
+        let status = duel.process();
+        for message in duel.parse_messages() {
+            if let CoreMessage::PositionChange(data) = &message {
+                layer.apply(&message).unwrap();
+                let tracked = layer.card_at(field).unwrap();
+                assert_eq!(tracked.id, id);
+                assert_eq!(tracked.position, Some(data.current_position));
+                let queried = duel.get_cards(CardLocation::MonsterZone)[0].unwrap();
+                assert_eq!(
+                    queried.position.unwrap() as u32,
+                    data.current_position.bits()
+                );
+                changes.push((data.previous_position, data.current_position));
+            }
+        }
+        if matches!(status, OCG_DuelStatus::OCG_DUEL_STATUS_AWAITING) {
+            assert_eq!(
+                changes,
+                [
+                    (
+                        CardPositionFlags::FACE_UP_ATTACK,
+                        CardPositionFlags::FACE_UP_DEFENSE
+                    ),
+                    (
+                        CardPositionFlags::FACE_UP_DEFENSE,
+                        CardPositionFlags::FACE_DOWN_DEFENSE
+                    ),
+                    (
+                        CardPositionFlags::FACE_DOWN_DEFENSE,
+                        CardPositionFlags::FACE_UP_ATTACK
+                    ),
+                ]
+            );
+            return;
+        }
+        assert_ne!(status, OCG_DuelStatus::OCG_DUEL_STATUS_END);
+    }
+    panic!("Position test did not reach an input prompt");
+}
+
+#[test]
+fn tracks_native_flip_summon() {
+    let core = test_core();
+    let duel = core.create_duel(0).unwrap();
+    let field = CardAddress {
+        controller: Player::Player,
+        location: CardLocation::MonsterZone,
+        sequence: 0,
+    };
+    duel.add_card(
+        Player::Player,
+        100,
+        Player::Player,
+        CardLocation::MonsterZone,
+        0,
+        ocgcore_ffi::constants::POS_FACEDOWN_DEFENSE,
+    );
+    let mut layer = CardLayer::default();
+    let id = layer.insert(field, 100).unwrap();
+    duel.start();
+    let mut requested = false;
+    let mut flipping = false;
+    for _ in 0..1000 {
+        let status = duel.process();
+        for message in duel.parse_messages() {
+            match &message {
+                CoreMessage::Idle(data) if !requested => {
+                    let card = data
+                        .battle_positions
+                        .iter()
+                        .find(|card| card.card_code == 100)
+                        .expect("Expected a flip-summon action");
+                    let response = [2u8, 0, card.action_index.unwrap(), 0];
+                    unsafe {
+                        ocgcore_ffi::OCG_DuelSetResponse(
+                            duel.handle(),
+                            response.as_ptr().cast(),
+                            response.len() as u32,
+                        )
+                    };
+                    requested = true;
+                }
+                CoreMessage::FlipSummoning(_) => {
+                    layer.apply(&message).unwrap();
+                    let tracked = layer.card_at(field).unwrap();
+                    assert_eq!(tracked.id, id);
+                    assert_eq!(tracked.position, Some(CardPositionFlags::FACE_UP_ATTACK));
+                    flipping = true;
+                }
+                CoreMessage::FlipSummoned => {
+                    assert!(flipping);
+                    assert_eq!(
+                        duel.get_cards(CardLocation::MonsterZone)[0]
+                            .unwrap()
+                            .position,
+                        Some(BattlePosition::FaceUpAttack)
+                    );
+                    return;
+                }
+                CoreMessage::SelectChain(_) => duel.set_response(Response::PassPriority),
+                _ => {}
+            }
+        }
+        assert_ne!(status, OCG_DuelStatus::OCG_DUEL_STATUS_END);
+    }
+    panic!("Flip summon was not completed");
 }
 
 #[test]
