@@ -296,6 +296,7 @@ pub fn handle_core_message() -> bool {
                 tracing::trace!("Received shuffle hand: {message:?}")
             }
             CoreMessage::Move(message) => tracing::trace!("Received move: {message:?}"),
+            CoreMessage::Swap(message) => tracing::trace!("Received swap: {message:?}"),
             CoreMessage::PositionChange(message) => {
                 tracing::trace!("Received position change: {message:?}")
             }

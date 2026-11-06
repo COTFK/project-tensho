@@ -3,7 +3,7 @@ use crate::ocgcore::location_info::CardPositionFlags;
 use crate::ocgcore::messages::draw::DrawCard;
 use crate::ocgcore::messages::move_card::MoveReason;
 use crate::ocgcore::messages::{
-    PositionChangeMessageData, SetCardMessageData, SummoningMessageData,
+    PositionChangeMessageData, SetCardMessageData, SummoningMessageData, SwapMessageData,
 };
 
 fn address(controller: Player, location: CardLocation, sequence: u32) -> CardAddress {
@@ -94,6 +94,107 @@ fn position_change(
         previous_position,
         current_position,
     })
+}
+
+#[test]
+fn swaps_occupied_zones_and_carries_materials_with_their_hosts() {
+    let first = address(Player::Player, CardLocation::MonsterZone, 0);
+    let second = address(Player::Opponent, CardLocation::MonsterZone, 3);
+    let first_material = address(Player::Player, CardLocation::Hand, 0);
+    let second_material = address(Player::Opponent, CardLocation::Hand, 0);
+    let mut layer = CardLayer::default();
+    let first_id = layer.insert(first, 100).unwrap();
+    let second_id = layer.insert(second, 0).unwrap();
+    let first_material_id = layer.insert(first_material, 101).unwrap();
+    let second_material_id = layer.insert(second_material, 201).unwrap();
+    for (source, host, code) in [(first_material, first, 101), (second_material, second, 201)] {
+        layer
+            .apply(&overlay_move(
+                location(Some(source)),
+                overlay(Some(host), 0),
+                code,
+            ))
+            .unwrap();
+    }
+    let mut first_location = location(Some(first));
+    first_location.position = CardLocationPosition::Position(CardPositionFlags::FACE_UP_DEFENSE);
+    let mut second_location = location(Some(second));
+    second_location.position = CardLocationPosition::Position(CardPositionFlags::FACE_DOWN_DEFENSE);
+    layer
+        .apply(&CoreMessage::Swap(SwapMessageData {
+            first_code: 0,
+            first_location,
+            second_code: 200,
+            second_location,
+        }))
+        .unwrap();
+    let first_card = layer.card_at(second).unwrap();
+    assert_eq!((first_card.id, first_card.code), (first_id, 100));
+    assert_eq!(
+        first_card.position,
+        Some(CardPositionFlags::FACE_UP_DEFENSE)
+    );
+    let second_card = layer.card_at(first).unwrap();
+    assert_eq!((second_card.id, second_card.code), (second_id, 200));
+    assert_eq!(
+        second_card.position,
+        Some(CardPositionFlags::FACE_DOWN_DEFENSE)
+    );
+    assert_eq!(
+        layer.material_at(first_id, 0).unwrap().id,
+        first_material_id
+    );
+    assert_eq!(
+        layer.material_at(second_id, 0).unwrap().id,
+        second_material_id
+    );
+
+    let grave = address(Player::Opponent, CardLocation::Graveyard, 0);
+    layer
+        .apply(&overlay_move(
+            overlay(Some(second), 0),
+            location(Some(grave)),
+            101,
+        ))
+        .unwrap();
+    assert_eq!(layer.card_at(grave).unwrap().id, first_material_id);
+    assert_eq!(
+        layer.material_at(second_id, 0).unwrap().id,
+        second_material_id
+    );
+}
+
+#[test]
+fn rejects_invalid_swaps_atomically() {
+    let first = address(Player::Player, CardLocation::MonsterZone, 0);
+    let second = address(Player::Player, CardLocation::MonsterZone, 1);
+    let missing = address(Player::Player, CardLocation::MonsterZone, 2);
+    let pile = address(Player::Player, CardLocation::Hand, 0);
+    let mut layer = CardLayer::default();
+    layer.insert(first, 0).unwrap();
+    layer.insert(second, 200).unwrap();
+    layer.insert(pile, 300).unwrap();
+    let before = layer.clone();
+    for (first_location, second_location, second_code) in [
+        (location(Some(first)), location(Some(missing)), 0),
+        (location(Some(first)), location(Some(second)), 999),
+        (location(Some(first)), location(Some(first)), 0),
+        (location(Some(first)), location(None), 0),
+        (location(Some(first)), location(Some(pile)), 0),
+        (location(Some(first)), overlay(Some(second), 0), 0),
+    ] {
+        assert!(
+            layer
+                .apply(&CoreMessage::Swap(SwapMessageData {
+                    first_code: 100,
+                    first_location,
+                    second_code,
+                    second_location,
+                }))
+                .is_err()
+        );
+        assert_eq!(layer, before);
+    }
 }
 
 #[test]

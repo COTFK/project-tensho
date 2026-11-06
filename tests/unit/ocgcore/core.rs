@@ -617,6 +617,190 @@ fn tracks_native_material_after_token_host_disappears() {
 }
 
 #[test]
+fn tracks_native_swap_with_overlay_materials() {
+    let core = test_core();
+    let duel = core.create_duel(0).unwrap();
+    let field = |sequence| CardAddress {
+        controller: Player::Player,
+        location: CardLocation::MonsterZone,
+        sequence,
+    };
+    let mut layer = CardLayer::default();
+    let mut ids = Vec::new();
+    for (code, sequence) in [(100, 0), (101, 1), (102, 2), (103, 3)] {
+        duel.add_card(
+            Player::Player,
+            code,
+            Player::Player,
+            CardLocation::MonsterZone,
+            sequence,
+            POS_FACEUP_ATTACK,
+        );
+        ids.push(layer.insert(field(sequence), code).unwrap());
+    }
+    core.load_script(
+        &duel,
+        br#"
+        local effect = Effect.GlobalEffect()
+        effect:SetType(0x0802)
+        effect:SetCode(1113)
+        effect:SetOperation(function()
+            local first = Duel.GetFieldCard(0, 4, 0)
+            local second = Duel.GetFieldCard(0, 4, 1)
+            Duel.Overlay(first, Duel.GetFieldCard(0, 4, 2))
+            Duel.Overlay(second, Duel.GetFieldCard(0, 4, 3))
+            Duel.SwapSequence(first, second)
+        end)
+        Duel.RegisterEffect(effect, 0)
+    "#,
+        "swap-test.lua",
+    )
+    .unwrap();
+
+    duel.start();
+    let mut swaps = 0;
+    for _ in 0..1000 {
+        let status = duel.process();
+        for message in duel.parse_messages() {
+            if matches!(message, CoreMessage::Move(_) | CoreMessage::Swap(_)) {
+                layer.apply(&message).unwrap();
+            }
+            if matches!(message, CoreMessage::Swap(_)) {
+                swaps += 1;
+                let queried = duel.get_cards(CardLocation::MonsterZone);
+                for (sequence, id, code, material) in
+                    [(0, ids[1], 101, ids[3]), (1, ids[0], 100, ids[2])]
+                {
+                    let card = layer.card_at(field(sequence)).unwrap();
+                    assert_eq!((card.id, card.code), (id, code));
+                    assert_eq!(queried[sequence as usize].unwrap().card_code, code);
+                    assert_eq!(layer.material_at(id, 0).unwrap().id, material);
+                }
+            }
+        }
+        if matches!(status, OCG_DuelStatus::OCG_DUEL_STATUS_AWAITING) {
+            assert_eq!(swaps, 1);
+            return;
+        }
+        assert_ne!(status, OCG_DuelStatus::OCG_DUEL_STATUS_END);
+    }
+    panic!("Swap test did not reach an input prompt");
+}
+
+#[test]
+fn tracks_native_control_swap() {
+    let core = test_core();
+    let duel = core.create_duel(0).unwrap();
+    let field = |controller, sequence| CardAddress {
+        controller,
+        location: CardLocation::MonsterZone,
+        sequence,
+    };
+    let mut layer = CardLayer::default();
+    let mut ids = Vec::new();
+    for (team, code, sequence) in [(0, 100, 1), (1, 200, 3)] {
+        let player = Player::try_from(team).unwrap();
+        let card = OCG_NewCardInfo {
+            team,
+            duelist: 0,
+            code,
+            con: team,
+            loc: CardLocation::MonsterZone as u32,
+            seq: sequence,
+            pos: POS_FACEUP_ATTACK,
+        };
+        unsafe { ocgcore_ffi::OCG_DuelNewCard(duel.handle(), &card) };
+        ids.push(layer.insert(field(player, sequence), code).unwrap());
+    }
+    core.load_script(
+        &duel,
+        br#"
+        local effect = Effect.GlobalEffect()
+        effect:SetType(0x0802)
+        effect:SetCode(1113)
+        effect:SetOperation(function()
+            local first = Duel.GetFieldCard(0, 4, 1)
+            local second = Duel.GetFieldCard(1, 4, 3)
+            Duel.SwapControl(first, second)
+        end)
+        Duel.RegisterEffect(effect, 0)
+    "#,
+        "swap-control-test.lua",
+    )
+    .unwrap();
+
+    duel.start();
+    let mut selections = 0;
+    let mut swaps = 0;
+    for _ in 0..1000 {
+        let status = duel.process();
+        for message in duel.parse_messages() {
+            match &message {
+                CoreMessage::SelectPlace(data) => {
+                    let sequence = if data.player == 0 { 1 } else { 3 };
+                    assert!(
+                        data.zones.iter().any(|zone| {
+                            zone.location == CardLocation::MonsterZone && zone.sequence == sequence
+                        }),
+                        "Original zone is unavailable for control swap"
+                    );
+                    duel.set_response(Response::Place {
+                        controller: data.player,
+                        location: CardLocation::MonsterZone as u8,
+                        index: sequence,
+                    });
+                    selections += 1;
+                }
+                CoreMessage::Swap(_) => {
+                    layer.apply(&message).unwrap();
+                    swaps += 1;
+                    assert_eq!(layer.card_at(field(Player::Player, 1)).unwrap().id, ids[1]);
+                    assert_eq!(
+                        layer.card_at(field(Player::Opponent, 3)).unwrap().id,
+                        ids[0]
+                    );
+                    assert_eq!(
+                        duel.get_cards(CardLocation::MonsterZone)[1]
+                            .unwrap()
+                            .card_code,
+                        200
+                    );
+                    let query = ocgcore_ffi::types::OCG_QueryInfo {
+                        flags: u32::MAX,
+                        con: Player::Opponent as u8,
+                        loc: CardLocation::MonsterZone as u32,
+                        seq: 0,
+                        overlay_seq: 0,
+                    };
+                    let mut length = 0;
+                    let ptr = unsafe {
+                        ocgcore_ffi::OCG_DuelQueryLocation(duel.handle(), &mut length, &query)
+                    };
+                    assert!(!ptr.is_null());
+                    let bytes =
+                        unsafe { std::slice::from_raw_parts(ptr.cast::<u8>(), length as usize) };
+                    let cards = crate::ocgcore::query::decode_location(
+                        bytes,
+                        Player::Opponent,
+                        CardLocation::MonsterZone,
+                    )
+                    .unwrap();
+                    assert_eq!(cards[3].unwrap().card_code, 100);
+                }
+                _ => {}
+            }
+        }
+        if matches!(status, OCG_DuelStatus::OCG_DUEL_STATUS_AWAITING) && swaps > 0 {
+            assert_eq!(selections, 2);
+            assert_eq!(swaps, 1);
+            return;
+        }
+        assert_ne!(status, OCG_DuelStatus::OCG_DUEL_STATUS_END);
+    }
+    panic!("Control swap test did not reach an input prompt");
+}
+
+#[test]
 fn tracks_native_position_changes_and_reveals() {
     let core = test_core();
     let duel = core.create_duel(0).unwrap();

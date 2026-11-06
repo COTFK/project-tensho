@@ -4,7 +4,7 @@ use crate::ocgcore::constants::{CardLocation, Player};
 use crate::ocgcore::location_info::{
     CardLocationInfo, CardLocationKind, CardLocationPosition, CardPositionFlags,
 };
-use crate::ocgcore::messages::{CoreMessage, DrawMessageData, MoveMessageData};
+use crate::ocgcore::messages::{CoreMessage, DrawMessageData, MoveMessageData, SwapMessageData};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct CardId(u64);
@@ -93,6 +93,7 @@ impl CardLayer {
         let mut next = self.clone();
         match message {
             CoreMessage::Move(message) => next.apply_move(message)?,
+            CoreMessage::Swap(message) => next.apply_swap(message)?,
             CoreMessage::Draw(message) => next.apply_draw(message)?,
             CoreMessage::PositionChange(message) => next.update_appearance(
                 CardPlacement::Zone(CardAddress {
@@ -130,6 +131,41 @@ impl CardLayer {
             _ => None,
         };
         self.place_moved_card(card, current, message.card_code, position)
+    }
+
+    fn apply_swap(&mut self, message: &SwapMessageData) -> anyhow::Result<()> {
+        let (first, first_placement) =
+            self.swap_card_source(message.first_location, message.first_code)?;
+        let (second, second_placement) =
+            self.swap_card_source(message.second_location, message.second_code)?;
+        ensure!(first != second, "Swap locations are identical");
+        self.cards[first].placement = second_placement;
+        self.cards[second].placement = first_placement;
+        Ok(())
+    }
+
+    fn swap_card_source(
+        &mut self,
+        info: CardLocationInfo,
+        code: u32,
+    ) -> anyhow::Result<(usize, CardPlacement)> {
+        let placement = self.placement_from(info)?.context("Swap has no location")?;
+        let CardPlacement::Zone(address) = placement else {
+            anyhow::bail!("Swap targets an overlay material");
+        };
+        ensure!(!Self::is_pile(address.location), "Swap targets a pile");
+        let CardLocationPosition::Position(position) = info.position else {
+            anyhow::bail!("Swap card has no position");
+        };
+        let index = self
+            .cards
+            .iter()
+            .position(|card| card.placement == placement)
+            .context("No card at swap location")?;
+        let card = &mut self.cards[index];
+        Self::update_code(card, code)?;
+        card.position = Some(position);
+        Ok((index, placement))
     }
 
     fn apply_draw(&mut self, message: &DrawMessageData) -> anyhow::Result<()> {
