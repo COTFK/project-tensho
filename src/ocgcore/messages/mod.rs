@@ -11,6 +11,7 @@ mod hint;
 mod idle;
 pub mod move_card;
 mod new_phase;
+mod position_change;
 mod select_card;
 mod select_chain;
 mod select_effect_yes_no;
@@ -38,6 +39,7 @@ pub use hint::{Hint, HintMessageData};
 pub use idle::IdleMessageData;
 pub use move_card::MoveMessageData;
 pub use new_phase::NewPhaseMessageData;
+pub use position_change::PositionChangeMessageData;
 pub use select_card::SelectCardMessageData;
 pub use select_chain::SelectChainMessageData;
 pub use select_effect_yes_no::SelectEffectYNMessageData;
@@ -58,11 +60,12 @@ use anyhow::Context;
 use ocgcore_ffi::constants::{
     MSG_ANNOUNCE_NUMBER, MSG_BECOME_TARGET, MSG_CARD_HINT, MSG_CARD_SELECTED, MSG_CHAIN_DISABLED,
     MSG_CHAIN_END, MSG_CHAIN_SOLVED, MSG_CHAIN_SOLVING, MSG_CHAINED, MSG_CHAINING,
-    MSG_CONFIRM_CARDS, MSG_DRAW, MSG_HINT, MSG_MOVE, MSG_NEW_PHASE, MSG_NEW_TURN, MSG_RETRY,
-    MSG_SELECT_CARD, MSG_SELECT_CHAIN, MSG_SELECT_EFFECTYN, MSG_SELECT_IDLECMD, MSG_SELECT_OPTION,
-    MSG_SELECT_PLACE, MSG_SELECT_POSITION, MSG_SELECT_TRIBUTE, MSG_SELECT_UNSELECT_CARD,
-    MSG_SELECT_YESNO, MSG_SET, MSG_SHUFFLE_DECK, MSG_SHUFFLE_HAND, MSG_SORT_CARD, MSG_SPSUMMONED,
-    MSG_SPSUMMONING, MSG_SUMMONED, MSG_SUMMONING, MSG_WIN,
+    MSG_CONFIRM_CARDS, MSG_DRAW, MSG_FLIPSUMMONED, MSG_FLIPSUMMONING, MSG_HINT, MSG_MOVE,
+    MSG_NEW_PHASE, MSG_NEW_TURN, MSG_POS_CHANGE, MSG_RETRY, MSG_SELECT_CARD, MSG_SELECT_CHAIN,
+    MSG_SELECT_EFFECTYN, MSG_SELECT_IDLECMD, MSG_SELECT_OPTION, MSG_SELECT_PLACE,
+    MSG_SELECT_POSITION, MSG_SELECT_TRIBUTE, MSG_SELECT_UNSELECT_CARD, MSG_SELECT_YESNO, MSG_SET,
+    MSG_SHUFFLE_DECK, MSG_SHUFFLE_HAND, MSG_SORT_CARD, MSG_SPSUMMONED, MSG_SPSUMMONING,
+    MSG_SUMMONED, MSG_SUMMONING, MSG_WIN,
 };
 
 #[derive(Hash, Debug, Clone, PartialEq, Eq)]
@@ -78,11 +81,14 @@ pub enum CoreMessage {
     ShuffleDeck(ShuffleDeckMessageData),
     ShuffleHand(ShuffleHandMessageData),
     Move(MoveMessageData),
+    PositionChange(PositionChangeMessageData),
     SetCard(SetCardMessageData),
     Summoning(SummoningMessageData),
     SpecialSummoning(SummoningMessageData),
+    FlipSummoning(SummoningMessageData),
     Summoned,
     SpecialSummoned,
+    FlipSummoned,
     Chaining(ChainingMessageData),
     Chained(ChainLinkMessageData),
     ChainSolving(ChainLinkMessageData),
@@ -132,6 +138,9 @@ impl TryFrom<&[u8]> for CoreMessage {
                 bytes,
             )?)),
             MSG_MOVE => Ok(CoreMessage::Move(MoveMessageData::try_from(bytes)?)),
+            MSG_POS_CHANGE => Ok(CoreMessage::PositionChange(
+                PositionChangeMessageData::try_from(bytes)?,
+            )),
             MSG_SET => Ok(CoreMessage::SetCard(SetCardMessageData::try_from(bytes)?)),
             MSG_SUMMONING => Ok(CoreMessage::Summoning(SummoningMessageData::try_from(
                 bytes,
@@ -139,13 +148,16 @@ impl TryFrom<&[u8]> for CoreMessage {
             MSG_SPSUMMONING => Ok(CoreMessage::SpecialSummoning(
                 SummoningMessageData::try_from(bytes)?,
             )),
-            MSG_SUMMONED | MSG_SPSUMMONED => {
+            MSG_FLIPSUMMONING => Ok(CoreMessage::FlipSummoning(SummoningMessageData::try_from(
+                bytes,
+            )?)),
+            MSG_SUMMONED | MSG_SPSUMMONED | MSG_FLIPSUMMONED => {
                 let length = u32::from_le_bytes(bytes[..4].try_into()?);
                 anyhow::ensure!(length == 1, "Invalid summoned message length: {length}");
-                Ok(if u32::from(message_type) == MSG_SUMMONED {
-                    CoreMessage::Summoned
-                } else {
-                    CoreMessage::SpecialSummoned
+                Ok(match u32::from(message_type) {
+                    MSG_SUMMONED => CoreMessage::Summoned,
+                    MSG_SPSUMMONED => CoreMessage::SpecialSummoned,
+                    _ => CoreMessage::FlipSummoned,
                 })
             }
             MSG_CHAINING => Ok(CoreMessage::Chaining(ChainingMessageData::try_from(bytes)?)),

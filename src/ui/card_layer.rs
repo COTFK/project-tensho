@@ -1,7 +1,9 @@
 use anyhow::{Context, ensure};
 
 use crate::ocgcore::constants::{CardLocation, Player};
-use crate::ocgcore::location_info::{CardLocationInfo, CardLocationKind, CardLocationPosition};
+use crate::ocgcore::location_info::{
+    CardLocationInfo, CardLocationKind, CardLocationPosition, CardPositionFlags,
+};
 use crate::ocgcore::messages::{CoreMessage, DrawMessageData, MoveMessageData};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -25,6 +27,7 @@ pub(crate) struct Card {
     pub id: CardId,
     pub code: u32,
     pub placement: CardPlacement,
+    pub position: Option<CardPositionFlags>,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -65,6 +68,7 @@ impl CardLayer {
             id,
             code,
             placement: CardPlacement::Zone(address),
+            position: None,
         });
         Ok(id)
     }
@@ -90,6 +94,23 @@ impl CardLayer {
         match message {
             CoreMessage::Move(message) => next.apply_move(message)?,
             CoreMessage::Draw(message) => next.apply_draw(message)?,
+            CoreMessage::PositionChange(message) => next.update_appearance(
+                CardPlacement::Zone(CardAddress {
+                    controller: message.controller,
+                    location: message.location,
+                    sequence: message.sequence,
+                }),
+                message.card_code,
+                message.current_position,
+            )?,
+            CoreMessage::SetCard(message) => {
+                next.apply_card_event(message.location, message.card_code)?
+            }
+            CoreMessage::Summoning(message)
+            | CoreMessage::SpecialSummoning(message)
+            | CoreMessage::FlipSummoning(message) => {
+                next.apply_card_event(message.location, message.card_code)?
+            }
             _ => anyhow::bail!("Unsupported card update"),
         }
         *self = next;
@@ -104,7 +125,11 @@ impl CardLayer {
         );
         let card = previous.map(|place| self.remove_card(place)).transpose()?;
         let current = self.placement_from(message.current)?;
-        self.place_moved_card(card, current, message.card_code)
+        let position = match message.current.position {
+            CardLocationPosition::Position(position) if current.is_some() => Some(position),
+            _ => None,
+        };
+        self.place_moved_card(card, current, message.card_code, position)
     }
 
     fn apply_draw(&mut self, message: &DrawMessageData) -> anyhow::Result<()> {
@@ -124,7 +149,53 @@ impl CardLayer {
                 sequence: hand_len,
             };
             let card = self.remove_card(CardPlacement::Zone(previous))?;
-            self.place_moved_card(Some(card), Some(CardPlacement::Zone(current)), drawn.code)?;
+            self.place_moved_card(
+                Some(card),
+                Some(CardPlacement::Zone(current)),
+                drawn.code,
+                Some(drawn.position),
+            )?;
+        }
+        Ok(())
+    }
+
+    fn apply_card_event(&mut self, info: CardLocationInfo, code: u32) -> anyhow::Result<()> {
+        let placement = self
+            .placement_from(info)?
+            .context("Card event has no location")?;
+        ensure!(
+            matches!(placement, CardPlacement::Zone(_)),
+            "Card event targets an overlay material"
+        );
+        let CardLocationPosition::Position(position) = info.position else {
+            anyhow::bail!("Card event has no position");
+        };
+        self.update_appearance(placement, code, position)
+    }
+
+    fn update_appearance(
+        &mut self,
+        placement: CardPlacement,
+        code: u32,
+        position: CardPositionFlags,
+    ) -> anyhow::Result<()> {
+        let card = self
+            .cards
+            .iter_mut()
+            .find(|card| card.placement == placement)
+            .context("No card at appearance update location")?;
+        Self::update_code(card, code)?;
+        card.position = Some(position);
+        Ok(())
+    }
+
+    fn update_code(card: &mut Card, code: u32) -> anyhow::Result<()> {
+        ensure!(
+            card.code == 0 || code == 0 || card.code == code,
+            "Message card code does not match the tracked card"
+        );
+        if code != 0 {
+            card.code = code;
         }
         Ok(())
     }
@@ -186,15 +257,13 @@ impl CardLayer {
 
     fn place_moved_card(
         &mut self,
-        before: Option<Card>,
+        mut before: Option<Card>,
         current: Option<CardPlacement>,
         code: u32,
+        position: Option<CardPositionFlags>,
     ) -> anyhow::Result<()> {
-        if let Some(card) = before {
-            ensure!(
-                card.code == 0 || code == 0 || card.code == code,
-                "Move card code does not match the card at its source"
-            );
+        if let Some(card) = &mut before {
+            Self::update_code(card, code)?;
         }
         if let Some(placement) = current {
             let id = match before {
@@ -214,6 +283,7 @@ impl CardLayer {
                 id,
                 code,
                 placement,
+                position,
             })?;
         }
         Ok(())
