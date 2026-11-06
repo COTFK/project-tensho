@@ -1,3 +1,8 @@
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "Prepared for card layer integration")
+)]
+pub(crate) mod card_layer;
 mod components;
 mod duel;
 mod loading;
