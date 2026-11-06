@@ -31,6 +31,26 @@ fn movement(from: Option<CardAddress>, to: Option<CardAddress>, code: u32) -> Co
     })
 }
 
+fn overlay(host: Option<CardAddress>, sequence: u32) -> CardLocationInfo {
+    CardLocationInfo {
+        controller: host.map(|address| address.controller),
+        location: CardLocationKind::Overlay {
+            host: host.map(|address| address.location),
+        },
+        sequence: host.map_or(0, |address| address.sequence),
+        position: CardLocationPosition::OverlaySequence(sequence),
+    }
+}
+
+fn overlay_move(previous: CardLocationInfo, current: CardLocationInfo, code: u32) -> CoreMessage {
+    CoreMessage::Move(MoveMessageData {
+        card_code: code,
+        previous,
+        current,
+        reason: MoveReason::XYZ | MoveReason::MATERIAL,
+    })
+}
+
 fn draw(player: Player, codes: &[u32]) -> CoreMessage {
     CoreMessage::Draw(DrawMessageData {
         player,
@@ -188,6 +208,337 @@ fn consecutive_moves_keep_identity_at_each_intermediate_address() {
 }
 
 #[test]
+fn materials_follow_host_and_reindex_after_detachment() {
+    let player = Player::Player;
+    let host = address(player, CardLocation::MonsterZone, 1);
+    let hand = address(player, CardLocation::Hand, 0);
+    let moved_host = address(Player::Opponent, CardLocation::MonsterZone, 3);
+    let grave = address(player, CardLocation::Graveyard, 0);
+    let mut layer = CardLayer::default();
+    let host_id = layer.insert(host, 100).unwrap();
+    let first = layer.insert(hand, 7).unwrap();
+    let second = layer
+        .insert(address(player, CardLocation::Hand, 1), 7)
+        .unwrap();
+
+    layer
+        .apply(&overlay_move(
+            location(Some(hand)),
+            overlay(Some(host), 0),
+            7,
+        ))
+        .unwrap();
+    layer
+        .apply(&overlay_move(
+            location(Some(hand)),
+            overlay(Some(host), 1),
+            7,
+        ))
+        .unwrap();
+    assert_eq!(layer.material_at(host_id, 0).unwrap().id, first);
+    assert_eq!(layer.material_at(host_id, 1).unwrap().id, second);
+    assert_ne!(first, second);
+
+    layer
+        .apply(&movement(Some(host), Some(moved_host), 100))
+        .unwrap();
+    assert_eq!(layer.card_at(moved_host).unwrap().id, host_id);
+    layer
+        .apply(&overlay_move(
+            overlay(Some(moved_host), 0),
+            location(Some(grave)),
+            7,
+        ))
+        .unwrap();
+    assert_eq!(layer.card_at(grave).unwrap().id, first);
+    assert_eq!(layer.material_at(host_id, 0).unwrap().id, second);
+    assert!(layer.material_at(host_id, 1).is_none());
+}
+
+#[test]
+fn materials_follow_host_into_grave_before_their_own_moves() {
+    let host = address(Player::Player, CardLocation::MonsterZone, 0);
+    let hand = address(Player::Player, CardLocation::Hand, 0);
+    let grave = address(Player::Player, CardLocation::Graveyard, 0);
+    let mut layer = CardLayer::default();
+    let host_id = layer.insert(host, 100).unwrap();
+    let material_id = layer.insert(hand, 10).unwrap();
+    layer
+        .apply(&overlay_move(
+            location(Some(hand)),
+            overlay(Some(host), 0),
+            10,
+        ))
+        .unwrap();
+    layer
+        .apply(&movement(Some(host), Some(grave), 100))
+        .unwrap();
+    assert_eq!(layer.material_at(host_id, 0).unwrap().id, material_id);
+    layer
+        .apply(&overlay_move(
+            overlay(Some(grave), 0),
+            location(Some(address(Player::Player, CardLocation::Graveyard, 1))),
+            10,
+        ))
+        .unwrap();
+    assert_eq!(
+        layer
+            .card_at(address(Player::Player, CardLocation::Graveyard, 1))
+            .unwrap()
+            .id,
+        material_id
+    );
+    assert!(layer.material_at(host_id, 0).is_none());
+}
+
+#[test]
+fn overlay_destination_resolves_after_source_pile_compacts() {
+    let player = Player::Player;
+    let hand = |sequence| address(player, CardLocation::Hand, sequence);
+    let mut layer = CardLayer::default();
+    let material = layer.insert(hand(0), 10).unwrap();
+    layer.insert(hand(1), 20).unwrap();
+    let host = layer.insert(hand(2), 100).unwrap();
+    layer
+        .apply(&overlay_move(
+            location(Some(hand(0))),
+            overlay(Some(hand(1)), 0),
+            10,
+        ))
+        .unwrap();
+    assert_eq!(layer.card_at(hand(1)).unwrap().id, host);
+    assert_eq!(layer.material_at(host, 0).unwrap().id, material);
+    let grave = address(player, CardLocation::Graveyard, 0);
+    layer
+        .apply(&movement(Some(hand(0)), Some(grave), 20))
+        .unwrap();
+    assert_eq!(layer.card_at(hand(0)).unwrap().id, host);
+    layer
+        .apply(&overlay_move(
+            overlay(Some(hand(0)), 0),
+            location(Some(address(player, CardLocation::Graveyard, 1))),
+            10,
+        ))
+        .unwrap();
+    assert_eq!(
+        layer
+            .card_at(address(player, CardLocation::Graveyard, 1))
+            .unwrap()
+            .id,
+        material
+    );
+}
+
+#[test]
+fn transfers_materials_between_hosts_without_changing_identity() {
+    let player = Player::Player;
+    let first_host = address(player, CardLocation::MonsterZone, 0);
+    let second_host = address(player, CardLocation::MonsterZone, 1);
+    let hand = address(player, CardLocation::Hand, 0);
+    let mut layer = CardLayer::default();
+    let first_id = layer.insert(first_host, 100).unwrap();
+    let second_id = layer.insert(second_host, 200).unwrap();
+    let material = layer.insert(hand, 10).unwrap();
+    layer
+        .apply(&overlay_move(
+            location(Some(hand)),
+            overlay(Some(first_host), 0),
+            10,
+        ))
+        .unwrap();
+    layer
+        .apply(&overlay_move(
+            overlay(Some(first_host), 0),
+            overlay(Some(second_host), 0),
+            10,
+        ))
+        .unwrap();
+    assert!(layer.material_at(first_id, 0).is_none());
+    assert_eq!(layer.material_at(second_id, 0).unwrap().id, material);
+}
+
+#[test]
+fn host_materials_transfer_before_the_host_becomes_a_material() {
+    let player = Player::Player;
+    let source = address(player, CardLocation::MonsterZone, 0);
+    let target = address(player, CardLocation::MonsterZone, 1);
+    let hand = address(player, CardLocation::Hand, 0);
+    let mut layer = CardLayer::default();
+    let source_id = layer.insert(source, 100).unwrap();
+    let target_id = layer.insert(target, 200).unwrap();
+    let material = layer.insert(hand, 10).unwrap();
+    layer
+        .apply(&overlay_move(
+            location(Some(hand)),
+            overlay(Some(source), 0),
+            10,
+        ))
+        .unwrap();
+    let initial = layer.clone();
+    assert!(
+        layer
+            .apply(&overlay_move(
+                location(Some(source)),
+                overlay(Some(target), 0),
+                100,
+            ))
+            .is_err()
+    );
+    assert_eq!(layer, initial);
+    layer
+        .apply(&overlay_move(
+            overlay(Some(source), 0),
+            overlay(Some(target), 0),
+            10,
+        ))
+        .unwrap();
+    layer
+        .apply(&overlay_move(
+            location(Some(source)),
+            overlay(Some(target), 1),
+            100,
+        ))
+        .unwrap();
+    assert_eq!(layer.material_at(target_id, 0).unwrap().id, material);
+    assert_eq!(layer.material_at(target_id, 1).unwrap().id, source_id);
+}
+
+#[test]
+fn material_sequences_are_full_width_and_reindex_after_detachment() {
+    let host = address(Player::Player, CardLocation::MonsterZone, 0);
+    let hand = address(Player::Player, CardLocation::Hand, 0);
+    let grave = address(Player::Player, CardLocation::Graveyard, 0);
+    let mut layer = CardLayer::default();
+    let host_id = layer.insert(host, 1000).unwrap();
+    for sequence in 0..300 {
+        layer.insert(hand, sequence + 1).unwrap();
+        layer
+            .apply(&overlay_move(
+                location(Some(hand)),
+                overlay(Some(host), sequence),
+                sequence + 1,
+            ))
+            .unwrap();
+    }
+    let detached = layer.material_at(host_id, 256).unwrap().id;
+    let shifted = layer.material_at(host_id, 257).unwrap().id;
+    layer
+        .apply(&overlay_move(
+            overlay(Some(host), 256),
+            location(Some(grave)),
+            257,
+        ))
+        .unwrap();
+    assert_eq!(layer.card_at(grave).unwrap().id, detached);
+    assert_eq!(layer.material_at(host_id, 256).unwrap().id, shifted);
+    assert!(layer.material_at(host_id, 299).is_none());
+}
+
+#[test]
+fn handles_material_moves_after_a_host_disappears() {
+    let host = address(Player::Player, CardLocation::MonsterZone, 0);
+    let hand = address(Player::Player, CardLocation::Hand, 0);
+    let grave = address(Player::Player, CardLocation::Graveyard, 0);
+    let mut layer = CardLayer::default();
+    let host_id = layer.insert(host, 100).unwrap();
+    let first = layer.insert(hand, 7).unwrap();
+    let second = layer
+        .insert(address(Player::Player, CardLocation::Hand, 1), 7)
+        .unwrap();
+    layer
+        .apply(&overlay_move(
+            location(Some(hand)),
+            overlay(Some(host), 0),
+            7,
+        ))
+        .unwrap();
+    layer
+        .apply(&overlay_move(
+            location(Some(hand)),
+            overlay(Some(host), 1),
+            7,
+        ))
+        .unwrap();
+    layer.apply(&movement(Some(host), None, 100)).unwrap();
+    assert!(layer.card_at(host).is_none());
+    layer
+        .apply(&overlay_move(overlay(None, 0), location(Some(grave)), 7))
+        .unwrap();
+    assert_eq!(layer.card_at(grave).unwrap().id, first);
+    assert_eq!(layer.material_at(host_id, 0).unwrap().id, second);
+    layer
+        .apply(&overlay_move(overlay(None, 0), location(None), 7))
+        .unwrap();
+    assert!(layer.material_at(host_id, 0).is_none());
+}
+
+#[test]
+fn rejects_invalid_overlay_moves_atomically() {
+    let host = address(Player::Player, CardLocation::MonsterZone, 0);
+    let hand = address(Player::Player, CardLocation::Hand, 0);
+    let mut layer = CardLayer::default();
+    layer.insert(host, 100).unwrap();
+    layer.insert(hand, 10).unwrap();
+    let initial = layer.clone();
+    let missing_host = address(Player::Player, CardLocation::MonsterZone, 1);
+    let mut bad_position = overlay(Some(host), 0);
+    bad_position.position = CardLocationPosition::Position(CardPositionFlags::FACE_UP_ATTACK);
+    let mut bad_controller = overlay(Some(host), 0);
+    bad_controller.controller = None;
+    for message in [
+        overlay_move(location(Some(hand)), overlay(Some(missing_host), 0), 10),
+        overlay_move(location(Some(hand)), overlay(Some(host), 1), 10),
+        overlay_move(overlay(Some(host), 0), location(Some(hand)), 10),
+        overlay_move(location(Some(hand)), bad_position, 10),
+        overlay_move(location(Some(hand)), bad_controller, 10),
+        overlay_move(overlay(None, 0), location(Some(hand)), 10),
+    ] {
+        assert!(layer.apply(&message).is_err(), "{message:?}");
+        assert_eq!(layer, initial);
+    }
+}
+
+#[test]
+fn ambiguous_disappeared_hosts_are_rejected() {
+    let player = Player::Player;
+    let first_host = address(player, CardLocation::MonsterZone, 0);
+    let second_host = address(player, CardLocation::MonsterZone, 1);
+    let hand = address(player, CardLocation::Hand, 0);
+    let mut layer = CardLayer::default();
+    layer.insert(first_host, 100).unwrap();
+    layer.insert(second_host, 200).unwrap();
+    layer.insert(hand, 10).unwrap();
+    layer
+        .insert(address(player, CardLocation::Hand, 1), 20)
+        .unwrap();
+    layer
+        .apply(&overlay_move(
+            location(Some(hand)),
+            overlay(Some(first_host), 0),
+            10,
+        ))
+        .unwrap();
+    layer
+        .apply(&overlay_move(
+            location(Some(hand)),
+            overlay(Some(second_host), 0),
+            20,
+        ))
+        .unwrap();
+    layer.apply(&movement(Some(first_host), None, 100)).unwrap();
+    layer
+        .apply(&movement(Some(second_host), None, 200))
+        .unwrap();
+    let initial = layer.clone();
+    assert!(
+        layer
+            .apply(&overlay_move(overlay(None, 0), location(Some(hand)), 10))
+            .is_err()
+    );
+    assert_eq!(layer, initial);
+}
+
+#[test]
 fn moves_full_width_sequences() {
     let mut layer = CardLayer::from_decks(&(0..300).collect::<Vec<_>>(), &[]).unwrap();
     let deck = |sequence| address(Player::Player, CardLocation::Deck, sequence);
@@ -261,7 +612,10 @@ fn initializes_ordered_decks_and_distinguishes_copies() {
     assert_eq!(
         cards
             .iter()
-            .map(|card| (card.address.location, card.address.sequence, card.code))
+            .map(|card| match card.placement {
+                CardPlacement::Zone(address) => (address.location, address.sequence, card.code),
+                CardPlacement::Overlay { .. } => panic!("Unexpected overlay material"),
+            })
             .collect::<Vec<_>>(),
         [
             (CardLocation::Deck, 0, 7),
