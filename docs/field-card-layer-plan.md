@@ -12,6 +12,8 @@ Architectural boundaries:
 - The upstream core remains unchanged and authoritative.
 - The card layer assigns instance IDs and updates its list from ordered
   messages; it is a presentation of the core state, not another authority.
+- Card changes use one ordered application path; playback must not apply
+  changes a second time.
 - The displayed list may temporarily lag behind the core during playback.
 - Prompts and actions are enabled only when presentation has caught up.
 - Modals remain selection and preview views, not owners of moving board cards.
@@ -46,20 +48,23 @@ not depend on card code or position. Keep the existing UI active.
 
 ### 3. Track moves, draws, and card lifetimes
 
-Update the card list directly from ordinary movement and draw messages,
-including sequence shifts, creation, and disappearance. Produce ordered
-events containing enough historical data for later playback. Harden the draw
-decoder as part of making it a reliable input.
+Update the card list through one ordered path for movement and draw messages,
+including sequence shifts, creation, and disappearance. Leave the original
+messages available for later playback. Reuse the wire location's controller and
+location types and full-width sequence; keep position separate from address
+identity and handle absent locations. Harden the draw decoder using existing
+bounded readers.
 
 - Depends on: 2.
 - Test: duplicate copies, multiple draws, same-pile moves, creation and
-  removal, and truncated draw messages.
+  removal, absent locations, full-width sequences, and truncated draw messages.
 - Commit: `feat(tracker): track card movement and draws`
 
 ### 4. Track overlay relationships
 
 Handle attaching and detaching materials, material reindexing, and moving hosts
-without replacing material identities.
+without replacing material identities. Reuse the wire representation for
+overlay host locations and material sequences.
 
 - Depends on: 3.
 - Test: multiple materials, host movement, detachment, and host removal.
@@ -80,7 +85,7 @@ presentation-relevant state without changing IDs. Preserve concealment rules.
 Decode swaps and update both addresses atomically, avoiding temporary
 collisions.
 
-- Depends on: 3.
+- Depends on: 3, 4.
 - Test: occupied-zone swaps, controller changes, and associated material
   addresses.
 - Commit: `feat(tracker): track atomic card swaps`
@@ -138,11 +143,13 @@ any ensuing shuffle boundary.
 
 Initialize the card list directly from the actual shuffled decks and custom
 hand setup before processing begins, and hold it in a UI state signal. Update
-that same list from the game loop, preserving message order and existing
-process-to-input behavior. Apply every structural message from startup onward.
-Audit reachable structural messages and check list invariants; report detected
-divergence and stop card playback instead of silently continuing with invalid
-identities. Keep the existing UI and its responses unchanged.
+that same list through the step 3 application path in immediate mode, preserving
+message order and existing process-to-input behavior. Apply every structural
+message from startup onward. Keep legacy queries while the old UI needs them,
+and retain queries needed for dynamic card properties. Audit reachable
+structural messages and check list invariants; report detected divergence and
+stop card playback instead of silently continuing with invalid identities. Keep
+the existing UI and its responses unchanged.
 
 - Depends on: 2, 3-11.
 - Test: native-core startup, summon/set/move sequences, batched events,
@@ -152,21 +159,29 @@ identities. Keep the existing UI and its responses unchanged.
 
 ### 13. Add card playback
 
-Build a playback queue that applies ordered events to the same card list.
+Add a playback queue to the existing application path: immediate mode applies
+changes once, while queued mode delays that same application rather than
+reapplying changes already made. Use each original message and the presentation
+state before applying it to derive playback details, including draw addresses.
 Preserve intermediate moves and appearance changes even when the core processes
-several events together; do not introduce a second card identity model.
+several events together. Keep prompts and
+actions gated until presentation catches up; do not introduce a second card
+identity model.
 
-- Depends on: 3-11.
+- Depends on: 12.
 - Test: consecutive movements of one card, simultaneous groups, immediate
-  playback, cancellation, and completion.
+  playback, no double application, prompts after queued moves, cancellation,
+  and completion.
 - Commit: `feat(animation): add ordered card playback`
 
 ### 14. Decouple card behavior from zone ownership
 
 Extract reusable actions, highlights, menus, and stat decorations from field
-and hand cards. Keep the existing components using those extracted pieces.
-Preserve response indices and resolve actions against current logical
-addresses.
+and hand cards, building on the existing card component. Derive temporary
+actions and selections from the current prompt rather than duplicating them
+in persistent card instances. Keep the existing components using those
+extracted pieces. Preserve core response indices and resolve actions against
+current logical addresses; retain queries for dynamic card properties.
 
 - Test: summon, set, activation, chains, tributes, selection, action
   suppression, and unchanged appearance.
@@ -222,7 +237,9 @@ now retain the same rendered instance.
 
 Represent deck, extra deck, graveyard, banishment, and material destinations in
 the shared layer. Preserve pile clicks and existing modal behavior; avoid
-simultaneously drawing a moving card in its destination pile.
+simultaneously drawing a moving card in its destination pile. Share pile picker
+pieces where appropriate without merging their distinct visibility and action
+rules.
 
 - Depends on: 4, 18.
 - Test: draw, discard, banish, special summon, attachment and detachment, stack
@@ -277,10 +294,10 @@ that still serves the new UI.
 
 ### 24. Consolidate card UI state
 
-After legacy rendering is removed, move the card-list types and operations into
-the UI state implementation and remove the temporary standalone data module.
-Remove obsolete zone-specific state that no longer serves prompts or modals;
-keep the rendering components separate.
+After legacy rendering is removed, remove obsolete zone-specific state that no
+longer serves prompts or modals. Keep one card list owned by UI state; consolidate
+its types and operations where clearest, retaining a separate data module if it
+improves readability. Keep the rendering components separate.
 
 - Depends on: 23.
 - Test: card updates and stable keys, restart and reset, prompts and modals,

@@ -39,6 +39,7 @@ mod tests {
     };
     use crate::ocgcore::location_info::CardLocationKind;
     use crate::ocgcore::messages::{CoreMessage, Hint, HintMessageData, WinMessageData};
+    use crate::ui::card_layer::{CardAddress, CardLayer};
     use ocgcore_ffi::constants::{POS_FACEUP_ATTACK, TYPE_MONSTER, TYPE_NORMAL};
     use ocgcore_ffi::enums::OCG_DuelStatus;
     use ocgcore_ffi::types::{OCG_CardData, OCG_NewCardInfo};
@@ -196,6 +197,7 @@ mod tests {
     fn normal_summon_emits_move_summoning_and_summoned() {
         let core = test_core();
         let duel = core.create_duel(5).unwrap();
+        let mut layer = CardLayer::default();
         for team in 0..=1 {
             for code in 1..=10 {
                 let card = OCG_NewCardInfo {
@@ -208,8 +210,30 @@ mod tests {
                     pos: 0,
                 };
                 unsafe { ocgcore_ffi::OCG_DuelNewCard(duel.handle(), &card) };
+                layer
+                    .insert(
+                        CardAddress {
+                            controller: Player::try_from(team).unwrap(),
+                            location: CardLocation::Deck,
+                            sequence: code - 1,
+                        },
+                        code,
+                    )
+                    .unwrap();
             }
         }
+        let initial_deck: Vec<_> = (0..10)
+            .map(|sequence| {
+                layer
+                    .card_at(CardAddress {
+                        controller: Player::Player,
+                        location: CardLocation::Deck,
+                        sequence,
+                    })
+                    .unwrap()
+                    .id
+            })
+            .collect();
         duel.start();
         let mut summoned_code = None;
         let mut moved_location = None;
@@ -218,8 +242,67 @@ mod tests {
         for _ in 0..1000 {
             let status = duel.process();
             for message in duel.parse_messages() {
+                if let CoreMessage::Move(data) = &message {
+                    let source_id = if Some(data.card_code) == summoned_code {
+                        Some(
+                            layer
+                                .card_at(CardAddress {
+                                    controller: Player::Player,
+                                    location: CardLocation::Hand,
+                                    sequence: data.previous.sequence,
+                                })
+                                .unwrap()
+                                .id,
+                        )
+                    } else {
+                        None
+                    };
+                    layer.apply(&message).unwrap();
+                    if let Some(id) = source_id {
+                        assert_eq!(
+                            layer
+                                .card_at(CardAddress {
+                                    controller: Player::Player,
+                                    location: CardLocation::MonsterZone,
+                                    sequence: data.current.sequence,
+                                })
+                                .unwrap()
+                                .id,
+                            id
+                        );
+                    }
+                } else if matches!(message, CoreMessage::Draw(_)) {
+                    layer.apply(&message).unwrap();
+                }
                 match message {
                     CoreMessage::Idle(data) if summoned_code.is_none() => {
+                        for location in [CardLocation::Deck, CardLocation::Hand] {
+                            for (sequence, core_card) in duel.get_cards(location).iter().enumerate()
+                            {
+                                let tracked = layer
+                                    .card_at(CardAddress {
+                                        controller: Player::Player,
+                                        location,
+                                        sequence: sequence as u32,
+                                    })
+                                    .unwrap();
+                                assert_eq!(tracked.code, core_card.unwrap().card_code);
+                                if location == CardLocation::Hand {
+                                    assert_eq!(tracked.id, initial_deck[9 - sequence]);
+                                }
+                            }
+                            assert_eq!(
+                                layer
+                                    .cards()
+                                    .iter()
+                                    .filter(|card| {
+                                        card.address.controller == Player::Player
+                                            && card.address.location == location
+                                    })
+                                    .count(),
+                                duel.count_location(Player::Player, location) as usize
+                            );
+                        }
                         let card = data.normal_summons.first().expect("No summonable card");
                         summoned_code = Some(card.card_code);
                         duel.set_response(Response::NormalSummon {
@@ -259,6 +342,31 @@ mod tests {
                 (moved_location, summoning_location, summoned)
             {
                 assert_eq!(summoning, moved);
+                let tracked = layer
+                    .card_at(CardAddress {
+                        controller: Player::Player,
+                        location: CardLocation::MonsterZone,
+                        sequence: moved.sequence,
+                    })
+                    .unwrap();
+                let queried = duel.get_cards(CardLocation::MonsterZone);
+                assert_eq!(
+                    tracked.code,
+                    queried[moved.sequence as usize].unwrap().card_code
+                );
+                for (sequence, core_card) in duel.get_cards(CardLocation::Hand).iter().enumerate() {
+                    assert_eq!(
+                        layer
+                            .card_at(CardAddress {
+                                controller: Player::Player,
+                                location: CardLocation::Hand,
+                                sequence: sequence as u32,
+                            })
+                            .unwrap()
+                            .code,
+                        core_card.unwrap().card_code
+                    );
+                }
                 return;
             }
             assert_ne!(status, OCG_DuelStatus::OCG_DUEL_STATUS_END);
