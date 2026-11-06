@@ -1,15 +1,6 @@
 use std::ffi::c_void;
 use std::rc::Rc;
 
-use ocgcore_ffi::constants::QUERY_ATTACK;
-use ocgcore_ffi::constants::QUERY_CODE;
-use ocgcore_ffi::constants::QUERY_DEFENSE;
-use ocgcore_ffi::constants::QUERY_END;
-use ocgcore_ffi::constants::QUERY_LEVEL;
-use ocgcore_ffi::constants::QUERY_LINK;
-use ocgcore_ffi::constants::QUERY_POSITION;
-use ocgcore_ffi::constants::QUERY_RANK;
-use ocgcore_ffi::constants::QUERY_TYPE;
 use ocgcore_ffi::types::OCG_Duel;
 use ocgcore_ffi::types::OCG_NewCardInfo;
 use ocgcore_ffi::types::OCG_QueryInfo;
@@ -18,12 +9,11 @@ use super::OCGCore;
 use super::constants::CardLocation;
 use crate::ocgcore::CardData;
 use crate::ocgcore::Response;
-use crate::ocgcore::constants::BattlePosition;
 use crate::ocgcore::constants::Player;
-use crate::ocgcore::data::CardType;
 use crate::ocgcore::data::HandCard;
 use crate::ocgcore::messages::CoreMessage;
 use crate::ocgcore::messages::parse_messages;
+use crate::ocgcore::query::decode_location;
 use ocgcore_ffi::enums::OCG_DuelStatus;
 
 struct DuelInner {
@@ -100,7 +90,7 @@ impl Duel {
         unsafe { ocgcore_ffi::OCG_DuelQueryCount(self.inner.handle, team as u8, location as u32) }
     }
 
-    fn query_location(&self, flags: u32, team: Player, location: CardLocation) -> Option<Vec<u8>> {
+    fn query_location(&self, flags: u32, team: Player, location: CardLocation) -> Vec<u8> {
         let query = OCG_QueryInfo {
             flags,
             con: team as u8,
@@ -113,9 +103,11 @@ impl Duel {
         let ptr = unsafe {
             ocgcore_ffi::OCG_DuelQueryLocation(self.inner.handle, &mut length, &query) as *mut u8
         };
-        let data = unsafe { std::slice::from_raw_parts(ptr, length as usize) };
-
-        Some(data.to_vec())
+        if length == 0 {
+            return Vec::new();
+        }
+        assert!(!ptr.is_null(), "Core returned a null query buffer");
+        unsafe { std::slice::from_raw_parts(ptr, length as usize) }.to_vec()
     }
 
     pub fn get_raw_hand(&self) -> Vec<HandCard> {
@@ -139,171 +131,9 @@ impl Duel {
     }
 
     pub fn get_cards(&self, location: CardLocation) -> Vec<Option<CardData>> {
-        let orig_buf = match self.query_location(0xFFFFFFFF, Player::Player, location) {
-            Some(js_array) => js_array,
-            None => return Vec::new(),
-        };
-
-        if orig_buf.len() < 4 {
-            return Vec::new();
-        }
-
-        let payload_len =
-            u32::from_le_bytes([orig_buf[0], orig_buf[1], orig_buf[2], orig_buf[3]]) as usize;
-        if payload_len + 4 > orig_buf.len() {
-            return Vec::new();
-        }
-        let payload = &orig_buf[4..4 + payload_len];
-
-        let mut cards = Vec::new();
-        let mut current_sequence: u8 = 0;
-        let mut cursor = 0usize;
-
-        while cursor < payload.len() {
-            if cursor + 2 <= payload.len() {
-                let marker = u16::from_le_bytes([payload[cursor], payload[cursor + 1]]);
-                if marker == 0 {
-                    cards.push(None);
-                    current_sequence += 1;
-                    cursor += 2;
-                    continue;
-                }
-            }
-
-            if cursor + 6 > payload.len() {
-                panic!("Malformed buffer payload: unexpected end of stream");
-            }
-
-            let mut card_code = 0u32;
-            let mut card_type = CardType::empty();
-            let mut position = None;
-            let mut attack = None;
-            let mut defense = None;
-            let mut level = None;
-            let mut rank = None;
-            let mut link_rating = None;
-
-            loop {
-                let length = u16::from_le_bytes([payload[cursor], payload[cursor + 1]]) as usize;
-                let record_end = cursor + 2 + length;
-
-                if length < 4 || record_end > payload.len() {
-                    panic!("Malformed buffer payload: unexpected end of stream");
-                }
-
-                let query_flag = u32::from_le_bytes([
-                    payload[cursor + 2],
-                    payload[cursor + 3],
-                    payload[cursor + 4],
-                    payload[cursor + 5],
-                ]);
-
-                match query_flag {
-                    QUERY_CODE if cursor + 10 <= payload.len() => {
-                        card_code = u32::from_le_bytes([
-                            payload[cursor + 6],
-                            payload[cursor + 7],
-                            payload[cursor + 8],
-                            payload[cursor + 9],
-                        ]);
-                    }
-                    QUERY_POSITION if cursor + 10 <= payload.len() => {
-                        let raw_position = u32::from_le_bytes([
-                            payload[cursor + 6],
-                            payload[cursor + 7],
-                            payload[cursor + 8],
-                            payload[cursor + 9],
-                        ]);
-                        position = BattlePosition::try_from(raw_position).ok();
-                    }
-                    QUERY_TYPE if cursor + 10 <= payload.len() => {
-                        let raw_card_type = u32::from_le_bytes([
-                            payload[cursor + 6],
-                            payload[cursor + 7],
-                            payload[cursor + 8],
-                            payload[cursor + 9],
-                        ]);
-
-                        card_type = CardType::from_bits_truncate(raw_card_type);
-                    }
-                    QUERY_LEVEL if cursor + 10 <= payload.len() => {
-                        level = Some(u32::from_le_bytes([
-                            payload[cursor + 6],
-                            payload[cursor + 7],
-                            payload[cursor + 8],
-                            payload[cursor + 9],
-                        ]));
-                    }
-                    QUERY_RANK if cursor + 10 <= payload.len() => {
-                        rank = Some(u32::from_le_bytes([
-                            payload[cursor + 6],
-                            payload[cursor + 7],
-                            payload[cursor + 8],
-                            payload[cursor + 9],
-                        ]));
-                    }
-                    QUERY_ATTACK if cursor + 10 <= payload.len() => {
-                        attack = Some(u32::from_le_bytes([
-                            payload[cursor + 6],
-                            payload[cursor + 7],
-                            payload[cursor + 8],
-                            payload[cursor + 9],
-                        ]));
-                    }
-                    QUERY_DEFENSE if cursor + 10 <= payload.len() => {
-                        defense = Some(u32::from_le_bytes([
-                            payload[cursor + 6],
-                            payload[cursor + 7],
-                            payload[cursor + 8],
-                            payload[cursor + 9],
-                        ]));
-                    }
-                    QUERY_LINK => {
-                        link_rating = Some(u32::from_le_bytes([
-                            payload[cursor + 6],
-                            payload[cursor + 7],
-                            payload[cursor + 8],
-                            payload[cursor + 9],
-                        ]));
-                    }
-                    QUERY_END => {
-                        cards.push(Some(CardData {
-                            card_code,
-                            controller: Player::Player,
-                            location,
-                            position,
-                            sequence: current_sequence,
-                            level,
-                            rank,
-                            attack,
-                            defense,
-                            card_type,
-                            link_rating,
-                            ..Default::default()
-                        }));
-                        current_sequence += 1;
-                        cursor = record_end;
-                        break;
-                    }
-                    _ => {}
-                }
-
-                cursor = record_end;
-
-                if cursor >= payload.len() {
-                    panic!("Malformed buffer payload: unexpected end of stream");
-                }
-
-                if cursor + 2 <= payload.len() {
-                    let next_marker = u16::from_le_bytes([payload[cursor], payload[cursor + 1]]);
-                    if next_marker == 0 {
-                        panic!("Malformed buffer payload: missing QUERY_END");
-                    }
-                }
-            }
-        }
-
-        cards
+        let data = self.query_location(u32::MAX, Player::Player, location);
+        decode_location(&data, Player::Player, location)
+            .unwrap_or_else(|error| panic!("Invalid {location} query: {error:#}"))
     }
 
     pub fn add_card(
