@@ -26,6 +26,7 @@ mod shuffle_deck;
 mod shuffle_hand;
 mod sort_card;
 mod summoning;
+mod swap;
 mod win;
 
 pub use announce_number::AnnounceNumberMessageData;
@@ -54,6 +55,7 @@ pub use shuffle_deck::ShuffleDeckMessageData;
 pub use shuffle_hand::ShuffleHandMessageData;
 pub use sort_card::SortCardMessageData;
 pub use summoning::SummoningMessageData;
+pub use swap::SwapMessageData;
 pub use win::WinMessageData;
 
 use anyhow::Context;
@@ -65,7 +67,7 @@ use ocgcore_ffi::constants::{
     MSG_SELECT_EFFECTYN, MSG_SELECT_IDLECMD, MSG_SELECT_OPTION, MSG_SELECT_PLACE,
     MSG_SELECT_POSITION, MSG_SELECT_TRIBUTE, MSG_SELECT_UNSELECT_CARD, MSG_SELECT_YESNO, MSG_SET,
     MSG_SHUFFLE_DECK, MSG_SHUFFLE_HAND, MSG_SORT_CARD, MSG_SPSUMMONED, MSG_SPSUMMONING,
-    MSG_SUMMONED, MSG_SUMMONING, MSG_WIN,
+    MSG_SUMMONED, MSG_SUMMONING, MSG_SWAP, MSG_WIN,
 };
 
 #[derive(Hash, Debug, Clone, PartialEq, Eq)]
@@ -81,6 +83,7 @@ pub enum CoreMessage {
     ShuffleDeck(ShuffleDeckMessageData),
     ShuffleHand(ShuffleHandMessageData),
     Move(MoveMessageData),
+    Swap(SwapMessageData),
     PositionChange(PositionChangeMessageData),
     SetCard(SetCardMessageData),
     Summoning(SummoningMessageData),
@@ -138,6 +141,7 @@ impl TryFrom<&[u8]> for CoreMessage {
                 bytes,
             )?)),
             MSG_MOVE => Ok(CoreMessage::Move(MoveMessageData::try_from(bytes)?)),
+            MSG_SWAP => Ok(CoreMessage::Swap(SwapMessageData::try_from(bytes)?)),
             MSG_POS_CHANGE => Ok(CoreMessage::PositionChange(
                 PositionChangeMessageData::try_from(bytes)?,
             )),
