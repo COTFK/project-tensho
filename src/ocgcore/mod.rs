@@ -3,7 +3,7 @@ pub mod constants;
 mod core;
 mod data;
 mod duel;
-mod location_info;
+pub(crate) mod location_info;
 pub mod messages;
 mod query;
 mod response;

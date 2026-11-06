@@ -6,7 +6,7 @@ mod card_locations;
 mod card_selected;
 mod chaining;
 pub mod confirm_cards;
-mod draw;
+pub(crate) mod draw;
 mod hint;
 mod idle;
 pub mod move_card;
