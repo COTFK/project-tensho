@@ -5,6 +5,7 @@ mod data;
 mod duel;
 mod location_info;
 pub mod messages;
+mod query;
 mod response;
 mod utility;
 

@@ -32,11 +32,14 @@ pub struct OCGCore {
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
     use super::*;
+    use crate::ocgcore::CardType;
     use crate::ocgcore::Response;
-    use crate::ocgcore::constants::{CardLocation, Phase, Player, WinReason, Winner};
+    use crate::ocgcore::constants::{
+        BattlePosition, CardLocation, Phase, Player, WinReason, Winner,
+    };
     use crate::ocgcore::location_info::CardLocationKind;
     use crate::ocgcore::messages::{CoreMessage, Hint, HintMessageData, WinMessageData};
-    use ocgcore_ffi::constants::{TYPE_MONSTER, TYPE_NORMAL};
+    use ocgcore_ffi::constants::{POS_FACEUP_ATTACK, TYPE_MONSTER, TYPE_NORMAL};
     use ocgcore_ffi::enums::OCG_DuelStatus;
     use ocgcore_ffi::types::{OCG_CardData, OCG_NewCardInfo};
 
@@ -97,6 +100,53 @@ mod tests {
             }
         }
         panic!("Duel did not reach an input prompt or end");
+    }
+
+    #[test]
+    fn queries_native_core_cards_and_empty_zones() {
+        let core = test_core();
+        let duel = core.create_duel(5).unwrap();
+        for (code, sequence) in [(101, 1), (102, 4)] {
+            duel.add_card(
+                Player::Player,
+                code,
+                Player::Player,
+                CardLocation::MonsterZone,
+                sequence,
+                POS_FACEUP_ATTACK,
+            );
+        }
+        duel.add_card(
+            Player::Player,
+            103,
+            Player::Player,
+            CardLocation::Hand,
+            0,
+            POS_FACEUP_ATTACK,
+        );
+
+        let monsters = duel.get_cards(CardLocation::MonsterZone);
+        assert_eq!(monsters.len(), 7);
+        for index in [0, 2, 3, 5, 6] {
+            assert_eq!(monsters[index], None);
+        }
+        for (index, code) in [(1, 101), (4, 102)] {
+            let card = monsters[index].unwrap();
+            assert_eq!(card.card_code, code);
+            assert_eq!(card.controller, Player::Player);
+            assert_eq!(card.location, CardLocation::MonsterZone);
+            assert_eq!(card.sequence, index as u8);
+            assert_eq!(card.position, Some(BattlePosition::FaceUpAttack));
+            assert_eq!(card.card_type, CardType::MONSTER | CardType::NORMAL);
+            assert_eq!(card.level, Some(4));
+            assert_eq!(card.attack, Some(1000));
+            assert_eq!(card.defense, Some(1000));
+        }
+        assert_eq!(duel.get_cards(CardLocation::Graveyard), vec![]);
+        let hand = duel.get_raw_hand();
+        assert_eq!(hand.len(), 1);
+        assert_eq!(hand[0].index, 0);
+        assert_eq!(hand[0].code, 103);
     }
 
     #[test]
