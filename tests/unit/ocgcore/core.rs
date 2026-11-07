@@ -219,6 +219,258 @@ fn tracks_native_deck_reversal_top_confirmations_and_draw() {
 }
 
 #[test]
+fn tracks_native_graveyard_deck_exchange_and_shuffle() {
+    fn card_data(code: u32) -> OCG_CardData {
+        let mut data = test_card_data(code);
+        if (300..=302).contains(&code) {
+            data.r#type = TYPE_MONSTER | ocgcore_ffi::constants::TYPE_FUSION;
+        }
+        data
+    }
+    let core = futures::executor::block_on(OCGCore::load(
+        card_data,
+        Box::new(|_| None),
+        super::super::callbacks::log_core_message,
+    ))
+    .unwrap();
+    let duel = core.create_duel(0).unwrap();
+    let mut layer = CardLayer::default();
+    for (player, location, codes) in [
+        (Player::Player, CardLocation::Deck, vec![1; 12]),
+        (Player::Opponent, CardLocation::Deck, vec![2; 12]),
+        (
+            Player::Player,
+            CardLocation::Graveyard,
+            vec![10, 300, 10, 301, 11],
+        ),
+        (Player::Player, CardLocation::ExtraDeck, vec![302]),
+    ] {
+        for (sequence, code) in codes.into_iter().enumerate() {
+            let card = OCG_NewCardInfo {
+                team: player as u8,
+                duelist: 0,
+                code,
+                con: player as u8,
+                loc: location as u32,
+                seq: 0,
+                pos: ocgcore_ffi::constants::POS_FACEDOWN,
+            };
+            unsafe { ocgcore_ffi::OCG_DuelNewCard(duel.handle(), &card) };
+            layer
+                .insert(
+                    CardAddress {
+                        controller: player,
+                        location,
+                        sequence: sequence as u32,
+                    },
+                    code,
+                )
+                .unwrap();
+        }
+    }
+    core.load_script(
+        &duel,
+        br#"
+        local effect = Effect.GlobalEffect()
+        effect:SetType(0x0802)
+        effect:SetCode(1113)
+        effect:SetOperation(function()
+            Duel.SwapDeckAndGrave(0)
+        end)
+        Duel.RegisterEffect(effect, 0)
+        "#,
+        "swap-grave-deck-test.lua",
+    )
+    .unwrap();
+    duel.start();
+    let mut exchanged = false;
+    let mut shuffled = false;
+    let mut moved_ids = Vec::new();
+    for _ in 0..1000 {
+        let status = duel.process();
+        for message in duel.parse_messages() {
+            match &message {
+                CoreMessage::SwapGraveDeck(data) => {
+                    assert_eq!(data.extra_insert_index, 1);
+                    assert_eq!(data.extra_cards, [0b0000_1010]);
+                    layer.apply(&message).unwrap();
+                    let at = |location, sequence| CardAddress {
+                        controller: Player::Player,
+                        location,
+                        sequence,
+                    };
+                    assert_eq!(
+                        (0..3)
+                            .map(|i| layer.card_at(at(CardLocation::Deck, i)).unwrap().code)
+                            .collect::<Vec<_>>(),
+                        [10, 10, 11]
+                    );
+                    assert_eq!(
+                        (0..3)
+                            .map(|i| layer.card_at(at(CardLocation::ExtraDeck, i)).unwrap().code)
+                            .collect::<Vec<_>>(),
+                        [302, 300, 301]
+                    );
+                    moved_ids = (0..3)
+                        .map(|i| layer.card_at(at(CardLocation::Deck, i)).unwrap().id)
+                        .collect();
+                    exchanged = true;
+                }
+                CoreMessage::ShuffleDeck(data) if exchanged && data.player == Player::Player => {
+                    layer.apply(&message).unwrap();
+                    for sequence in 0..3 {
+                        let card = layer
+                            .card_at(CardAddress {
+                                controller: Player::Player,
+                                location: CardLocation::Deck,
+                                sequence,
+                            })
+                            .unwrap();
+                        assert!(!moved_ids.contains(&card.id));
+                    }
+                    shuffled = true;
+                }
+                CoreMessage::Draw(_) | CoreMessage::Move(_) | CoreMessage::ShuffleDeck(_) => {
+                    layer.apply(&message).unwrap();
+                }
+                _ => {}
+            }
+        }
+        if matches!(status, OCG_DuelStatus::OCG_DUEL_STATUS_AWAITING) && exchanged {
+            assert!(shuffled);
+            for location in [
+                CardLocation::Deck,
+                CardLocation::Graveyard,
+                CardLocation::ExtraDeck,
+            ] {
+                let core_cards = duel.get_cards(location);
+                let tracked: Vec<_> = layer.cards().iter().filter(|card| matches!(
+                    card.placement,
+                    CardPlacement::Zone(address) if address.controller == Player::Player && address.location == location
+                )).collect();
+                assert_eq!(tracked.len(), core_cards.len());
+                if location != CardLocation::Deck {
+                    for (sequence, card) in core_cards.iter().enumerate() {
+                        assert_eq!(
+                            layer
+                                .card_at(CardAddress {
+                                    controller: Player::Player,
+                                    location,
+                                    sequence: sequence as u32
+                                })
+                                .unwrap()
+                                .code,
+                            card.unwrap().card_code
+                        );
+                    }
+                }
+            }
+            return;
+        }
+        assert_ne!(status, OCG_DuelStatus::OCG_DUEL_STATUS_END);
+    }
+    panic!("Exchange test did not reach an input prompt");
+}
+
+#[test]
+fn native_exchange_single_survivor_retains_its_old_sequence() {
+    fn card_data(code: u32) -> OCG_CardData {
+        let mut data = test_card_data(code);
+        if code == 300 {
+            data.r#type = TYPE_MONSTER | ocgcore_ffi::constants::TYPE_FUSION;
+        }
+        data
+    }
+    let core = futures::executor::block_on(OCGCore::load(
+        card_data,
+        Box::new(|_| None),
+        super::super::callbacks::log_core_message,
+    ))
+    .unwrap();
+    let duel = core.create_duel(0).unwrap();
+    for (team, location, codes) in [
+        (0, CardLocation::Deck, vec![1; 12]),
+        (1, CardLocation::Deck, vec![2; 12]),
+        (0, CardLocation::Graveyard, vec![300, 10]),
+    ] {
+        for code in codes {
+            let card = OCG_NewCardInfo {
+                team,
+                duelist: 0,
+                code,
+                con: team,
+                loc: location as u32,
+                seq: 0,
+                pos: ocgcore_ffi::constants::POS_FACEDOWN,
+            };
+            unsafe { ocgcore_ffi::OCG_DuelNewCard(duel.handle(), &card) };
+        }
+    }
+    core.load_script(
+        &duel,
+        br#"
+        local effect = Effect.GlobalEffect()
+        effect:SetType(0x0802)
+        effect:SetCode(1113)
+        effect:SetOperation(function()
+            Duel.SwapDeckAndGrave(0)
+            Duel.SendtoGrave(Duel.GetFieldCard(0, 1, 0), 0x40)
+        end)
+        Duel.RegisterEffect(effect, 0)
+    "#,
+        "exchange-single.lua",
+    )
+    .unwrap();
+    duel.start();
+    let mut found = false;
+    let mut rejected = false;
+    let mut layer = CardLayer::default();
+    for (sequence, code) in [300, 10].into_iter().enumerate() {
+        layer
+            .insert(
+                CardAddress {
+                    controller: Player::Player,
+                    location: CardLocation::Graveyard,
+                    sequence: sequence as u32,
+                },
+                code,
+            )
+            .unwrap();
+    }
+    for _ in 0..1000 {
+        let status = duel.process();
+        for message in duel.parse_messages() {
+            if matches!(message, CoreMessage::SwapGraveDeck(_)) {
+                let before = layer.clone();
+                assert!(
+                    layer
+                        .apply(&message)
+                        .unwrap_err()
+                        .to_string()
+                        .contains("stale sequence")
+                );
+                assert_eq!(layer, before);
+                rejected = true;
+            }
+            if let CoreMessage::Move(data) = message {
+                if data.card_code == 10
+                    && data.previous.location == CardLocationKind::Known(CardLocation::Deck)
+                {
+                    assert_eq!(data.previous.sequence, 1);
+                    found = true;
+                }
+            }
+        }
+        if matches!(status, OCG_DuelStatus::OCG_DUEL_STATUS_AWAITING) && found {
+            assert!(rejected);
+            return;
+        }
+        assert_ne!(status, OCG_DuelStatus::OCG_DUEL_STATUS_END);
+    }
+    panic!("Single survivor movement was not reported");
+}
+
+#[test]
 fn queries_native_core_cards_and_empty_zones() {
     let core = test_core();
     let duel = core.create_duel(5).unwrap();

@@ -136,7 +136,9 @@ treating every reveal as a new card.
 ### 11. Track graveyard-deck exchanges
 
 Implement the bulk exchange, including cards redirected to the extra deck and
-any ensuing shuffle boundary.
+any ensuing shuffle boundary. Reject exchanges where the core leaves a single
+deck card with a stale sequence after extra-deck redirection. Codes not supplied
+by the exchange remain unknown until queried during integration.
 
 - Depends on: 8, 10.
 - Test: ordering, counts, extra-deck redirection, and duplicate copies.
