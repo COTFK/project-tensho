@@ -4,12 +4,14 @@ use dioxus::prelude::*;
 use super::field::Field;
 use super::hand::{Hand, hand_transform};
 use super::layout_anchors::{CardAnchor, LayoutAnchors, LayoutRevision};
-use super::persistent_card_layer::{CardTarget, PersistentCardLayer};
-use crate::ocgcore::constants::{CardLocation, Player};
+use super::persistent_card_layer::{CardAppearance, CardTarget, PersistentCardLayer};
+use crate::ocgcore::CardType;
+use crate::ocgcore::constants::{BattlePosition, CardLocation, Player};
 use crate::ocgcore::{CardData, HandCard};
 use crate::state::{SelectedCard, UIState};
 use crate::ui::card_layer::{CardAddress, CardLayer, CardPlacement};
 use crate::ui::card_tracking::CardTracking;
+use crate::ui::components::CardImage;
 
 #[derive(Clone, PartialEq)]
 struct PreviewSnapshot {
@@ -18,6 +20,10 @@ struct PreviewSnapshot {
     spell_traps: Vec<Option<CardData>>,
     hand: Vec<HandCard>,
     selected: Option<SelectedCard>,
+    deck_count: usize,
+    extra: Vec<Option<CardData>>,
+    graveyard: Vec<Option<CardData>>,
+    banishment: Vec<Option<CardData>>,
 }
 
 fn snapshot(
@@ -35,6 +41,10 @@ fn snapshot(
             spell_traps,
             hand,
             selected,
+            deck_count: 0,
+            extra: Vec::new(),
+            graveyard: Vec::new(),
+            banishment: Vec::new(),
         }),
         _ => None,
     }
@@ -43,6 +53,7 @@ fn snapshot(
 struct PreviewGeometry {
     field: Vec<CardAnchor>,
     hand_base: CardAnchor,
+    piles: Vec<CardAnchor>,
 }
 
 fn hand_position(
@@ -90,8 +101,28 @@ async fn measure_field(anchors: &LayoutAnchors) -> anyhow::Result<PreviewGeometr
             );
         }
     }
+    let mut piles = Vec::new();
+    for location in [
+        CardLocation::Deck,
+        CardLocation::ExtraDeck,
+        CardLocation::Graveyard,
+        CardLocation::Banishment,
+    ] {
+        let address = CardAddress {
+            controller: Player::Player,
+            location,
+            sequence: 0,
+        };
+        piles.push(
+            anchors
+                .measure(address)
+                .await
+                .with_context(|| format!("Cannot measure {address:?}"))?,
+        );
+    }
     Ok(PreviewGeometry {
         field,
+        piles,
         hand_base: anchors
             .measure_hand_base()
             .await
@@ -132,14 +163,16 @@ fn targets(
                     );
                     targets.push(CardTarget {
                         id: card.id,
+                        address,
                         anchor: *geometry
                             .field
                             .get(offset + sequence)
                             .context("Field anchor missing")?,
                         data: *data,
                         rotation: 0.0,
-                        stack_order: 1,
+                        stack_order: 2,
                         interactive: true,
+                        appearance: CardAppearance::Interactive,
                     });
                 }
                 (None, None) => {}
@@ -195,6 +228,7 @@ fn targets(
         let (anchor, rotation, stack) = hand_position(geometry.hand_base, index, count, selected);
         targets.push(CardTarget {
             id: tracked.id,
+            address,
             anchor,
             data: CardData {
                 card_code: card.code,
@@ -206,6 +240,147 @@ fn targets(
             rotation,
             stack_order: 50 + i32::try_from(stack)?,
             interactive: true,
+            appearance: CardAppearance::Interactive,
+        });
+    }
+    for (pile_index, (location, count, queried)) in [
+        (CardLocation::Deck, snapshot.deck_count, None),
+        (
+            CardLocation::ExtraDeck,
+            snapshot.extra.len(),
+            Some(&snapshot.extra),
+        ),
+        (
+            CardLocation::Graveyard,
+            snapshot.graveyard.len(),
+            Some(&snapshot.graveyard),
+        ),
+        (
+            CardLocation::Banishment,
+            snapshot.banishment.len(),
+            Some(&snapshot.banishment),
+        ),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let tracked_count = snapshot.cards.cards().iter().filter(|card| matches!(card.placement,
+            CardPlacement::Zone(address) if address.controller == Player::Player && address.location == location)).count();
+        ensure!(
+            tracked_count == count,
+            "Tracked {location} count differs from the pile"
+        );
+        let image = match location {
+            CardLocation::Deck => CardImage::CardBack,
+            CardLocation::ExtraDeck => CardImage::ExtraDeckBack,
+            CardLocation::Graveyard | CardLocation::Banishment if count > 0 => {
+                let top = queried
+                    .context("Pile query missing")?
+                    .last()
+                    .and_then(|card| *card)
+                    .context("Pile top missing")?;
+                if location == CardLocation::Banishment
+                    && !matches!(
+                        top.position,
+                        Some(BattlePosition::FaceUpAttack | BattlePosition::FaceUpDefense)
+                    )
+                {
+                    if top.card_type.intersects(
+                        CardType::FUSION | CardType::SYNCHRO | CardType::XYZ | CardType::LINK,
+                    ) {
+                        CardImage::ExtraDeckBack
+                    } else {
+                        CardImage::CardBack
+                    }
+                } else if top.card_code == 0 {
+                    CardImage::CardBack
+                } else {
+                    CardImage::Thumbnail(top)
+                }
+            }
+            _ => continue,
+        };
+        for sequence in 0..count {
+            let address = CardAddress {
+                controller: Player::Player,
+                location,
+                sequence: u32::try_from(sequence)?,
+            };
+            let card = snapshot
+                .cards
+                .card_at(address)
+                .with_context(|| format!("Untracked pile card at {address:?}"))?;
+            if let Some(queried) = queried {
+                let data = queried[sequence].context("Empty pile query slot")?;
+                ensure!(
+                    data.controller == address.controller
+                        && data.location == location
+                        && u32::from(data.sequence) == address.sequence
+                        && (card.code == 0 || data.card_code == 0 || card.code == data.card_code),
+                    "Tracked card and pile query disagree at {address:?}"
+                );
+            }
+            targets.push(CardTarget {
+                id: card.id,
+                address,
+                anchor: *geometry
+                    .piles
+                    .get(pile_index)
+                    .context("Pile anchor missing")?,
+                data: CardData {
+                    card_code: card.code,
+                    controller: Player::Player,
+                    location,
+                    sequence: u8::try_from(sequence)?,
+                    ..Default::default()
+                },
+                rotation: if location == CardLocation::Banishment {
+                    -90.0
+                } else {
+                    0.0
+                },
+                stack_order: 1,
+                interactive: false,
+                appearance: CardAppearance::Pile(image),
+            });
+        }
+    }
+    for card in snapshot.cards.cards() {
+        let CardPlacement::Overlay { host, sequence } = card.placement else {
+            continue;
+        };
+        let host = snapshot
+            .cards
+            .card_by_id(host)
+            .context("Material host missing")?;
+        let CardPlacement::Zone(address) = host.placement else {
+            anyhow::bail!("Material host is not in a zone")
+        };
+        if address.controller != Player::Player {
+            continue;
+        }
+        let host_target = targets
+            .iter()
+            .find(|target| target.id == host.id)
+            .context("Material host has no visible target")?;
+        let mut anchor = host_target.anchor;
+        anchor.center_x += anchor.width * (0.12 + f64::from(sequence) * 0.06);
+        anchor.center_y += anchor.height * 0.12;
+        targets.push(CardTarget {
+            id: card.id,
+            address,
+            anchor,
+            data: CardData {
+                card_code: card.code,
+                controller: address.controller,
+                location: address.location,
+                sequence: u8::try_from(address.sequence)?,
+                ..Default::default()
+            },
+            rotation: 0.0,
+            stack_order: 1,
+            interactive: false,
+            appearance: CardAppearance::Material,
         });
     }
     Ok(targets)
@@ -234,7 +409,7 @@ pub(super) fn FieldPreview(enabled: Signal<bool>) -> Element {
             }
         }
     });
-    let current = snapshot(
+    let mut current = snapshot(
         enabled(),
         tracking(),
         (state.monsters)(),
@@ -242,6 +417,12 @@ pub(super) fn FieldPreview(enabled: Signal<bool>) -> Element {
         (state.hand_contents)(),
         (state.selected_card)(),
     );
+    if let Some(current) = &mut current {
+        current.deck_count = (state.main_deck_length)() as usize;
+        current.extra = (state.extra_deck)();
+        current.graveyard = (state.graveyard)();
+        current.banishment = (state.banishment)();
+    }
     let current_revision = (revision.0)();
     let result = resource.read();
     let geometry =

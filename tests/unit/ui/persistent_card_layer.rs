@@ -19,6 +19,7 @@ fn fixture(
     card.position = position;
     let target = CardTarget {
         id,
+        address,
         anchor: CardAnchor {
             center_x: 120.0,
             center_y: 100.0,
@@ -35,6 +36,7 @@ fn fixture(
         rotation: 0.0,
         stack_order: 2,
         interactive: true,
+        appearance: CardAppearance::Interactive,
     };
     (card, target)
 }
@@ -140,7 +142,7 @@ fn movement_and_property_updates_keep_the_same_root_node() {
     );
     assert!(changes.edits.iter().any(|edit| matches!(edit,
         Mutation::SetAttribute { name: "style", id, value: AttributeValue::Text(value), .. }
-            if *id == root && value.contains("--card-z: 8;") && value.contains("--card-x: 170.5px;")
+            if *id == root && value.contains("--card-z: 8;") && value.contains("--card-x: calc(170.5px + 0vw);")
     )), "{:?}", changes.edits);
 
     card.code = 54321;
@@ -166,6 +168,7 @@ fn movement_and_property_updates_keep_the_same_root_node() {
     card.placement = CardPlacement::Zone(address(CardLocation::MonsterZone));
     card.position = Some(CardPositionFlags::FACE_DOWN_DEFENSE);
     target.data.location = CardLocation::MonsterZone;
+    target.address.location = CardLocation::MonsterZone;
     target.interactive = false;
     TEST_STATE.with(|slot| slot.borrow().unwrap().set((vec![card], vec![target])));
     let moved = dom.render_immediate_to_vec();
@@ -214,6 +217,7 @@ fn movement_and_property_updates_keep_the_same_root_node() {
         ..address(CardLocation::MonsterZone)
     });
     target.data.sequence = 1;
+    target.address.sequence = 1;
     target.anchor.center_x += 100.0;
     TEST_STATE.with(|slot| slot.borrow().unwrap().set((vec![card], vec![target])));
     let moved_again = dom.render_immediate_to_vec();
@@ -223,7 +227,10 @@ fn movement_and_property_updates_keep_the_same_root_node() {
 
     card.placement = CardPlacement::Zone(address(CardLocation::Deck));
     target.data.location = CardLocation::Deck;
+    target.address.location = CardLocation::Deck;
+    target.address.sequence = 0;
     target.data.sequence = 0;
+    target.appearance = CardAppearance::Pile(CardImage::CardBack);
     TEST_STATE.with(|slot| slot.borrow().unwrap().set((vec![card], vec![target])));
     let hidden = dom.render_immediate_to_vec();
     assert!(
@@ -234,13 +241,58 @@ fn movement_and_property_updates_keep_the_same_root_node() {
         hidden.edits
     );
     assert!(
-        hidden.edits.iter().any(|edit| matches!(edit,
-            Mutation::SetAttribute { name: "class", value: AttributeValue::Text(value), id, .. }
-                if *id == root && value.contains("hidden")
+        !hidden.edits.iter().any(|edit| matches!(edit,
+            Mutation::Remove { id } | Mutation::ReplaceWith { id, .. } if *id == image_id
         )),
         "{:?}",
         hidden.edits
     );
+    assert!(
+        !hidden.edits.iter().any(|edit| matches!(edit,
+            Mutation::SetAttribute { name: "src", value: AttributeValue::Text(value), .. }
+                if value.contains("00054321")
+        )),
+        "{:?}",
+        hidden.edits
+    );
+    let top = CardData {
+        card_code: 67890,
+        ..Default::default()
+    };
+    target.appearance = CardAppearance::Pile(CardImage::Thumbnail(top));
+    TEST_STATE.with(|slot| slot.borrow().unwrap().set((vec![card], vec![target])));
+    let thumbnail = dom.render_immediate_to_vec();
+    assert!(
+        thumbnail.edits.iter().any(|edit| matches!(edit,
+            Mutation::SetAttribute { name: "src", value: AttributeValue::Text(value), id, .. }
+                if *id == image_id && *value == crate::utility::card_thumbnail_url(top.card_code)
+        )),
+        "{:?}",
+        thumbnail.edits
+    );
+    assert!(!thumbnail.edits.iter().any(|edit| matches!(edit,
+        Mutation::Remove { id } | Mutation::ReplaceWith { id, .. } if *id == image_id || *id == root
+    )), "{:?}", thumbnail.edits);
+    card.placement = CardPlacement::Overlay {
+        host: card.id,
+        sequence: 0,
+    };
+    target.address.location = CardLocation::MonsterZone;
+    target.data.location = CardLocation::MonsterZone;
+    target.appearance = CardAppearance::Material;
+    TEST_STATE.with(|slot| slot.borrow().unwrap().set((vec![card], vec![target])));
+    let material = dom.render_immediate_to_vec();
+    assert!(
+        material.edits.iter().any(|edit| matches!(edit,
+            Mutation::SetAttribute { name: "src", value: AttributeValue::Text(value), id, .. }
+                if *id == image_id && value.contains("00054321")
+        )),
+        "{:?}",
+        material.edits
+    );
+    assert!(!material.edits.iter().any(|edit| matches!(edit,
+            Mutation::Remove { id } | Mutation::ReplaceWith { id, .. } if *id == image_id || *id == root
+        )), "{:?}", material.edits);
     TEST_STATE.with(|slot| *slot.borrow_mut() = None);
 }
 
