@@ -9,14 +9,12 @@ use crate::ui::components::ActionButton;
 use crate::ui::components::Card;
 use crate::ui::components::CardActionMenu;
 use crate::ui::components::CardImage;
-use crate::ui::components::CardStack;
 use crate::ui::components::OptionButton;
 use crate::ui::components::PickerModal;
 use crate::ui::components::svg::SummonIcon;
-use crate::utility::EXTRA_BACK;
 
 #[component]
-pub fn ExtraDeck(#[props(default)] layered: bool) -> Element {
+pub fn ExtraDeck() -> Element {
     let mut state = use_context::<UIState>();
     let available_special_summons = (state.special_summons)();
 
@@ -43,12 +41,6 @@ pub fn ExtraDeck(#[props(default)] layered: bool) -> Element {
                     div {
                         class: "absolute inset-[1px] my-0.5 ml-0.5 mb-1 md:inset-[2px] md:my-1 md:mb-2 md:ml-1 rounded-[2px] blur-[1px] mix-blend-screen pointer-events-none",
                         class: if has_summons && !suppress_actions { "bg-yellow-400" },
-                    }
-                    if !layered {
-                        CardStack {
-                            length: state.extra_deck.len(),
-                            image_url: EXTRA_BACK,
-                        }
                     }
                 }
             }

@@ -83,25 +83,6 @@ pub fn CardActionMenu(class: String, trigger: bool, children: Element) -> Elemen
     )
 }
 
-#[component]
-pub fn CardStack(length: usize, image_url: String) -> Element {
-    rsx!(
-        for index in 1..(length + 1) {
-            div {
-                class: "absolute inset-[clamp(2px,0.6vw,8px)]",
-                img {
-                    class: "w-full h-full object-contain",
-                    style: "z-index: 10; transform: translate({index as f32 * 0.01}vw, -{index as f32 * 0.01}vh);",
-                    image_rendering: "smooth",
-                    aspect_ratio: "59/86",
-                    src: "{image_url}",
-                }
-
-            }
-        }
-    )
-}
-
 #[cfg(test)]
 #[path = "../../../tests/unit/ui/card_component.rs"]
 mod tests;

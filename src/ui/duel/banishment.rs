@@ -1,9 +1,7 @@
 use dioxus::prelude::*;
 
 use super::constants::ZONE_SIZE;
-use crate::ocgcore::CardType;
 use crate::ocgcore::Response;
-use crate::ocgcore::constants::BattlePosition;
 use crate::ocgcore::constants::CardLocation;
 use crate::state::UIState;
 use crate::state::send_response;
@@ -11,16 +9,12 @@ use crate::ui::components::ActionButton;
 use crate::ui::components::Card;
 use crate::ui::components::CardActionMenu;
 use crate::ui::components::CardImage;
-use crate::ui::components::CardStack;
 use crate::ui::components::OptionButton;
 use crate::ui::components::PickerModal;
 use crate::ui::components::svg::LightningTrioIcon;
-use crate::utility::CARD_BACK;
-use crate::utility::EXTRA_BACK;
-use crate::utility::card_thumbnail_url;
 
 #[component]
-pub fn Banishment(#[props(default)] layered: bool) -> Element {
+pub fn Banishment() -> Element {
     let mut state = use_context::<UIState>();
 
     let has_cards = state.banishment.len() > 0;
@@ -31,24 +25,6 @@ pub fn Banishment(#[props(default)] layered: bool) -> Element {
 
     // Disable if effect selection modal is active
     let suppress_actions = !state.effects_to_select_from.is_empty();
-
-    let image_url = if has_cards {
-        let first_card = (state.banishment)().last().unwrap().unwrap();
-        if first_card.position == Some(BattlePosition::FaceDown) {
-            if first_card
-                .card_type
-                .intersects(CardType::FUSION | CardType::SYNCHRO | CardType::XYZ | CardType::LINK)
-            {
-                EXTRA_BACK.to_string()
-            } else {
-                CARD_BACK.to_string()
-            }
-        } else {
-            card_thumbnail_url((state.banishment)().last().unwrap().unwrap().card_code)
-        }
-    } else {
-        String::new()
-    };
 
     rsx!(
         div {
@@ -65,12 +41,6 @@ pub fn Banishment(#[props(default)] layered: bool) -> Element {
                     div {
                         class: "absolute inset-[2px] md:inset-[4px] my-0.5 md:my-1 rounded-[2px] blur-[1px] mix-blend-screen pointer-events-none",
                         class: if has_trigger_effects && !suppress_actions { "bg-yellow-400" },
-                    }
-                    if !layered {
-                        CardStack {
-                            length: state.banishment.len(),
-                            image_url,
-                        }
                     }
                 }
             }

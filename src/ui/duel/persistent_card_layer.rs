@@ -184,7 +184,6 @@ fn LayerCard(card: TrackedCard, target: Option<CardTarget>) -> Element {
                         InteractiveCard {
                             card: target.data,
                             address: target.address,
-                            layered: true,
                             force_facedown: facedown,
                             passive: target.appearance != CardAppearance::Interactive,
                             animated: animating,

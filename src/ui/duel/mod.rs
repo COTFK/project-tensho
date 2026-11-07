@@ -4,10 +4,10 @@ mod card_stats;
 mod constants;
 mod extra_deck;
 mod field;
-mod field_preview;
 mod graveyard;
 mod hand;
 mod layout_anchors;
+mod layered_field;
 mod main_deck;
 mod modal;
 mod persistent_card_layer;
@@ -28,7 +28,7 @@ use crate::ui::card_tracking::CardTracking;
 use crate::ui::components::UIButton;
 use crate::ui::components::svg::FullscreenIcon;
 use crate::ui::components::svg::ResetIcon;
-use field_preview::FieldPreview;
+use layered_field::LayeredField;
 use modal::ModalContainer;
 
 #[component]
@@ -99,17 +99,11 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>) -> Element {
     let tracking = use_context::<Signal<Option<CardTracking>>>();
     use_context_provider(layout_anchors::LayoutAnchors::default);
     let revision = use_context_provider(|| layout_anchors::LayoutRevision(Signal::new(0)));
-    let mut layered_preview = use_signal(|| true);
     let startup_ready = use_signal(|| false);
-    let mut playback = use_context_provider(|| {
-        Signal::new(CardPlayback {
-            enabled: *layered_preview.peek(),
-            ..Default::default()
-        })
-    });
+    let mut playback = use_context_provider(|| Signal::new(CardPlayback::default()));
 
     use_effect(move || {
-        if playback().enabled && playback.peek().failure.is_none() {
+        if playback().failure.is_none() {
             if let Some(CardTracking::Failed(error)) = &*tracking.read() {
                 playback.write().fail(error.clone());
             }
@@ -161,17 +155,6 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>) -> Element {
                 },
                 ResetIcon {}
             }
-            button {
-                class: "fixed top-3 left-16 z-50 rounded-md border border-white/20 bg-black/70 px-3 py-2 text-xs font-semibold text-white cursor-pointer hover:bg-black/85",
-                "aria-pressed": "{layered_preview}",
-                disabled: playback().failure.is_some() || playback().restarting,
-                onclick: move |event| {
-                    event.stop_propagation();
-                    layered_preview.toggle();
-                    playback.write().set_enabled(layered_preview());
-                },
-                if layered_preview() { "Layered field: on" } else { "Layered field: off" }
-            }
             UIButton {
                 label: "Toggle fullscreen",
                 class: "fixed top-3 right-3 z-50 w-max h-max p-2",
@@ -192,7 +175,7 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>) -> Element {
             }
             InteractionGate {
                 active: playback().blocked(),
-                FieldPreview { enabled: layered_preview, startup_ready }
+                LayeredField { startup_ready }
             }
             MotionPreference {}
             if let Some(error) = &playback().failure {

@@ -68,14 +68,10 @@ pub(crate) fn select_card(address: CardAddress) {
                 return;
             }
         },
-        Some(CardTracking::Failed(_))
-            if try_consume_context::<Signal<CardPlayback>>()
-                .is_some_and(|playback| playback.peek().enabled) =>
-        {
+        Some(CardTracking::Failed(_)) => {
             tracing::warn!("Ignoring selection after card tracking failed");
             return;
         }
-        Some(CardTracking::Failed(_)) => None,
         None => {
             tracing::error!("Cannot select a card without an active tracker");
             return;
@@ -161,12 +157,8 @@ pub fn run_game_loop() {
     let state = consume_context::<UIState>();
     let playback = try_consume_context::<Signal<CardPlayback>>();
     let tracking = consume_context::<Signal<Option<CardTracking>>>();
-    if let Some(mut playback) = playback {
-        if playback.peek().enabled && playback.peek().failure.is_none() {
-            if let Some(CardTracking::Failed(error)) = &*tracking.peek() {
-                playback.write().fail(error.clone());
-            }
-        }
+    if stop_failed_tracking(tracking, playback) {
+        return;
     }
     if playback.is_some_and(|playback| {
         let playback = playback();
@@ -190,7 +182,7 @@ pub fn run_game_loop() {
         || {
             let before = if playback.is_some_and(|playback| {
                 let playback = playback.peek();
-                playback.enabled && !playback.reduced_motion
+                !playback.reduced_motion
             }) {
                 match &*tracking.peek() {
                     Some(CardTracking::Active(layer)) => Some(layer.clone()),
@@ -401,9 +393,8 @@ pub fn send_response(response: Response) {
         tracing::warn!("Ignoring response during card animation");
         return;
     }
-    if try_consume_context::<Signal<CardPlayback>>().is_some_and(|playback| playback.peek().enabled)
-        && try_consume_context::<Signal<Option<CardTracking>>>()
-            .is_some_and(|tracking| matches!(&*tracking.peek(), Some(CardTracking::Failed(_))))
+    if try_consume_context::<Signal<Option<CardTracking>>>()
+        .is_some_and(|tracking| matches!(&*tracking.peek(), Some(CardTracking::Failed(_))))
     {
         tracing::warn!("Ignoring response after card tracking failed");
         return;
@@ -647,19 +638,15 @@ fn stop_failed_tracking(
     tracking: Signal<Option<CardTracking>>,
     playback: Option<Signal<CardPlayback>>,
 ) -> bool {
-    let Some(mut playback) = playback else {
-        return false;
-    };
-    if !playback.peek().enabled {
-        return false;
-    }
     let error = match &*tracking.peek() {
         Some(CardTracking::Failed(error)) => Some(error.clone()),
         _ => None,
     };
     if let Some(error) = error {
-        if playback.peek().failure.is_none() {
-            playback.write().fail(error);
+        if let Some(mut playback) = playback {
+            if playback.peek().failure.is_none() {
+                playback.write().fail(error);
+            }
         }
         true
     } else {

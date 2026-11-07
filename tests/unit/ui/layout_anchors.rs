@@ -51,10 +51,7 @@ fn address_mapping_covers_zones_hand_and_piles() {
         Anchor::Zone(CardLocation::SpellTrapZone, 5)
     );
     assert!(Anchor::try_from(address(CardLocation::MonsterZone, 7)).is_err());
-    assert_eq!(
-        Anchor::try_from(address(CardLocation::Hand, 257)).unwrap(),
-        Anchor::Hand(257)
-    );
+    assert!(Anchor::try_from(address(CardLocation::Hand, 257)).is_err());
     for location in [
         CardLocation::Deck,
         CardLocation::ExtraDeck,
@@ -72,31 +69,26 @@ fn address_mapping_covers_zones_hand_and_piles() {
 }
 
 #[test]
-fn measurements_use_current_viewport_and_center_unrotated_card() {
+fn hand_base_measurements_use_current_viewport() {
     let anchors = LayoutAnchors::default();
-    let hand = Anchor::Hand(0);
-    let center = Rc::new(RefCell::new(rect(70.0, 100.0, 86.0, 59.0)));
-    let size = Rc::new(RefCell::new(rect(0.0, 0.0, 59.0, 86.0)));
-    mount(&anchors, (hand, AnchorPart::HandCenter), center.clone());
-    mount(&anchors, (hand, AnchorPart::HandSize), size.clone());
-    let measure =
-        || futures::executor::block_on(anchors.measure(address(CardLocation::Hand, 0))).unwrap();
+    let base = Rc::new(RefCell::new(rect(70.0, 100.0, 59.0, 86.0)));
+    mount(&anchors, (Anchor::HandBase, AnchorPart::Card), base.clone());
+    let measure = || futures::executor::block_on(anchors.measure_hand_base()).unwrap();
     assert_eq!(
         measure(),
         CardAnchor {
-            center_x: 113.0,
-            center_y: 129.5,
+            center_x: 99.5,
+            center_y: 143.0,
             width: 59.0,
             height: 86.0
         }
     );
-    *center.borrow_mut() = rect(140.0, 200.0, 172.0, 118.0);
-    *size.borrow_mut() = rect(0.0, 0.0, 118.0, 172.0);
+    *base.borrow_mut() = rect(140.0, 200.0, 118.0, 172.0);
     assert_eq!(
         measure(),
         CardAnchor {
-            center_x: 226.0,
-            center_y: 259.0,
+            center_x: 199.0,
+            center_y: 286.0,
             width: 118.0,
             height: 172.0
         }
@@ -136,7 +128,7 @@ fn field_and_pile_measurements_use_card_rect_and_ignore_pile_sequence() {
 #[test]
 fn replacement_and_unmount_do_not_leave_stale_anchors() {
     let anchors = LayoutAnchors::default();
-    let key = (Anchor::Hand(0), AnchorPart::HandSize);
+    let key = (Anchor::HandBase, AnchorPart::Card);
     let old = mount(
         &anchors,
         key,
@@ -151,7 +143,7 @@ fn replacement_and_unmount_do_not_leave_stale_anchors() {
     assert!(anchors.0.borrow().contains_key(&key));
     anchors.remove(key, &new);
     assert!(!anchors.0.borrow().contains_key(&key));
-    assert!(futures::executor::block_on(anchors.measure(address(CardLocation::Hand, 0))).is_err());
+    assert!(futures::executor::block_on(anchors.measure_hand_base()).is_err());
 }
 
 #[test]
