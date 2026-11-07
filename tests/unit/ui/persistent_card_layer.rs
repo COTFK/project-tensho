@@ -121,6 +121,124 @@ fn field_app() -> Element {
     rsx! { PersistentCardLayer { cards: vec![card], targets: vec![target] } }
 }
 
+fn two_field_cards_app() -> Element {
+    let mut state = use_context_provider(UIState::default);
+    let playback = use_context_provider(|| Signal::new(CardAnimationState::default()));
+    let (first, first_target) = fixture(
+        CardLocation::MonsterZone,
+        Some(CardPositionFlags::FACE_UP_ATTACK),
+    );
+    let mut layer = CardLayer::default();
+    layer.insert(first_target.address, first.code).unwrap();
+    let second_address = CardAddress {
+        sequence: 1,
+        ..first_target.address
+    };
+    let second_id = layer.insert(second_address, 12346).unwrap();
+    let mut second = *layer.card_by_id(second_id).unwrap();
+    second.position = Some(CardPositionFlags::FACE_UP_ATTACK);
+    let mut second_target = first_target;
+    second_target.id = second_id;
+    second_target.address = second_address;
+    second_target.data.card_code = second.code;
+    second_target.data.sequence = 1;
+    state.cards.set(Some(layer));
+    TEST_PLAYBACK.with(|slot| *slot.borrow_mut() = Some(playback));
+    rsx! {
+        PersistentCardLayer {
+            cards: vec![first, second],
+            targets: vec![first_target, second_target],
+        }
+    }
+}
+
+fn stats_root(edits: &[Mutation], card: CardId) -> ElementId {
+    edits
+        .iter()
+        .find_map(|mutation| match mutation {
+            Mutation::SetAttribute {
+                name: "data-card-stats",
+                value: AttributeValue::Text(value),
+                id,
+                ..
+            } if value == &card.to_string() => Some(*id),
+            _ => None,
+        })
+        .expect("field card must have a stats overlay")
+}
+
+#[test]
+fn animation_hides_only_moving_field_card_stats_and_restores_them() {
+    let mut layer = CardLayer::default();
+    let first = layer
+        .insert(address(CardLocation::MonsterZone), 12345)
+        .unwrap();
+    let second = layer
+        .insert(
+            CardAddress {
+                sequence: 1,
+                ..address(CardLocation::MonsterZone)
+            },
+            12346,
+        )
+        .unwrap();
+    let hand = layer.insert(address(CardLocation::Hand), 12347).unwrap();
+    let mut dom = VirtualDom::new(two_field_cards_app);
+    let initial = dom.rebuild_to_vec();
+    let first_stats = stats_root(&initial.edits, first);
+    let second_stats = stats_root(&initial.edits, second);
+
+    TEST_PLAYBACK.with(|slot| {
+        slot.borrow()
+            .unwrap()
+            .write()
+            .begin_gather(vec![hand], layer.clone());
+    });
+    let hand_shuffle = dom.render_immediate_to_vec();
+    assert!(
+        !hand_shuffle.edits.iter().any(|edit| matches!(edit,
+            Mutation::Remove { id } | Mutation::ReplaceWith { id, .. }
+                if *id == first_stats || *id == second_stats
+        )),
+        "{:?}",
+        hand_shuffle.edits
+    );
+
+    TEST_PLAYBACK.with(|slot| {
+        slot.borrow().unwrap().write().begin(vec![first], layer);
+    });
+    let moving = dom.render_immediate_to_vec();
+    assert!(
+        moving.edits.iter().any(|edit| matches!(edit,
+            Mutation::Remove { id } | Mutation::ReplaceWith { id, .. } if *id == first_stats
+        )),
+        "{:?}",
+        moving.edits
+    );
+    assert!(
+        !moving.edits.iter().any(|edit| matches!(edit,
+            Mutation::Remove { id } | Mutation::ReplaceWith { id, .. } if *id == second_stats
+        )),
+        "{:?}",
+        moving.edits
+    );
+
+    TEST_PLAYBACK.with(|slot| {
+        let mut playback = slot.borrow().unwrap();
+        let generation = playback.peek().generation;
+        playback.write().finish(generation);
+    });
+    let finished = dom.render_immediate_to_vec();
+    stats_root(&finished.edits, first);
+    assert!(
+        !finished.edits.iter().any(|edit| matches!(edit,
+            Mutation::Remove { id } | Mutation::ReplaceWith { id, .. } if *id == second_stats
+        )),
+        "{:?}",
+        finished.edits
+    );
+}
+
 #[test]
 fn selected_field_card_is_above_other_cards_and_respects_movement_layering() {
     let (card, _) = fixture(

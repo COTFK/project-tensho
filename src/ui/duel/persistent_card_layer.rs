@@ -178,8 +178,9 @@ fn LayerCard(card: TrackedCard, target: Option<CardTarget>) -> Element {
                             image: card_image(card, Some(target)),
                         }
                     }
-                    if !animating && target.appearance == CardAppearance::Interactive && matches!(target.address.location, CardLocation::MonsterZone | CardLocation::SpellTrapZone) {
+                    if !moving && target.appearance == CardAppearance::Interactive && matches!(target.address.location, CardLocation::MonsterZone | CardLocation::SpellTrapZone) {
                         div {
+                            "data-card-stats": "{card.id}",
                             class: "absolute top-0 left-1/2 -translate-x-1/2 h-full w-[var(--card-height)] pointer-events-none",
                             CardStats { card: target.data }
                         }
