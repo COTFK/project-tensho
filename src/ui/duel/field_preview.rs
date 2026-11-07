@@ -2,11 +2,12 @@ use anyhow::{Context, ensure};
 use dioxus::prelude::*;
 
 use super::field::Field;
+use super::hand::{Hand, hand_transform};
 use super::layout_anchors::{CardAnchor, LayoutAnchors, LayoutRevision};
 use super::persistent_card_layer::{CardTarget, PersistentCardLayer};
-use crate::ocgcore::CardData;
 use crate::ocgcore::constants::{CardLocation, Player};
-use crate::state::UIState;
+use crate::ocgcore::{CardData, HandCard};
+use crate::state::{SelectedCard, UIState};
 use crate::ui::card_layer::{CardAddress, CardLayer, CardPlacement};
 use crate::ui::card_tracking::CardTracking;
 
@@ -15,6 +16,8 @@ struct PreviewSnapshot {
     cards: CardLayer,
     monsters: Vec<Option<CardData>>,
     spell_traps: Vec<Option<CardData>>,
+    hand: Vec<HandCard>,
+    selected: Option<SelectedCard>,
 }
 
 fn snapshot(
@@ -22,19 +25,53 @@ fn snapshot(
     tracking: Option<CardTracking>,
     monsters: Vec<Option<CardData>>,
     spell_traps: Vec<Option<CardData>>,
+    hand: Vec<HandCard>,
+    selected: Option<SelectedCard>,
 ) -> Option<PreviewSnapshot> {
     match (enabled, tracking) {
         (true, Some(CardTracking::Active(cards))) => Some(PreviewSnapshot {
             cards,
             monsters,
             spell_traps,
+            hand,
+            selected,
         }),
         _ => None,
     }
 }
 
-async fn measure_field(anchors: &LayoutAnchors) -> anyhow::Result<Vec<CardAnchor>> {
-    let mut result = Vec::with_capacity(13);
+struct PreviewGeometry {
+    field: Vec<CardAnchor>,
+    hand_base: CardAnchor,
+}
+
+fn hand_position(
+    base: CardAnchor,
+    index: usize,
+    count: usize,
+    selected: bool,
+) -> (CardAnchor, f64, usize) {
+    let (distance, default_y) = hand_transform(index, count);
+    let rotation = if selected { 0 } else { distance };
+    let translate_y = if selected { -25 } else { default_y };
+    let angle = f64::from(rotation).to_radians();
+    let shift = base.height * f64::from(translate_y) / 100.0;
+    // The hand slots are 10vw wide with -1.1vw margins on both sides.
+    let spacing = base.width * 0.78;
+    (
+        CardAnchor {
+            center_x: base.center_x + (index as f64 - (count as f64 - 1.0) / 2.0) * spacing
+                - angle.sin() * shift,
+            center_y: base.center_y + angle.cos() * shift,
+            ..base
+        },
+        f64::from(rotation),
+        if selected { count } else { index },
+    )
+}
+
+async fn measure_field(anchors: &LayoutAnchors) -> anyhow::Result<PreviewGeometry> {
+    let mut field = Vec::with_capacity(13);
     for (location, count) in [
         (CardLocation::MonsterZone, 7),
         (CardLocation::SpellTrapZone, 6),
@@ -45,7 +82,7 @@ async fn measure_field(anchors: &LayoutAnchors) -> anyhow::Result<Vec<CardAnchor
                 location,
                 sequence,
             };
-            result.push(
+            field.push(
                 anchors
                     .measure(address)
                     .await
@@ -53,10 +90,19 @@ async fn measure_field(anchors: &LayoutAnchors) -> anyhow::Result<Vec<CardAnchor
             );
         }
     }
-    Ok(result)
+    Ok(PreviewGeometry {
+        field,
+        hand_base: anchors
+            .measure_hand_base()
+            .await
+            .context("Cannot measure hand")?,
+    })
 }
 
-fn targets(snapshot: &PreviewSnapshot, anchors: &[CardAnchor]) -> anyhow::Result<Vec<CardTarget>> {
+fn targets(
+    snapshot: &PreviewSnapshot,
+    geometry: &PreviewGeometry,
+) -> anyhow::Result<Vec<CardTarget>> {
     let mut targets = Vec::new();
     for (location, cards, offset, count) in [
         (CardLocation::MonsterZone, &snapshot.monsters, 0, 7),
@@ -86,7 +132,8 @@ fn targets(snapshot: &PreviewSnapshot, anchors: &[CardAnchor]) -> anyhow::Result
                     );
                     targets.push(CardTarget {
                         id: card.id,
-                        anchor: *anchors
+                        anchor: *geometry
+                            .field
                             .get(offset + sequence)
                             .context("Field anchor missing")?,
                         data: *data,
@@ -112,6 +159,54 @@ fn targets(snapshot: &PreviewSnapshot, anchors: &[CardAnchor]) -> anyhow::Result
             tracked_count == cards.iter().flatten().count(),
             "Tracked {location} count differs from the field"
         );
+    }
+    let count = snapshot.hand.len();
+    let tracked_count = snapshot
+        .cards
+        .cards()
+        .iter()
+        .filter(|card| {
+            matches!(card.placement, CardPlacement::Zone(address)
+            if address.controller == Player::Player && address.location == CardLocation::Hand)
+        })
+        .count();
+    ensure!(
+        tracked_count == count,
+        "Tracked hand count differs from the hand query"
+    );
+    for (index, card) in snapshot.hand.iter().enumerate() {
+        ensure!(card.index == index, "Hand query sequence is out of order");
+        let address = CardAddress {
+            controller: Player::Player,
+            location: CardLocation::Hand,
+            sequence: u32::try_from(index)?,
+        };
+        let tracked = snapshot
+            .cards
+            .card_at(address)
+            .with_context(|| format!("Untracked hand card at {address:?}"))?;
+        ensure!(
+            tracked.code == 0 || tracked.code == card.code,
+            "Tracked hand card differs at {address:?}"
+        );
+        let selected = snapshot
+            .selected
+            .is_some_and(|selected| selected.matches(address));
+        let (anchor, rotation, stack) = hand_position(geometry.hand_base, index, count, selected);
+        targets.push(CardTarget {
+            id: tracked.id,
+            anchor,
+            data: CardData {
+                card_code: card.code,
+                controller: Player::Player,
+                location: CardLocation::Hand,
+                sequence: u8::try_from(index)?,
+                ..Default::default()
+            },
+            rotation,
+            stack_order: 50 + i32::try_from(stack)?,
+            interactive: true,
+        });
     }
     Ok(targets)
 }
@@ -144,6 +239,8 @@ pub(super) fn FieldPreview(enabled: Signal<bool>) -> Element {
         tracking(),
         (state.monsters)(),
         (state.spell_traps)(),
+        (state.hand_contents)(),
+        (state.selected_card)(),
     );
     let current_revision = (revision.0)();
     let result = resource.read();
@@ -156,8 +253,8 @@ pub(super) fn FieldPreview(enabled: Signal<bool>) -> Element {
                     .then_some(result)
             });
     let resolved = match (current.as_ref(), geometry) {
-        (Some(input), Some(Ok(anchors))) => {
-            Some(targets(input, anchors).map_err(|error| format!("{error:#}")))
+        (Some(input), Some(Ok(geometry))) => {
+            Some(targets(input, geometry).map_err(|error| format!("{error:#}")))
         }
         (_, Some(Err(error))) => Some(Err(error.clone())),
         _ => None,
@@ -174,8 +271,9 @@ pub(super) fn FieldPreview(enabled: Signal<bool>) -> Element {
         .unwrap_or_default();
     rsx! {
         Field { layered }
+        Hand { layered }
         if enabled() {
-            PersistentCardLayer { cards, targets: visible_targets, on_card_click: |_| {} }
+            PersistentCardLayer { cards, targets: visible_targets }
         }
         if let Some(Err(error)) = resolved {
             div {

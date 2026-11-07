@@ -89,7 +89,7 @@ fn app() -> Element {
     let state = use_signal(|| (vec![card], vec![target]));
     TEST_STATE.with(|slot| *slot.borrow_mut() = Some(state));
     let (cards, targets) = state();
-    rsx! { PersistentCardLayer { cards, targets, on_card_click: |_| {} } }
+    rsx! { PersistentCardLayer { cards, targets } }
 }
 
 fn card_root(edits: &[Mutation], id: CardId) -> ElementId {
@@ -113,6 +113,19 @@ fn movement_and_property_updates_keep_the_same_root_node() {
     let mut dom = VirtualDom::new(app);
     let initial = dom.rebuild_to_vec();
     let root = card_root(&initial.edits, card.id);
+    let original_image = initial
+        .edits
+        .iter()
+        .find_map(|edit| match edit {
+            Mutation::SetAttribute {
+                name: "src",
+                value: AttributeValue::Text(value),
+                id,
+                ..
+            } if value.contains("00012345") => Some(*id),
+            _ => None,
+        })
+        .unwrap();
     target.anchor.center_x += 80.0;
     target.rotation = -90.0;
     target.stack_order = 8;
@@ -192,6 +205,10 @@ fn movement_and_property_updates_keep_the_same_root_node() {
             _ => None,
         })
         .unwrap();
+    assert_eq!(
+        image_id, original_image,
+        "hand-to-field move must retain the image node"
+    );
     card.placement = CardPlacement::Zone(CardAddress {
         sequence: 1,
         ..address(CardLocation::MonsterZone)
