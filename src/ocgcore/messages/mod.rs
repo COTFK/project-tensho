@@ -12,6 +12,7 @@ mod hint;
 mod idle;
 pub mod move_card;
 mod new_phase;
+mod player_hint;
 mod position_change;
 mod random_selected;
 mod remove_cards;
@@ -46,6 +47,7 @@ pub use hint::{Hint, HintMessageData};
 pub use idle::IdleMessageData;
 pub use move_card::MoveMessageData;
 pub use new_phase::NewPhaseMessageData;
+pub use player_hint::PlayerHintMessageData;
 pub use position_change::PositionChangeMessageData;
 pub use random_selected::RandomSelectedMessageData;
 pub use remove_cards::RemoveCardsMessageData;
@@ -74,7 +76,7 @@ use ocgcore_ffi::constants::{
     MSG_CHAIN_END, MSG_CHAIN_SOLVED, MSG_CHAIN_SOLVING, MSG_CHAINED, MSG_CHAINING,
     MSG_CONFIRM_CARDS, MSG_CONFIRM_DECKTOP, MSG_CONFIRM_EXTRATOP, MSG_DECK_TOP, MSG_DRAW,
     MSG_FLIPSUMMONED, MSG_FLIPSUMMONING, MSG_HINT, MSG_MOVE, MSG_NEW_PHASE, MSG_NEW_TURN,
-    MSG_POS_CHANGE, MSG_RANDOM_SELECTED, MSG_REMOVE_CARDS, MSG_RETRY, MSG_REVERSE_DECK,
+    MSG_PLAYER_HINT, MSG_POS_CHANGE, MSG_RANDOM_SELECTED, MSG_REMOVE_CARDS, MSG_RETRY, MSG_REVERSE_DECK,
     MSG_SELECT_CARD, MSG_SELECT_CHAIN, MSG_SELECT_EFFECTYN, MSG_SELECT_IDLECMD, MSG_SELECT_OPTION,
     MSG_SELECT_PLACE, MSG_SELECT_POSITION, MSG_SELECT_TRIBUTE, MSG_SELECT_UNSELECT_CARD,
     MSG_SELECT_YESNO, MSG_SET, MSG_SHUFFLE_DECK, MSG_SHUFFLE_EXTRA, MSG_SHUFFLE_HAND,
@@ -90,6 +92,7 @@ pub enum CoreMessage {
     Hint(HintMessageData),
     BecomeTarget(BecomeTargetMessageData),
     CardHint(CardHintMessageData),
+    PlayerHint(PlayerHintMessageData),
     CardSelected(CardSelectedMessageData),
     RandomSelected(RandomSelectedMessageData),
     ConfirmCards(ConfirmCardsMessageData),
@@ -149,6 +152,9 @@ impl TryFrom<&[u8]> for CoreMessage {
                 BecomeTargetMessageData::try_from(bytes)?,
             )),
             MSG_CARD_HINT => Ok(CoreMessage::CardHint(CardHintMessageData::try_from(bytes)?)),
+            MSG_PLAYER_HINT => Ok(CoreMessage::PlayerHint(PlayerHintMessageData::try_from(
+                bytes,
+            )?)),
             MSG_CARD_SELECTED => Ok(CoreMessage::CardSelected(
                 CardSelectedMessageData::try_from(bytes)?,
             )),
