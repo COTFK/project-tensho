@@ -6,6 +6,7 @@ mod card_locations;
 mod card_selected;
 mod chaining;
 pub mod confirm_cards;
+mod deck_top;
 pub(crate) mod draw;
 mod hint;
 mod idle;
@@ -37,6 +38,7 @@ pub use card_hint::CardHintMessageData;
 pub use card_selected::CardSelectedMessageData;
 pub use chaining::{ChainLinkMessageData, ChainingMessageData};
 pub use confirm_cards::ConfirmCardsMessageData;
+pub use deck_top::DeckTopMessageData;
 pub use draw::DrawMessageData;
 pub use hint::{Hint, HintMessageData};
 pub use idle::IdleMessageData;
@@ -66,8 +68,9 @@ use anyhow::Context;
 use ocgcore_ffi::constants::{
     MSG_ANNOUNCE_NUMBER, MSG_BECOME_TARGET, MSG_CARD_HINT, MSG_CARD_SELECTED, MSG_CHAIN_DISABLED,
     MSG_CHAIN_END, MSG_CHAIN_SOLVED, MSG_CHAIN_SOLVING, MSG_CHAINED, MSG_CHAINING,
-    MSG_CONFIRM_CARDS, MSG_DRAW, MSG_FLIPSUMMONED, MSG_FLIPSUMMONING, MSG_HINT, MSG_MOVE,
-    MSG_NEW_PHASE, MSG_NEW_TURN, MSG_POS_CHANGE, MSG_REMOVE_CARDS, MSG_RETRY, MSG_SELECT_CARD,
+    MSG_CONFIRM_CARDS, MSG_CONFIRM_DECKTOP, MSG_CONFIRM_EXTRATOP, MSG_DECK_TOP, MSG_DRAW,
+    MSG_FLIPSUMMONED, MSG_FLIPSUMMONING, MSG_HINT, MSG_MOVE, MSG_NEW_PHASE, MSG_NEW_TURN,
+    MSG_POS_CHANGE, MSG_REMOVE_CARDS, MSG_RETRY, MSG_REVERSE_DECK, MSG_SELECT_CARD,
     MSG_SELECT_CHAIN, MSG_SELECT_EFFECTYN, MSG_SELECT_IDLECMD, MSG_SELECT_OPTION, MSG_SELECT_PLACE,
     MSG_SELECT_POSITION, MSG_SELECT_TRIBUTE, MSG_SELECT_UNSELECT_CARD, MSG_SELECT_YESNO, MSG_SET,
     MSG_SHUFFLE_DECK, MSG_SHUFFLE_EXTRA, MSG_SHUFFLE_HAND, MSG_SHUFFLE_SET_CARD, MSG_SORT_CARD,
@@ -84,6 +87,10 @@ pub enum CoreMessage {
     CardHint(CardHintMessageData),
     CardSelected(CardSelectedMessageData),
     ConfirmCards(ConfirmCardsMessageData),
+    ConfirmDeckTop(ConfirmCardsMessageData),
+    ConfirmExtraTop(ConfirmCardsMessageData),
+    ReverseDeck,
+    DeckTop(DeckTopMessageData),
     ShuffleDeck(ShuffleDeckMessageData),
     ShuffleHand(ShuffleCardsMessageData),
     ShuffleExtra(ShuffleCardsMessageData),
@@ -141,6 +148,18 @@ impl TryFrom<&[u8]> for CoreMessage {
             MSG_CONFIRM_CARDS => Ok(CoreMessage::ConfirmCards(
                 ConfirmCardsMessageData::try_from(bytes)?,
             )),
+            MSG_CONFIRM_DECKTOP => Ok(CoreMessage::ConfirmDeckTop(
+                ConfirmCardsMessageData::try_from(bytes)?,
+            )),
+            MSG_CONFIRM_EXTRATOP => Ok(CoreMessage::ConfirmExtraTop(
+                ConfirmCardsMessageData::try_from(bytes)?,
+            )),
+            MSG_REVERSE_DECK => {
+                let length = u32::from_le_bytes(bytes[..4].try_into()?);
+                anyhow::ensure!(length == 1, "Invalid reverse deck message length: {length}");
+                Ok(CoreMessage::ReverseDeck)
+            }
+            MSG_DECK_TOP => Ok(CoreMessage::DeckTop(DeckTopMessageData::try_from(bytes)?)),
             MSG_SHUFFLE_DECK => Ok(CoreMessage::ShuffleDeck(ShuffleDeckMessageData::try_from(
                 bytes,
             )?)),

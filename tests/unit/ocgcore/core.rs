@@ -69,6 +69,156 @@ fn startup_messages(player_cards: u32, opponent_cards: u32) -> Vec<CoreMessage> 
 }
 
 #[test]
+fn tracks_native_deck_reversal_top_confirmations_and_draw() {
+    fn card_data(code: u32) -> OCG_CardData {
+        let mut data = test_card_data(code);
+        if (300..=302).contains(&code) {
+            data.r#type = TYPE_MONSTER | ocgcore_ffi::constants::TYPE_FUSION;
+        }
+        data
+    }
+    let core = futures::executor::block_on(OCGCore::load(
+        card_data,
+        Box::new(|_| None),
+        super::super::callbacks::log_core_message,
+    ))
+    .unwrap();
+    let duel = core.create_duel(0).unwrap();
+    let mut layer = CardLayer::default();
+    for (player, location, count, base) in [
+        (Player::Player, CardLocation::Deck, 12, 100),
+        (Player::Opponent, CardLocation::Deck, 12, 200),
+        (Player::Player, CardLocation::ExtraDeck, 3, 300),
+    ] {
+        for sequence in 0..count {
+            let code = base + sequence;
+            let card = OCG_NewCardInfo {
+                team: player as u8,
+                duelist: 0,
+                code,
+                con: player as u8,
+                loc: location as u32,
+                seq: 0,
+                pos: ocgcore_ffi::constants::POS_FACEDOWN,
+            };
+            unsafe { ocgcore_ffi::OCG_DuelNewCard(duel.handle(), &card) };
+            layer
+                .insert(
+                    CardAddress {
+                        controller: player,
+                        location,
+                        sequence,
+                    },
+                    code,
+                )
+                .unwrap();
+        }
+    }
+    core.load_script(
+        &duel,
+        br#"
+            local reverse = Effect.GlobalEffect()
+            reverse:SetType(0x0002)
+            reverse:SetCode(294)
+            Duel.RegisterEffect(reverse, 0)
+            local effect = Effect.GlobalEffect()
+            effect:SetType(0x0802)
+            effect:SetCode(1113)
+            effect:SetOperation(function()
+                Duel.ConfirmDecktop(0, 2)
+                Duel.ConfirmExtratop(0, 2)
+                Duel.Draw(0, 1, 0x40)
+                reverse:Reset()
+            end)
+            Duel.RegisterEffect(effect, 0)
+            "#,
+        "reverse-deck-test.lua",
+    )
+    .unwrap();
+    duel.start();
+    let mut reversals = 0;
+    let mut top_offset = false;
+    let mut confirmations = [false; 2];
+    let mut draw_after_reverse = false;
+    for _ in 0..1000 {
+        let status = duel.process();
+        for message in duel.parse_messages() {
+            match &message {
+                CoreMessage::ReverseDeck => reversals += 1,
+                CoreMessage::DeckTop(data) if data.offset > 0 => top_offset = true,
+                CoreMessage::ConfirmDeckTop(_) => confirmations[0] = true,
+                CoreMessage::ConfirmExtraTop(_) => confirmations[1] = true,
+                CoreMessage::Draw(_) if reversals > 0 => draw_after_reverse = true,
+                _ => {}
+            }
+            if matches!(
+                message,
+                CoreMessage::ReverseDeck
+                    | CoreMessage::DeckTop(_)
+                    | CoreMessage::ConfirmDeckTop(_)
+                    | CoreMessage::ConfirmExtraTop(_)
+                    | CoreMessage::Draw(_)
+                    | CoreMessage::Move(_)
+            ) {
+                layer
+                    .apply(&message)
+                    .unwrap_or_else(|error| panic!("{message:?}: {error:#}"));
+            }
+        }
+        if matches!(status, OCG_DuelStatus::OCG_DUEL_STATUS_AWAITING) && confirmations[1] {
+            assert_eq!(reversals, 2);
+            assert!(top_offset);
+            assert_eq!(confirmations, [true, true]);
+            assert!(draw_after_reverse);
+            assert!(!layer.deck_reversed());
+            for player in [Player::Player, Player::Opponent] {
+                let query = ocgcore_ffi::types::OCG_QueryInfo {
+                    flags: u32::MAX,
+                    con: player as u8,
+                    loc: CardLocation::Deck as u32,
+                    seq: 0,
+                    overlay_seq: 0,
+                };
+                let mut length = 0;
+                let ptr = unsafe {
+                    ocgcore_ffi::OCG_DuelQueryLocation(duel.handle(), &mut length, &query)
+                };
+                assert!(!ptr.is_null());
+                let bytes =
+                    unsafe { std::slice::from_raw_parts(ptr.cast::<u8>(), length as usize) };
+                let cards =
+                    crate::ocgcore::query::decode_location(bytes, player, CardLocation::Deck)
+                        .unwrap();
+                assert_eq!(
+                        layer.cards().iter().filter(|card| matches!(
+                            card.placement,
+                            CardPlacement::Zone(address)
+                                if address.controller == player && address.location == CardLocation::Deck
+                        )).count(),
+                        cards.len()
+                    );
+                for (sequence, card) in cards.iter().enumerate() {
+                    assert_eq!(
+                        layer
+                            .card_at(CardAddress {
+                                controller: player,
+                                location: CardLocation::Deck,
+                                sequence: sequence as u32,
+                            })
+                            .unwrap()
+                            .code,
+                        card.unwrap().card_code
+                    );
+                }
+            }
+            return;
+        }
+        assert_ne!(status, OCG_DuelStatus::OCG_DUEL_STATUS_END);
+    }
+    panic!("Deck reversal test did not reach an input prompt");
+}
+
+#[test]
 fn queries_native_core_cards_and_empty_zones() {
     let core = test_core();
     let duel = core.create_duel(5).unwrap();

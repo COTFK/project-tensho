@@ -5,8 +5,8 @@ use crate::ocgcore::location_info::{
     CardLocationInfo, CardLocationKind, CardLocationPosition, CardPositionFlags,
 };
 use crate::ocgcore::messages::{
-    CoreMessage, DrawMessageData, MoveMessageData, RemoveCardsMessageData,
-    ShuffleSetCardMessageData, SwapMessageData,
+    ConfirmCardsMessageData, CoreMessage, DeckTopMessageData, DrawMessageData, MoveMessageData,
+    RemoveCardsMessageData, ShuffleSetCardMessageData, SwapMessageData,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -37,6 +37,7 @@ pub(crate) struct Card {
 pub(crate) struct CardLayer {
     cards: Vec<Card>,
     next_id: u64,
+    deck_reversed: bool,
 }
 
 impl CardLayer {
@@ -91,6 +92,10 @@ impl CardLayer {
             .find(|card| card.placement == CardPlacement::Overlay { host, sequence })
     }
 
+    pub fn deck_reversed(&self) -> bool {
+        self.deck_reversed
+    }
+
     pub fn apply(&mut self, message: &CoreMessage) -> anyhow::Result<()> {
         let mut next = self.clone();
         match message {
@@ -98,6 +103,14 @@ impl CardLayer {
             CoreMessage::Swap(message) => next.apply_swap(message)?,
             CoreMessage::RemoveCards(message) => next.apply_remove_cards(message)?,
             CoreMessage::Draw(message) => next.apply_draw(message)?,
+            CoreMessage::ReverseDeck => next.reverse_decks()?,
+            CoreMessage::DeckTop(message) => next.apply_deck_top(message)?,
+            CoreMessage::ConfirmDeckTop(message) => {
+                next.confirm_top_cards(message, CardLocation::Deck)?
+            }
+            CoreMessage::ConfirmExtraTop(message) => {
+                next.confirm_top_cards(message, CardLocation::ExtraDeck)?
+            }
             CoreMessage::ShuffleDeck(message) => {
                 next.apply_shuffle(message.player, CardLocation::Deck, None)?
             }
@@ -244,6 +257,86 @@ impl CardLayer {
                 drawn.code,
                 Some(drawn.position),
             )?;
+        }
+        Ok(())
+    }
+
+    fn reverse_decks(&mut self) -> anyhow::Result<()> {
+        for player in [Player::Player, Player::Opponent] {
+            let len = self.pile_len(player, CardLocation::Deck)?;
+            for card in &mut self.cards {
+                if let CardPlacement::Zone(address) = &mut card.placement {
+                    if address.controller == player && address.location == CardLocation::Deck {
+                        address.sequence = len - 1 - address.sequence;
+                    }
+                }
+            }
+        }
+        self.deck_reversed = !self.deck_reversed;
+        Ok(())
+    }
+
+    fn apply_deck_top(&mut self, message: &DeckTopMessageData) -> anyhow::Result<()> {
+        let sequence = self
+            .pile_len(message.player, CardLocation::Deck)?
+            .checked_sub(1)
+            .and_then(|top| top.checked_sub(message.offset))
+            .context("Deck top offset is outside the deck")?;
+        self.update_appearance(
+            CardPlacement::Zone(CardAddress {
+                controller: message.player,
+                location: CardLocation::Deck,
+                sequence,
+            }),
+            message.card_code,
+            message.position,
+        )
+    }
+
+    fn confirm_top_cards(
+        &mut self,
+        message: &ConfirmCardsMessageData,
+        location: CardLocation,
+    ) -> anyhow::Result<()> {
+        let len = self.pile_len(message.player, location)?;
+        ensure!(
+            message.cards.len() <= len as usize,
+            "Confirmed card count exceeds the pile"
+        );
+        let mut previous_sequence = None;
+        for (index, confirmed) in message.cards.iter().enumerate() {
+            ensure!(
+                confirmed.controller == Some(message.player)
+                    && confirmed.location == CardLocationKind::Known(location),
+                "Confirmed top card has an unexpected location"
+            );
+            ensure!(
+                confirmed.sequence < len,
+                "Confirmed top card is outside the pile"
+            );
+            if location == CardLocation::Deck {
+                ensure!(
+                    confirmed.sequence == len - 1 - index as u32,
+                    "Confirmed deck cards are not in top order"
+                );
+            } else if let Some(previous) = previous_sequence {
+                ensure!(
+                    confirmed.sequence.checked_add(1) == Some(previous),
+                    "Confirmed extra-deck cards are not in top order"
+                );
+            }
+            previous_sequence = Some(confirmed.sequence);
+            let address = CardAddress {
+                controller: message.player,
+                location,
+                sequence: confirmed.sequence,
+            };
+            let card = self
+                .cards
+                .iter_mut()
+                .find(|card| card.placement == CardPlacement::Zone(address))
+                .context("No card at confirmed top location")?;
+            Self::update_code(card, confirmed.card_code)?;
         }
         Ok(())
     }

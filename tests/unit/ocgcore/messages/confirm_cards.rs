@@ -1,7 +1,9 @@
 use super::*;
 use crate::ocgcore::constants::CardLocation;
 use crate::ocgcore::messages::{CoreMessage, parse_messages};
-use ocgcore_ffi::constants::{LOCATION_MZONE, LOCATION_OVERLAY, PLAYER_NONE};
+use ocgcore_ffi::constants::{
+    LOCATION_MZONE, LOCATION_OVERLAY, MSG_CONFIRM_DECKTOP, MSG_CONFIRM_EXTRATOP, PLAYER_NONE,
+};
 
 const SAMPLE: [u8; 20] = [
     16, 0, 0, 0, 31, 1, 1, 0, 0, 0, 122, 125, 228, 3, 0, 2, 4, 0, 0, 0,
@@ -21,6 +23,23 @@ fn parses_sample_confirm_cards() {
             }],
         })
     );
+}
+
+#[test]
+fn parses_deck_and_extra_top_confirmation_formats() {
+    let mut bytes = SAMPLE;
+    for (kind, expected) in [(MSG_CONFIRM_DECKTOP, false), (MSG_CONFIRM_EXTRATOP, true)] {
+        bytes[4] = kind as u8;
+        let message = CoreMessage::try_from(bytes.as_slice()).unwrap();
+        assert!(match message {
+            CoreMessage::ConfirmDeckTop(data) if !expected => data.cards.len() == 1,
+            CoreMessage::ConfirmExtraTop(data) if expected => data.cards.len() == 1,
+            _ => false,
+        });
+        for length in 0..bytes.len() {
+            assert!(CoreMessage::try_from(&bytes[..length]).is_err());
+        }
+    }
 }
 
 #[test]
