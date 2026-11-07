@@ -1,10 +1,12 @@
 use super::*;
 use crate::ocgcore::location_info::CardPositionFlags;
+use crate::ocgcore::messages::confirm_cards::ConfirmedCard;
 use crate::ocgcore::messages::draw::DrawCard;
 use crate::ocgcore::messages::move_card::MoveReason;
 use crate::ocgcore::messages::{
-    PositionChangeMessageData, RemoveCardsMessageData, SetCardMessageData, ShuffleCardsMessageData,
-    ShuffleDeckMessageData, ShuffleSetCardMessageData, SummoningMessageData, SwapMessageData,
+    ConfirmCardsMessageData, DeckTopMessageData, PositionChangeMessageData, RemoveCardsMessageData,
+    SetCardMessageData, ShuffleCardsMessageData, ShuffleDeckMessageData, ShuffleSetCardMessageData,
+    SummoningMessageData, SwapMessageData,
 };
 
 fn address(controller: Player, location: CardLocation, sequence: u32) -> CardAddress {
@@ -95,6 +97,181 @@ fn position_change(
         previous_position,
         current_position,
     })
+}
+
+fn deck_top(player: Player, offset: u32, code: u32, position: CardPositionFlags) -> CoreMessage {
+    CoreMessage::DeckTop(DeckTopMessageData {
+        player,
+        offset,
+        card_code: code,
+        position,
+    })
+}
+
+fn confirmed(address: CardAddress, code: u32) -> ConfirmedCard {
+    ConfirmedCard {
+        card_code: code,
+        controller: Some(address.controller),
+        location: CardLocationKind::Known(address.location),
+        sequence: address.sequence,
+    }
+}
+
+#[test]
+fn reverses_both_decks_and_draws_from_the_new_top() {
+    let mut layer = CardLayer::from_decks(&[1, 2, 3, 4], &[]).unwrap();
+    let player_ids: Vec<_> = layer.cards().iter().map(|card| card.id).collect();
+    let opponent = |sequence| address(Player::Opponent, CardLocation::Deck, sequence);
+    let opponent_ids = [
+        layer.insert(opponent(0), 5).unwrap(),
+        layer.insert(opponent(1), 6).unwrap(),
+    ];
+    let hand = address(Player::Opponent, CardLocation::Hand, 0);
+    let hand_id = layer.insert(hand, 7).unwrap();
+    assert!(!layer.deck_reversed());
+    layer.apply(&CoreMessage::ReverseDeck).unwrap();
+    assert!(layer.deck_reversed());
+    assert_eq!(
+        codes(&layer, Player::Player, CardLocation::Deck),
+        [4, 3, 2, 1]
+    );
+    assert_eq!(layer.card_at(opponent(0)).unwrap().id, opponent_ids[1]);
+    assert_eq!(layer.card_at(opponent(1)).unwrap().id, opponent_ids[0]);
+    assert_eq!(layer.card_at(hand).unwrap().id, hand_id);
+    layer.apply(&draw(Player::Player, &[1, 2])).unwrap();
+    assert_eq!(
+        layer
+            .card_at(address(Player::Player, CardLocation::Hand, 0))
+            .unwrap()
+            .id,
+        player_ids[0]
+    );
+    assert_eq!(
+        layer
+            .card_at(address(Player::Player, CardLocation::Hand, 1))
+            .unwrap()
+            .id,
+        player_ids[1]
+    );
+    layer.apply(&CoreMessage::ReverseDeck).unwrap();
+    assert!(!layer.deck_reversed());
+    assert_eq!(codes(&layer, Player::Player, CardLocation::Deck), [3, 4]);
+    assert_eq!(layer.card_at(opponent(0)).unwrap().id, opponent_ids[0]);
+    assert_eq!(layer.card_at(opponent(1)).unwrap().id, opponent_ids[1]);
+}
+
+#[test]
+fn top_offsets_target_the_pre_draw_deck_and_preserve_identity() {
+    let mut layer = CardLayer::from_decks(&[11, 12, 13, 14], &[]).unwrap();
+    let address = address(Player::Player, CardLocation::Deck, 1);
+    let id = layer.card_at(address).unwrap().id;
+    layer
+        .apply(&deck_top(
+            Player::Player,
+            2,
+            12,
+            CardPositionFlags::FACE_UP_DEFENSE,
+        ))
+        .unwrap();
+    assert_eq!(layer.card_at(address).unwrap().id, id);
+    assert_eq!(
+        layer.card_at(address).unwrap().position,
+        Some(CardPositionFlags::FACE_UP_DEFENSE)
+    );
+    layer.apply(&draw(Player::Player, &[14, 13])).unwrap();
+    let top = layer.card_at(address).unwrap();
+    assert_eq!((top.id, top.code), (id, 12));
+    layer
+        .apply(&deck_top(
+            Player::Player,
+            0,
+            0,
+            CardPositionFlags::FACE_DOWN_DEFENSE,
+        ))
+        .unwrap();
+    assert_eq!(layer.card_at(address).unwrap().code, 12);
+    assert_eq!(
+        layer.card_at(address).unwrap().position,
+        Some(CardPositionFlags::FACE_DOWN_DEFENSE)
+    );
+}
+
+#[test]
+fn confirmations_update_known_codes_without_changing_position_or_identity() {
+    let mut layer = CardLayer::from_decks(&[0, 0, 0], &[0, 0, 0]).unwrap();
+    let deck = |sequence| address(Player::Player, CardLocation::Deck, sequence);
+    let extra = |sequence| address(Player::Player, CardLocation::ExtraDeck, sequence);
+    let old = layer.cards().to_vec();
+    layer
+        .apply(&CoreMessage::ConfirmDeckTop(ConfirmCardsMessageData {
+            player: Player::Player,
+            cards: vec![confirmed(deck(2), 22), confirmed(deck(1), 21)],
+        }))
+        .unwrap();
+    layer
+        .apply(&CoreMessage::ConfirmExtraTop(ConfirmCardsMessageData {
+            player: Player::Player,
+            cards: vec![confirmed(extra(1), 31), confirmed(extra(0), 30)],
+        }))
+        .unwrap();
+    for (address, code) in [(deck(2), 22), (deck(1), 21), (extra(1), 31), (extra(0), 30)] {
+        let card = layer.card_at(address).unwrap();
+        assert_eq!(card.code, code);
+        assert_eq!(card.position, None);
+        assert!(old.iter().any(|previous| previous.id == card.id));
+    }
+}
+
+#[test]
+fn rejects_invalid_deck_updates_atomically() {
+    let deck = |sequence| address(Player::Player, CardLocation::Deck, sequence);
+    let extra = |sequence| address(Player::Player, CardLocation::ExtraDeck, sequence);
+    let mut layer = CardLayer::from_decks(&[0, 0, 0], &[0, 0, 0]).unwrap();
+    let before = layer.clone();
+    for message in [
+        deck_top(Player::Opponent, 0, 1, CardPositionFlags::FACE_UP_DEFENSE),
+        deck_top(Player::Player, 3, 1, CardPositionFlags::FACE_UP_DEFENSE),
+        deck_top(
+            Player::Player,
+            u32::MAX,
+            1,
+            CardPositionFlags::FACE_UP_DEFENSE,
+        ),
+        CoreMessage::ConfirmDeckTop(ConfirmCardsMessageData {
+            player: Player::Player,
+            cards: vec![confirmed(deck(2), 10), confirmed(deck(2), 10)],
+        }),
+        CoreMessage::ConfirmDeckTop(ConfirmCardsMessageData {
+            player: Player::Player,
+            cards: vec![confirmed(extra(2), 10)],
+        }),
+        CoreMessage::ConfirmExtraTop(ConfirmCardsMessageData {
+            player: Player::Player,
+            cards: vec![confirmed(extra(2), 10), confirmed(extra(0), 11)],
+        }),
+        CoreMessage::ConfirmDeckTop(ConfirmCardsMessageData {
+            player: Player::Opponent,
+            cards: vec![confirmed(deck(2), 10)],
+        }),
+    ] {
+        assert!(layer.apply(&message).is_err(), "{message:?}");
+        assert_eq!(layer, before);
+    }
+    layer
+        .apply(&deck_top(
+            Player::Player,
+            1,
+            21,
+            CardPositionFlags::FACE_UP_DEFENSE,
+        ))
+        .unwrap();
+    let before = layer.clone();
+    let conflicting = CoreMessage::ConfirmDeckTop(ConfirmCardsMessageData {
+        player: Player::Player,
+        cards: vec![confirmed(deck(2), 22), confirmed(deck(1), 99)],
+    });
+    assert!(layer.apply(&conflicting).is_err());
+    assert_eq!(layer, before);
 }
 
 fn shuffle_cards(player: Player, location: CardLocation, codes: &[u32]) -> CoreMessage {

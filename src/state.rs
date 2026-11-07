@@ -289,6 +289,14 @@ pub fn handle_core_message() -> bool {
             CoreMessage::ConfirmCards(message) => {
                 tracing::trace!("Received confirm cards: {message:?}")
             }
+            CoreMessage::ConfirmDeckTop(message) => {
+                tracing::trace!("Received confirm deck top: {message:?}")
+            }
+            CoreMessage::ConfirmExtraTop(message) => {
+                tracing::trace!("Received confirm extra top: {message:?}")
+            }
+            CoreMessage::ReverseDeck => tracing::trace!("Received reverse deck"),
+            CoreMessage::DeckTop(message) => tracing::trace!("Received deck top: {message:?}"),
             CoreMessage::ShuffleDeck(message) => {
                 tracing::trace!("Received shuffle deck: {message:?}")
             }
