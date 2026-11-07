@@ -6,6 +6,7 @@ mod extra_deck;
 mod field;
 mod graveyard;
 mod hand;
+mod layout_anchors;
 mod main_deck;
 mod modal;
 
@@ -95,6 +96,7 @@ fn install_duel(
 fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>) -> Element {
     let mut state = use_context::<UIState>();
     let tracking = use_context::<Signal<Option<CardTracking>>>();
+    use_context_provider(layout_anchors::LayoutAnchors::default);
 
     // Start game loop
     use_effect(run_game_loop);

@@ -1,6 +1,7 @@
 use dioxus::prelude::*;
 
 use super::card_interaction::InteractiveCard;
+use super::layout_anchors::{Anchor, AnchorPart, LayoutAnchor};
 use crate::ocgcore::CardData;
 use crate::ocgcore::constants::{CardLocation, Player};
 use crate::state::UIState;
@@ -40,9 +41,19 @@ pub fn Hand() -> Element {
                             key: "{card.code}-{index}",
                             class: "w-[10vw] aspect-[59/86] shrink-0 -mx-[1.1vw] relative",
                             z_index: "{stacking_order}",
+                            LayoutAnchor {
+                                anchor: Anchor::Hand(address.sequence),
+                                part: AnchorPart::HandSize,
+                                class: "absolute inset-0 pointer-events-none",
+                            }
                             div {
                                 class: "absolute inset-0 group [transition:transform_150ms_ease-in-out]",
                                 transform: "translateZ(0) rotateZ({rotation}deg) translateY({translate_y}%)",
+                                LayoutAnchor {
+                                    anchor: Anchor::Hand(address.sequence),
+                                    part: AnchorPart::HandCenter,
+                                    class: "absolute inset-0 pointer-events-none",
+                                }
                                 InteractiveCard {
                                     address,
                                     card: CardData {
