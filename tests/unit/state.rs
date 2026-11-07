@@ -271,7 +271,55 @@ fn dispatches_final_messages_when_duel_ends() {
 
 #[test]
 #[cfg(not(target_arch = "wasm32"))]
+fn failed_tracking_blocks_layered_actions_until_restart() {
+    thread_local! {
+        static COMPLETED: Cell<bool> = const { Cell::new(false) };
+    }
+    fn app() -> Element {
+        let core = futures::executor::block_on(OCGCore::load(
+            |_| panic!("Unexpected card lookup"),
+            Box::new(|_| None),
+            |_, _| {},
+        ))
+        .unwrap();
+        let duel = core.create_duel(5).unwrap();
+        let mut state = use_context_provider(UIState::default);
+        use_context_provider(|| Signal::new(Some(duel)));
+        use_context_provider(|| {
+            Signal::new(Some(CardTracking::Failed("injected divergence".into())))
+        });
+        let mut playback = use_context_provider(|| {
+            Signal::new(CardPlayback {
+                enabled: true,
+                reduced_motion: false,
+                ..Default::default()
+            })
+        });
+        state.waiting_on_input.set(true);
+        run_game_loop();
+        assert_eq!(
+            playback.peek().failure.as_deref(),
+            Some("injected divergence")
+        );
+        send_response(Response::No);
+        assert!(*state.waiting_on_input.peek());
+        playback.write().set_enabled(false);
+        send_response(Response::No);
+        assert!(*state.waiting_on_input.peek());
+        COMPLETED.with(|completed| completed.set(true));
+        rsx! {}
+    }
+    let mut dom = VirtualDom::new(app);
+    dom.rebuild_in_place();
+    assert!(COMPLETED.with(|completed| completed.get()));
+}
+
+#[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn responses_are_blocked_during_playback_and_after_a_prompt_is_consumed() {
+    thread_local! {
+        static COMPLETED: Cell<bool> = const { Cell::new(false) };
+    }
     fn app() -> Element {
         let core = futures::executor::block_on(OCGCore::load(
             |_| panic!("Unexpected card lookup"),
@@ -300,10 +348,12 @@ fn responses_are_blocked_during_playback_and_after_a_prompt_is_consumed() {
         }));
         send_response(Response::Yes);
         assert!(state.selected_card.peek().is_some());
+        COMPLETED.with(|completed| completed.set(true));
         rsx! {}
     }
     let mut dom = VirtualDom::new(app);
     dom.rebuild_in_place();
+    assert!(COMPLETED.with(|completed| completed.get()));
 }
 
 #[test]
@@ -311,6 +361,10 @@ fn responses_are_blocked_during_playback_and_after_a_prompt_is_consumed() {
 fn layered_loop_pauses_on_a_real_draw_and_resumes_to_the_prompt() {
     use ocgcore_ffi::constants::{TYPE_MONSTER, TYPE_NORMAL};
     use ocgcore_ffi::types::OCG_CardData;
+    thread_local! {
+        static COMPLETED: Cell<bool> = const { Cell::new(false) };
+        static REDUCED: Cell<bool> = const { Cell::new(false) };
+    }
     fn card_data(code: u32) -> OCG_CardData {
         static EMPTY_SETCODES: [u16; 1] = [0];
         OCG_CardData {
@@ -355,10 +409,17 @@ fn layered_loop_pauses_on_a_real_draw_and_resumes_to_the_prompt() {
         let mut playback = use_context_provider(|| {
             Signal::new(CardPlayback {
                 enabled: true,
+                reduced_motion: REDUCED.with(|reduced| reduced.get()),
                 ..Default::default()
             })
         });
         run_game_loop();
+        if REDUCED.with(|reduced| reduced.get()) {
+            assert!(!playback.peek().active);
+            assert!(*state.waiting_on_input.peek());
+            COMPLETED.with(|completed| completed.set(true));
+            return rsx! {};
+        }
         assert!(playback.peek().active);
         assert_eq!(playback.peek().moving.len(), 5);
         let paused = tracking.peek().clone();
@@ -373,6 +434,7 @@ fn layered_loop_pauses_on_a_real_draw_and_resumes_to_the_prompt() {
                 playback.write().finish(generation);
             } else if *state.waiting_on_input.peek() {
                 assert!(matches!(&*tracking.peek(), Some(CardTracking::Active(_))));
+                COMPLETED.with(|completed| completed.set(true));
                 return rsx! {};
             } else if playback.peek().finished {
                 panic!("Duel ended before a prompt");
@@ -382,6 +444,13 @@ fn layered_loop_pauses_on_a_real_draw_and_resumes_to_the_prompt() {
     }
     let mut dom = VirtualDom::new(app);
     dom.rebuild_in_place();
+    assert!(COMPLETED.with(|completed| completed.get()));
+    COMPLETED.with(|completed| completed.set(false));
+    REDUCED.with(|reduced| reduced.set(true));
+    let mut reduced_dom = VirtualDom::new(app);
+    reduced_dom.rebuild_in_place();
+    assert!(COMPLETED.with(|completed| completed.get()));
+    REDUCED.with(|reduced| reduced.set(false));
 }
 
 #[test]

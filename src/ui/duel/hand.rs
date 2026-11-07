@@ -54,7 +54,7 @@ pub fn Hand(layered: bool) -> Element {
                                 class: "absolute inset-0 pointer-events-none",
                             }
                             div {
-                                class: "absolute inset-0 group [transition:transform_150ms_ease-in-out]",
+                                class: "absolute inset-0 group [transition:transform_150ms_ease-in-out] motion-reduce:transition-none",
                                 transform: "translateZ(0) rotateZ({rotation}deg) translateY({translate_y}%)",
                                 LayoutAnchor {
                                     anchor: Anchor::Hand(address.sequence),

@@ -116,6 +116,7 @@ fn LayerCard(card: TrackedCard, target: Option<CardTarget>) -> Element {
     let playback = try_consume_context::<Signal<CardPlayback>>();
     let animating = playback.is_some_and(|playback| playback().active);
     let moving = playback.is_some_and(|playback| playback().moving.contains(&card.id));
+    let layout_pending = playback.is_some_and(|playback| playback().layout_pending);
     let visible = visible_card(card, target);
     let hand = matches!(card.placement, CardPlacement::Zone(address) if address.location == CardLocation::Hand);
     let style = visible.map(|(target, _)| {
@@ -146,13 +147,15 @@ fn LayerCard(card: TrackedCard, target: Option<CardTarget>) -> Element {
         div {
             "data-card-id": "{card.id}",
             class: "fixed left-0 top-0 pointer-events-none [transform:translate(var(--card-x),var(--card-y))] w-[var(--card-width)] h-[var(--card-height)] z-[var(--card-z)]",
-            class: if animating { "[transition:transform_300ms_ease-in-out,width_300ms_ease-in-out,height_300ms_ease-in-out]" } else if hand { "[transition:transform_150ms_ease-in-out]" },
+            class: if animating { "[transition:transform_300ms_ease-in-out,width_300ms_ease-in-out,height_300ms_ease-in-out]" } else if hand && !layout_pending { "[transition:transform_150ms_ease-in-out]" },
+            class: "motion-reduce:transition-none",
             class: if visible.is_none() { "hidden" },
             style,
             if let Some((target, facedown)) = visible {
                 div {
                     class: "w-full h-full [transform:rotate(var(--card-rotation))]",
-                    class: if animating { "[transition:transform_300ms_ease-in-out]" } else if hand { "[transition:transform_150ms_ease-in-out]" },
+                    class: if animating { "[transition:transform_300ms_ease-in-out]" } else if hand && !layout_pending { "[transition:transform_150ms_ease-in-out]" },
+                    class: "motion-reduce:transition-none",
                     style: "--card-rotation: {target.rotation}deg;",
                     div {
                         class: "w-full h-full",

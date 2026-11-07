@@ -53,7 +53,8 @@ impl SelectedCard {
 
 pub(crate) fn select_card(address: CardAddress) {
     let mut state = consume_context::<UIState>();
-    if try_consume_context::<Signal<CardPlayback>>().is_some_and(|playback| playback.peek().active)
+    if try_consume_context::<Signal<CardPlayback>>()
+        .is_some_and(|playback| playback.peek().blocked())
     {
         tracing::warn!("Ignoring card selection during animation");
         return;
@@ -67,6 +68,13 @@ pub(crate) fn select_card(address: CardAddress) {
                 return;
             }
         },
+        Some(CardTracking::Failed(_))
+            if try_consume_context::<Signal<CardPlayback>>()
+                .is_some_and(|playback| playback.peek().enabled) =>
+        {
+            tracing::warn!("Ignoring selection after card tracking failed");
+            return;
+        }
         Some(CardTracking::Failed(_)) => None,
         None => {
             tracing::error!("Cannot select a card without an active tracker");
@@ -151,17 +159,24 @@ define_ui_state!(UIState {
 
 pub fn run_game_loop() {
     let state = consume_context::<UIState>();
-    let duel = consume_context::<Signal<Option<Duel>>>();
-    let duel = duel().expect("Duel context missing active duel");
     let playback = try_consume_context::<Signal<CardPlayback>>();
+    let tracking = consume_context::<Signal<Option<CardTracking>>>();
+    if let Some(mut playback) = playback {
+        if playback.peek().enabled && playback.peek().failure.is_none() {
+            if let Some(CardTracking::Failed(error)) = &*tracking.peek() {
+                playback.write().fail(error.clone());
+            }
+        }
+    }
     if playback.is_some_and(|playback| {
         let playback = playback();
-        playback.active || playback.finished
+        playback.blocked() || playback.finished
     }) || (state.waiting_on_input)()
     {
         return;
     }
-    let tracking = consume_context::<Signal<Option<CardTracking>>>();
+    let duel = consume_context::<Signal<Option<Duel>>>();
+    let duel = duel().expect("Duel context missing active duel");
     process_until_input(
         || {
             let status = duel.process();
@@ -173,7 +188,10 @@ pub fn run_game_loop() {
             status
         },
         || {
-            let before = if playback.is_some_and(|playback| playback.peek().enabled) {
+            let before = if playback.is_some_and(|playback| {
+                let playback = playback.peek();
+                playback.enabled && !playback.reduced_motion
+            }) {
                 match &*tracking.peek() {
                     Some(CardTracking::Active(layer)) => Some(layer.clone()),
                     _ => None,
@@ -189,6 +207,9 @@ pub fn run_game_loop() {
                 ]
             });
             let waiting = handle_core_message();
+            if playback.is_some_and(|playback| playback.peek().blocked()) {
+                return true;
+            }
             if let (Some(before), Some(piles), Some(mut playback)) = (before, piles, playback) {
                 if let Some(CardTracking::Active(after)) = &*tracking.peek() {
                     let moving = movements(&before, after);
@@ -219,7 +240,8 @@ fn process_until_input(
 pub fn handle_right_click(evt: MouseEvent) {
     evt.prevent_default();
     let mut state = consume_context::<UIState>();
-    if try_consume_context::<Signal<CardPlayback>>().is_some_and(|playback| playback.peek().active)
+    if try_consume_context::<Signal<CardPlayback>>()
+        .is_some_and(|playback| playback.peek().blocked())
     {
         return;
     }
@@ -373,9 +395,17 @@ pub(crate) async fn load_duel(
 
 pub fn send_response(response: Response) {
     let mut state = consume_context::<UIState>();
-    if try_consume_context::<Signal<CardPlayback>>().is_some_and(|playback| playback.peek().active)
+    if try_consume_context::<Signal<CardPlayback>>()
+        .is_some_and(|playback| playback.peek().blocked())
     {
         tracing::warn!("Ignoring response during card animation");
+        return;
+    }
+    if try_consume_context::<Signal<CardPlayback>>().is_some_and(|playback| playback.peek().enabled)
+        && try_consume_context::<Signal<Option<CardTracking>>>()
+            .is_some_and(|tracking| matches!(&*tracking.peek(), Some(CardTracking::Failed(_))))
+    {
+        tracing::warn!("Ignoring response after card tracking failed");
         return;
     }
     if !*state.waiting_on_input.peek() {
@@ -421,6 +451,7 @@ pub fn handle_core_message() -> bool {
     let duel = consume_context::<Signal<Option<Duel>>>();
     let duel = duel().expect("Duel context missing active duel");
     let mut tracking = consume_context::<Signal<Option<CardTracking>>>();
+    let playback = try_consume_context::<Signal<CardPlayback>>();
 
     state.hand_contents.set(duel.get_raw_hand());
     for message in duel.parse_messages() {
@@ -431,6 +462,9 @@ pub fn handle_core_message() -> bool {
             tracking.apply(&message);
             reconcile_selected_card(&mut state, tracking);
         });
+        if stop_failed_tracking(tracking, playback) {
+            break;
+        }
         match message {
             CoreMessage::Unsupported(_) | CoreMessage::NewTurn | CoreMessage::Win(_) => {}
             CoreMessage::Hint(message) => tracing::trace!("Received hint: {message:?}"),
@@ -588,6 +622,7 @@ pub fn handle_core_message() -> bool {
         tracking.reconcile(&duel);
         reconcile_selected_card(&mut state, tracking);
     });
+    stop_failed_tracking(tracking, playback);
 
     state
         .main_deck_length
@@ -606,6 +641,30 @@ pub fn handle_core_message() -> bool {
         .banishment
         .set(duel.get_cards(CardLocation::Banishment));
     (state.waiting_on_input)()
+}
+
+fn stop_failed_tracking(
+    tracking: Signal<Option<CardTracking>>,
+    playback: Option<Signal<CardPlayback>>,
+) -> bool {
+    let Some(mut playback) = playback else {
+        return false;
+    };
+    if !playback.peek().enabled {
+        return false;
+    }
+    let error = match &*tracking.peek() {
+        Some(CardTracking::Failed(error)) => Some(error.clone()),
+        _ => None,
+    };
+    if let Some(error) = error {
+        if playback.peek().failure.is_none() {
+            playback.write().fail(error);
+        }
+        true
+    } else {
+        false
+    }
 }
 
 #[cfg(test)]
