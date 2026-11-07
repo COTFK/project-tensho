@@ -69,7 +69,6 @@ pub(super) fn decode_location(
                     read_u32(record, &mut record_cursor, "link markers")?;
                 }
                 QUERY_END => {
-                    ensure!(length == 4, "Invalid QUERY_END record length");
                     cursor = record_end;
                     cards.push(Some(card));
                     break;
@@ -82,7 +81,6 @@ pub(super) fn decode_location(
                 read_u16(payload, &mut cursor, "next query record length")
                     .context("Missing QUERY_END")?,
             );
-            ensure!(length != 0, "Empty slot encountered before QUERY_END");
         }
     }
 

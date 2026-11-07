@@ -111,12 +111,7 @@ fn prompt_actions(state: &UIState, address: CardAddress) -> CardActions {
 }
 
 fn current_menu_actions(state: &UIState, address: CardAddress) -> Option<CardActions> {
-    if !state
-        .selected_card
-        .peek()
-        .is_some_and(|selected| selected.matches(address))
-        || !state.effects_to_select_from.peek().is_empty()
-    {
+    if !state.is_selected(address) || !state.effects_to_select_from.peek().is_empty() {
         tracing::warn!("Ignoring a stale or suppressed card action at {address:?}");
         return None;
     }
@@ -139,8 +134,7 @@ pub(super) fn InteractiveCard(
         prompt_actions(&state, address)
     };
     let hand = address.location == CardLocation::Hand;
-    let selected =
-        !passive && (state.selected_card)().is_some_and(|selected| selected.matches(address));
+    let selected = !passive && state.is_selected(address);
     let suppress = !state.effects_to_select_from.is_empty();
     let prompted = actions.prompted;
     let effects = &actions.effects;

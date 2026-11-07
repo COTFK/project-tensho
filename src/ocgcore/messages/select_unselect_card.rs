@@ -4,7 +4,6 @@ use crate::ocgcore::constants::CardLocation;
 use crate::ocgcore::constants::Player;
 use crate::ocgcore::utility::read_u8;
 use crate::ocgcore::utility::read_u32;
-use ocgcore_ffi::constants::MSG_SELECT_UNSELECT_CARD;
 
 #[derive(Hash, Debug, Clone, PartialEq, Eq)]
 pub struct SelectUnselectMessageData {
@@ -61,23 +60,7 @@ impl TryFrom<&[u8]> for SelectUnselectMessageData {
     type Error = anyhow::Error;
 
     fn try_from(raw_bytes: &[u8]) -> anyhow::Result<Self, Self::Error> {
-        // 1. Handle length headers if the socket layer prepends them
-        let message_offset = if u32::from(raw_bytes[0]) == MSG_SELECT_UNSELECT_CARD {
-            0
-        } else if raw_bytes.len() >= 5 && u32::from(raw_bytes[4]) == MSG_SELECT_UNSELECT_CARD {
-            let declared_len = u32::from_le_bytes(raw_bytes[0..4].try_into().unwrap()) as usize;
-            if declared_len != raw_bytes.len().saturating_sub(4) {
-                anyhow::bail!("Length prefix mismatch parsing message 26");
-            }
-            4
-        } else {
-            anyhow::bail!(
-                "Invalid message ID: Expected MSG_SELECT_UNSELECT_CARD ({MSG_SELECT_UNSELECT_CARD}), got {}",
-                raw_bytes.first().copied().unwrap_or_default()
-            );
-        };
-
-        let mut cursor = message_offset + 1;
+        let mut cursor = 5;
 
         let playerid = read_u8(raw_bytes, &mut cursor, "playerid")?;
         let finishable = read_u8(raw_bytes, &mut cursor, "finishable")? != 0;
@@ -86,10 +69,10 @@ impl TryFrom<&[u8]> for SelectUnselectMessageData {
         let max_count = read_u32(raw_bytes, &mut cursor, "max_count")?;
         let selectable_count = read_u32(raw_bytes, &mut cursor, "selectable_count")? as usize;
 
-        // Sanity guard against massive/corrupted allocations
-        if selectable_count > 100 {
-            anyhow::bail!("Impossible selection count detected: {}", selectable_count);
-        }
+        anyhow::ensure!(
+            selectable_count <= (raw_bytes.len() - cursor) / 14,
+            "Truncated selectable cards"
+        );
 
         let mut select_cards = Vec::with_capacity(selectable_count);
 
@@ -113,12 +96,10 @@ impl TryFrom<&[u8]> for SelectUnselectMessageData {
 
         let unselectable_count = read_u32(raw_bytes, &mut cursor, "unselectable_count")? as usize;
 
-        if unselectable_count > 100 {
-            anyhow::bail!(
-                "Impossible unselectable count detected: {}",
-                unselectable_count
-            );
-        }
+        anyhow::ensure!(
+            unselectable_count <= (raw_bytes.len() - cursor) / 14,
+            "Truncated unselectable cards"
+        );
 
         let mut unselect_cards = Vec::with_capacity(unselectable_count);
 

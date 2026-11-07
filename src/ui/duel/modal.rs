@@ -1,9 +1,9 @@
 use dioxus::prelude::*;
 
-use super::banishment::BanishmentModal;
+use super::effect_pile::EffectPileModal;
 use super::extra_deck::ExtraDeckModal;
-use super::graveyard::GraveyardModal;
 use crate::ocgcore::Response;
+use crate::ocgcore::constants::CardLocation;
 use crate::state::UIState;
 use crate::state::send_response;
 use crate::ui::components::Card;
@@ -22,8 +22,8 @@ pub fn ModalContainer() -> Element {
         PositionSelectorModal {}
         CardSelector { }
         SortCardSelector { }
-        GraveyardModal {}
-        BanishmentModal {}
+        EffectPileModal { location: CardLocation::Graveyard }
+        EffectPileModal { location: CardLocation::Banishment }
         EffectSelector {}
         ExtraDeckModal {}
         OptionSelector {}

@@ -129,16 +129,14 @@ fn resolves_selection_and_tribute_by_controller_and_response_order() {
 
 #[test]
 fn menu_actions_are_suppressed_and_resolved_from_current_prompt() {
-    use crate::state::SelectedCard;
     use crate::ui::card_layer::CardLayer;
-    use crate::ui::card_tracking::CardTracking;
 
     fn app() -> Element {
         let mut state = use_context_provider(UIState::default);
         let hand = address(Player::Player, CardLocation::Hand, 0);
         let mut layer = CardLayer::default();
         layer.insert(hand, 42).unwrap();
-        use_context_provider(|| Signal::new(Some(CardTracking::Active(layer))));
+        state.cards.set(Some(layer));
         select_card(hand);
         state
             .normal_summons
@@ -153,7 +151,7 @@ fn menu_actions_are_suppressed_and_resolved_from_current_prompt() {
             .set(vec![card(Player::Player, CardLocation::Hand, 0, 1)]);
         assert!(current_menu_actions(&state, hand).is_none());
         state.effects_to_select_from.set(vec![]);
-        state.selected_card.set(None::<SelectedCard>);
+        state.selected_card.set(None);
         assert!(current_menu_actions(&state, hand).is_none());
         rsx! {}
     }

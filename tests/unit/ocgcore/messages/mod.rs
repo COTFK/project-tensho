@@ -2,6 +2,74 @@ use super::*;
 use crate::ocgcore::constants::Phase;
 
 #[test]
+fn parses_large_select_unselect_lists_and_rejects_truncation() {
+    let mut bytes = vec![0, 0, 0, 0, MSG_SELECT_UNSELECT_CARD as u8, 0, 1, 1];
+    bytes.extend_from_slice(&0u32.to_le_bytes());
+    bytes.extend_from_slice(&101u32.to_le_bytes());
+    for _ in 0..2 {
+        bytes.extend_from_slice(&101u32.to_le_bytes());
+        for sequence in 0..101u32 {
+            bytes.extend_from_slice(&42u32.to_le_bytes());
+            bytes.push(0);
+            bytes.push(crate::ocgcore::constants::CardLocation::Deck as u8);
+            bytes.extend_from_slice(&sequence.to_le_bytes());
+            bytes.extend_from_slice(&1u32.to_le_bytes());
+        }
+    }
+    let length = (bytes.len() - 4) as u32;
+    bytes[..4].copy_from_slice(&length.to_le_bytes());
+    let CoreMessage::SelectUnselectCard(message) = CoreMessage::try_from(bytes.as_slice()).unwrap()
+    else {
+        panic!("Expected select-unselect message");
+    };
+    assert_eq!(message.select_cards.len(), 101);
+    assert_eq!(message.unselect_cards.len(), 101);
+    assert!(message.unselect_cards.iter().all(|card| card.is_selected));
+    bytes.pop();
+    assert!(SelectUnselectMessageData::try_from(bytes.as_slice()).is_err());
+}
+
+#[test]
+fn parses_large_idle_lists_and_skips_position_records() {
+    let mut bytes = vec![0, 0, 0, 0, MSG_SELECT_IDLECMD as u8, 0];
+    bytes.extend_from_slice(&101u32.to_le_bytes());
+    for sequence in 0..101u32 {
+        bytes.extend_from_slice(&42u32.to_le_bytes());
+        bytes.extend_from_slice(&[0, crate::ocgcore::constants::CardLocation::Hand as u8]);
+        bytes.extend_from_slice(&sequence.to_le_bytes());
+    }
+    bytes.extend_from_slice(&0u32.to_le_bytes());
+    bytes.extend_from_slice(&1u32.to_le_bytes());
+    bytes.extend_from_slice(&[1, 0, 0, 0, 0, 4, 3]);
+    bytes.extend_from_slice(&1u32.to_le_bytes());
+    bytes.extend_from_slice(&77u32.to_le_bytes());
+    bytes.extend_from_slice(&[0, crate::ocgcore::constants::CardLocation::Hand as u8]);
+    bytes.extend_from_slice(&2u32.to_le_bytes());
+    bytes.extend_from_slice(&0u32.to_le_bytes());
+    bytes.extend_from_slice(&1u32.to_le_bytes());
+    bytes.extend_from_slice(&99u32.to_le_bytes());
+    bytes.extend_from_slice(&[0, crate::ocgcore::constants::CardLocation::Graveyard as u8]);
+    bytes.extend_from_slice(&3u32.to_le_bytes());
+    bytes.extend_from_slice(&0x123456u64.to_le_bytes());
+    bytes.push(0);
+    bytes.extend_from_slice(&[0, 1, 0]);
+    let length = (bytes.len() - 4) as u32;
+    bytes[..4].copy_from_slice(&length.to_le_bytes());
+
+    let CoreMessage::Idle(idle) = CoreMessage::try_from(bytes.as_slice()).unwrap() else {
+        panic!("Expected idle message");
+    };
+    assert_eq!(idle.normal_summons.len(), 101);
+    assert_eq!(idle.normal_summons[100].action_index, Some(100));
+    assert_eq!(idle.monster_sets[0].card_code, 77);
+    assert_eq!(idle.activatable_effects[0].description, Some(0x23456));
+    assert_eq!(idle.activatable_effects[0].sequence, 3);
+    for end in 0..bytes.len() {
+        assert!(CoreMessage::try_from(&bytes[..end]).is_err());
+    }
+}
+
+#[test]
 fn parses_framed_messages_in_order() {
     let bytes = [1, 0, 0, 0, 255, 3, 0, 0, 0, 41, 1, 0, 3, 0, 0, 0, 41, 0, 2];
     assert_eq!(

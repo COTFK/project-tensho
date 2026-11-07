@@ -1,3 +1,4 @@
+use anyhow::Context;
 use dioxus::prelude::*;
 use rand::seq::SliceRandom;
 use std::future::pending;
@@ -5,7 +6,6 @@ use std::future::pending;
 use crate::define_ui_state;
 use crate::ocgcore::CardData;
 use crate::ocgcore::Duel;
-use crate::ocgcore::HandCard;
 use crate::ocgcore::OCGCore;
 use crate::ocgcore::Response;
 use crate::ocgcore::Zone;
@@ -22,9 +22,8 @@ use crate::ocgcore::messages::SelectTributeMessageData;
 use crate::ocgcore::messages::SelectUnselectMessageData;
 use crate::ocgcore::messages::SortCardMessageData;
 use crate::settings::CustomHand;
+use crate::ui::card_animation::{CardAnimationState, movements};
 use crate::ui::card_layer::{CardAddress, CardId, CardLayer, CardPlacement};
-use crate::ui::card_playback::{CardPlayback, movements};
-use crate::ui::card_tracking::CardTracking;
 use crate::utility::ARCHETYPE_SCRIPT;
 use crate::utility::EXTRA_DECK_IDS;
 use crate::utility::MAIN_DECK_IDS;
@@ -36,115 +35,60 @@ use crate::utility::get_card_label;
 use crate::utility::store_card_data;
 use ocgcore_ffi::enums::OCG_DuelStatus;
 
-#[derive(Hash, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct SelectedCard {
-    pub location: CardLocation,
-    pub index: usize,
-    card_id: Option<CardId>,
-}
-
-impl SelectedCard {
-    pub fn matches(self, address: CardAddress) -> bool {
-        address.controller == Player::Player
-            && self.location == address.location
-            && u32::try_from(self.index) == Ok(address.sequence)
-    }
-}
-
 pub(crate) fn select_card(address: CardAddress) {
     let mut state = consume_context::<UIState>();
-    if try_consume_context::<Signal<CardPlayback>>()
-        .is_some_and(|playback| playback.peek().blocked())
-    {
+    if state.interaction_blocked(try_consume_context::<Signal<CardAnimationState>>()) {
         tracing::warn!("Ignoring card selection during animation");
         return;
     }
-    let tracking = consume_context::<Signal<Option<CardTracking>>>();
+    let tracking = state.cards;
     let card_id = match &*tracking.peek() {
-        Some(CardTracking::Active(layer)) => match layer.card_at(address) {
-            Some(card) => Some(card.id),
+        Some(layer) => match layer.card_at(address) {
+            Some(card) => card.id,
             None => {
                 tracing::error!("Cannot select untracked card at {address:?}");
                 return;
             }
         },
-        Some(CardTracking::Failed(_)) => {
-            tracing::warn!("Ignoring selection after card tracking failed");
-            return;
-        }
         None => {
             tracing::error!("Cannot select a card without an active tracker");
             return;
         }
     };
-    let Ok(index) = usize::try_from(address.sequence) else {
-        tracing::error!("Card sequence is too large to select: {}", address.sequence);
-        return;
-    };
-    state.selected_card.set(Some(SelectedCard {
-        location: address.location,
-        index,
-        card_id,
-    }));
+    state.selected_card.set(Some(card_id));
 }
 
-fn reconcile_selected_card(state: &mut UIState, tracking: &CardTracking) {
-    let Some(selected) = *state.selected_card.peek() else {
+fn reconcile_selected_card(state: &mut UIState, layer: &CardLayer) {
+    let Some(id) = *state.selected_card.peek() else {
         return;
     };
-    let Some(id) = selected.card_id else {
-        return;
-    };
-    let CardTracking::Active(layer) = tracking else {
+    if !layer.card_by_id(id).is_some_and(|card| {
+        matches!(card.placement, CardPlacement::Zone(address) if address.controller == Player::Player)
+    }) {
         state.selected_card.set(None);
-        return;
-    };
-    let address = layer.card_by_id(id).and_then(|card| match card.placement {
-        CardPlacement::Zone(address) if address.controller == Player::Player => Some(address),
-        _ => None,
-    });
-    match address {
-        Some(address) if !selected.matches(address) => match usize::try_from(address.sequence) {
-            Ok(index) => state.selected_card.set(Some(SelectedCard {
-                location: address.location,
-                index,
-                card_id: Some(id),
-            })),
-            Err(error) => {
-                tracing::error!("Selected card sequence is invalid: {error}");
-                state.selected_card.set(None);
-            }
-        },
-        Some(_) => {}
-        None => state.selected_card.set(None),
     }
 }
 
 define_ui_state!(UIState {
-    main_deck_length: u32,
+    cards: Option<CardLayer>,
     current_phase: Option<Phase>,
-    extra_deck: Vec<Option<CardData>>,
-    hand_contents: Vec<HandCard>,
-    selected_card: Option<SelectedCard>,
+    selected_card: Option<CardId>,
     normal_summons: Vec<CardData>,
     special_summons: Vec<CardData>,
     monster_sets: Vec<CardData>,
     spell_trap_sets: Vec<CardData>,
     activatable_effects: Vec<CardData>,
     waiting_on_input: bool,
-    monsters: Vec<Option<CardData>>,
-    spell_traps: Vec<Option<CardData>>,
-    graveyard: Vec<Option<CardData>>,
-    banishment: Vec<Option<CardData>>,
+    duel_finished: bool,
+    restarting: bool,
+    failure: Option<String>,
     card_prompting_to_activate: Vec<CardData>,
     selectables: Option<SelectCardMessageData>,
     sort_cards_to_select_from: Option<SortCardMessageData>,
     yes_no_question: Option<String>,
     available_zones: Vec<Zone>,
     positions_to_select: Vec<BattlePosition>,
-    show_graveyard: bool,
-    show_banishment: bool,
-    show_extra_deck: bool,
+    open_pile: Option<CardLocation>,
     effects_to_select_from: Vec<CardData>,
     cards_to_select_from: Option<SelectUnselectMessageData>,
     tributes: Option<SelectTributeMessageData>,
@@ -155,58 +99,41 @@ define_ui_state!(UIState {
 
 pub fn run_game_loop() {
     let state = consume_context::<UIState>();
-    let playback = try_consume_context::<Signal<CardPlayback>>();
-    let tracking = consume_context::<Signal<Option<CardTracking>>>();
-    if stop_failed_tracking(tracking, playback) {
-        return;
-    }
-    if playback.is_some_and(|playback| {
-        let playback = playback();
-        playback.blocked() || playback.finished
-    }) || (state.waiting_on_input)()
+    let playback = try_consume_context::<Signal<CardAnimationState>>();
+    let tracking = state.cards;
+    if state.interaction_blocked(playback) || (state.duel_finished)() || (state.waiting_on_input)()
     {
         return;
     }
     let duel = consume_context::<Signal<Option<Duel>>>();
     let duel = duel().expect("Duel context missing active duel");
+    let mut duel_finished = state.duel_finished;
     process_until_input(
         || {
             let status = duel.process();
             if status == OCG_DuelStatus::OCG_DUEL_STATUS_END {
-                if let Some(mut playback) = playback {
-                    playback.write().finished = true;
-                }
+                duel_finished.set(true);
             }
             status
         },
         || {
-            let before = if playback.is_some_and(|playback| {
-                let playback = playback.peek();
-                !playback.reduced_motion
-            }) {
+            let before = if playback.is_some() {
                 match &*tracking.peek() {
-                    Some(CardTracking::Active(layer)) => Some(layer.clone()),
+                    Some(layer) => Some(layer.clone()),
                     _ => None,
                 }
             } else {
                 None
             };
-            let piles = before.as_ref().map(|_| {
-                [
-                    state.extra_deck.peek().clone(),
-                    state.graveyard.peek().clone(),
-                    state.banishment.peek().clone(),
-                ]
-            });
             let waiting = handle_core_message();
-            if playback.is_some_and(|playback| playback.peek().blocked()) {
+            if state.interaction_blocked(playback) {
                 return true;
             }
-            if let (Some(before), Some(piles), Some(mut playback)) = (before, piles, playback) {
-                if let Some(CardTracking::Active(after)) = &*tracking.peek() {
+            if let (Some(before), Some(mut playback)) = (before, playback) {
+                if let Some(after) = &*tracking.peek() {
                     let moving = movements(&before, after);
                     if !moving.is_empty() {
-                        playback.write().begin(moving, before, piles);
+                        playback.write().begin(moving, before);
                         return true;
                     }
                 }
@@ -232,9 +159,7 @@ fn process_until_input(
 pub fn handle_right_click(evt: MouseEvent) {
     evt.prevent_default();
     let mut state = consume_context::<UIState>();
-    if try_consume_context::<Signal<CardPlayback>>()
-        .is_some_and(|playback| playback.peek().blocked())
-    {
+    if state.interaction_blocked(try_consume_context::<Signal<CardAnimationState>>()) {
         return;
     }
 
@@ -255,17 +180,7 @@ pub fn handle_right_click(evt: MouseEvent) {
         send_response(Response::No);
     }
 
-    if (state.show_graveyard)() {
-        state.show_graveyard.set(false);
-    }
-
-    if (state.show_extra_deck)() {
-        state.show_extra_deck.set(false);
-    }
-
-    if (state.show_banishment)() {
-        state.show_banishment.set(false);
-    }
+    state.open_pile.set(None);
 
     if (state.tributes)().is_some_and(|message| message.is_cancelable) {
         send_response(Response::PassPriority);
@@ -387,16 +302,8 @@ pub(crate) async fn load_duel(
 
 pub fn send_response(response: Response) {
     let mut state = consume_context::<UIState>();
-    if try_consume_context::<Signal<CardPlayback>>()
-        .is_some_and(|playback| playback.peek().blocked())
-    {
+    if state.interaction_blocked(try_consume_context::<Signal<CardAnimationState>>()) {
         tracing::warn!("Ignoring response during card animation");
-        return;
-    }
-    if try_consume_context::<Signal<Option<CardTracking>>>()
-        .is_some_and(|tracking| matches!(&*tracking.peek(), Some(CardTracking::Failed(_))))
-    {
-        tracing::warn!("Ignoring response after card tracking failed");
         return;
     }
     if !*state.waiting_on_input.peek() {
@@ -411,6 +318,72 @@ pub fn send_response(response: Response) {
 }
 
 impl UIState {
+    pub(crate) fn interaction_blocked(&self, playback: Option<Signal<CardAnimationState>>) -> bool {
+        (self.restarting)()
+            || (self.failure)().is_some()
+            || playback.is_some_and(|playback| playback().active)
+    }
+
+    pub(crate) fn fail(&mut self, error: String, playback: Option<Signal<CardAnimationState>>) {
+        if self.failure.peek().is_none() {
+            if let Some(mut playback) = playback {
+                playback.write().cancel();
+            }
+            self.failure.set(Some(error));
+        }
+    }
+
+    fn tracking_failed(&mut self, error: String, playback: Option<Signal<CardAnimationState>>) {
+        tracing::error!("{error}");
+        self.cards.set(None);
+        self.selected_card.set(None);
+        self.fail(error, playback);
+    }
+
+    fn apply_card_message(
+        &mut self,
+        message: &CoreMessage,
+        playback: Option<Signal<CardAnimationState>>,
+    ) -> bool {
+        if self.interaction_blocked(playback) {
+            return false;
+        }
+        let mut cards = self.cards;
+        let result = cards.with_mut(|tracking| {
+            let layer = tracking
+                .as_mut()
+                .expect("Card tracking missing for active duel");
+            layer.apply(message)?;
+            reconcile_selected_card(self, layer);
+            Ok::<_, anyhow::Error>(())
+        });
+        if let Err(error) = result {
+            self.tracking_failed(
+                format!("Card tracking failed for {message:?}: {error:#}"),
+                playback,
+            );
+            return false;
+        }
+        true
+    }
+
+    pub(crate) fn is_selected(&self, address: CardAddress) -> bool {
+        let selected = (self.selected_card)();
+        match &*(self.cards).read() {
+            Some(cards) => cards
+                .card_at(address)
+                .is_some_and(|card| Some(card.id) == selected),
+            _ => false,
+        }
+    }
+
+    pub(crate) fn zone_data(&self, location: CardLocation) -> Option<Vec<Option<CardData>>> {
+        match &*self.cards.read() {
+            Some(cards) => cards.zone_data(location),
+            _ => None,
+        }
+    }
+
     pub fn clear_pending_input(&mut self) {
         self.selected_card.set(None);
         self.normal_summons.set(Vec::new());
@@ -425,9 +398,7 @@ impl UIState {
         self.yes_no_question.set(None);
         self.available_zones.set(Vec::new());
         self.positions_to_select.set(Vec::new());
-        self.show_graveyard.set(false);
-        self.show_banishment.set(false);
-        self.show_extra_deck.set(false);
+        self.open_pile.set(None);
         self.effects_to_select_from.set(Vec::new());
         self.cards_to_select_from.set(None);
         self.tributes.set(None);
@@ -441,88 +412,18 @@ pub fn handle_core_message() -> bool {
     let mut state = consume_context::<UIState>();
     let duel = consume_context::<Signal<Option<Duel>>>();
     let duel = duel().expect("Duel context missing active duel");
-    let mut tracking = consume_context::<Signal<Option<CardTracking>>>();
-    let playback = try_consume_context::<Signal<CardPlayback>>();
+    let mut tracking = state.cards;
+    let playback = try_consume_context::<Signal<CardAnimationState>>();
+    if state.interaction_blocked(playback) {
+        return true;
+    }
 
-    state.hand_contents.set(duel.get_raw_hand());
     for message in duel.parse_messages() {
-        tracking.with_mut(|tracking| {
-            let tracking = tracking
-                .as_mut()
-                .expect("Card tracking missing for active duel");
-            tracking.apply(&message);
-            reconcile_selected_card(&mut state, tracking);
-        });
-        if stop_failed_tracking(tracking, playback) {
-            break;
+        tracing::trace!("Received core message: {message:?}");
+        if !state.apply_card_message(&message, playback) {
+            return true;
         }
         match message {
-            CoreMessage::Unsupported(_) | CoreMessage::NewTurn | CoreMessage::Win(_) => {}
-            CoreMessage::Hint(message) => tracing::trace!("Received hint: {message:?}"),
-            CoreMessage::BecomeTarget(message) => {
-                tracing::trace!("Received become target: {message:?}")
-            }
-            CoreMessage::CardHint(message) => tracing::trace!("Received card hint: {message:?}"),
-            CoreMessage::CardSelected(message) => {
-                tracing::trace!("Received card selected: {message:?}")
-            }
-            CoreMessage::ConfirmCards(message) => {
-                tracing::trace!("Received confirm cards: {message:?}")
-            }
-            CoreMessage::ConfirmDeckTop(message) => {
-                tracing::trace!("Received confirm deck top: {message:?}")
-            }
-            CoreMessage::ConfirmExtraTop(message) => {
-                tracing::trace!("Received confirm extra top: {message:?}")
-            }
-            CoreMessage::ReverseDeck => tracing::trace!("Received reverse deck"),
-            CoreMessage::DeckTop(message) => tracing::trace!("Received deck top: {message:?}"),
-            CoreMessage::SwapGraveDeck(message) => {
-                tracing::trace!("Received graveyard-deck exchange: {message:?}")
-            }
-            CoreMessage::ShuffleDeck(message) => {
-                tracing::trace!("Received shuffle deck: {message:?}")
-            }
-            CoreMessage::ShuffleHand(message) => {
-                tracing::trace!("Received shuffle hand: {message:?}")
-            }
-            CoreMessage::ShuffleExtra(message) => {
-                tracing::trace!("Received shuffle extra: {message:?}")
-            }
-            CoreMessage::ShuffleSetCard(message) => {
-                tracing::trace!("Received shuffle set card: {message:?}")
-            }
-            CoreMessage::Move(message) => tracing::trace!("Received move: {message:?}"),
-            CoreMessage::Swap(message) => tracing::trace!("Received swap: {message:?}"),
-            CoreMessage::RemoveCards(message) => {
-                tracing::trace!("Received remove cards: {message:?}")
-            }
-            CoreMessage::PositionChange(message) => {
-                tracing::trace!("Received position change: {message:?}")
-            }
-            CoreMessage::SetCard(message) => tracing::trace!("Received set card: {message:?}"),
-            CoreMessage::Summoning(message) => tracing::trace!("Received summoning: {message:?}"),
-            CoreMessage::SpecialSummoning(message) => {
-                tracing::trace!("Received special summoning: {message:?}")
-            }
-            CoreMessage::FlipSummoning(message) => {
-                tracing::trace!("Received flip summoning: {message:?}")
-            }
-            CoreMessage::Summoned => tracing::trace!("Received summoned"),
-            CoreMessage::SpecialSummoned => tracing::trace!("Received special summoned"),
-            CoreMessage::FlipSummoned => tracing::trace!("Received flip summoned"),
-            CoreMessage::Chaining(message) => tracing::trace!("Received chaining: {message:?}"),
-            CoreMessage::Chained(message) => tracing::trace!("Received chained: {message:?}"),
-            CoreMessage::ChainSolving(message) => {
-                tracing::trace!("Received chain solving: {message:?}")
-            }
-            CoreMessage::ChainSolved(message) => {
-                tracing::trace!("Received chain solved: {message:?}")
-            }
-            CoreMessage::ChainDisabled(message) => {
-                tracing::trace!("Received chain disabled: {message:?}")
-            }
-            CoreMessage::ChainEnd => tracing::trace!("Received chain end"),
             CoreMessage::Retry => {
                 panic!("Received Retry - this shouldn't happen.");
             }
@@ -602,56 +503,58 @@ pub fn handle_core_message() -> bool {
                 state.sort_cards_to_select_from.set(Some(message));
                 state.waiting_on_input.set(true);
             }
-            CoreMessage::Draw(_) => {}
+            _ => {}
         }
     }
 
-    tracking.with_mut(|tracking| {
-        let tracking = tracking
+    let result = tracking.with_mut(|tracking| {
+        let layer = tracking
             .as_mut()
             .expect("Card tracking missing for active duel");
-        tracking.reconcile(&duel);
-        reconcile_selected_card(&mut state, tracking);
+        refresh_data(layer, &duel)?;
+        reconcile_selected_card(&mut state, layer);
+        Ok::<_, anyhow::Error>(())
     });
-    stop_failed_tracking(tracking, playback);
+    if let Err(error) = result {
+        state.tracking_failed(format!("Cannot refresh card data: {error:#}"), playback);
+        return true;
+    }
 
-    state
-        .main_deck_length
-        .set(duel.count_location(Player::Player, CardLocation::Deck));
-    state
-        .extra_deck
-        .set(duel.get_cards(CardLocation::ExtraDeck));
-    state
-        .monsters
-        .set(duel.get_cards(CardLocation::MonsterZone));
-    state
-        .spell_traps
-        .set(duel.get_cards(CardLocation::SpellTrapZone));
-    state.graveyard.set(duel.get_cards(CardLocation::Graveyard));
-    state
-        .banishment
-        .set(duel.get_cards(CardLocation::Banishment));
     (state.waiting_on_input)()
 }
 
-fn stop_failed_tracking(
-    tracking: Signal<Option<CardTracking>>,
-    playback: Option<Signal<CardPlayback>>,
-) -> bool {
-    let error = match &*tracking.peek() {
-        Some(CardTracking::Failed(error)) => Some(error.clone()),
-        _ => None,
-    };
-    if let Some(error) = error {
-        if let Some(mut playback) = playback {
-            if playback.peek().failure.is_none() {
-                playback.write().fail(error);
+fn refresh_data(layer: &mut CardLayer, duel: &Duel) -> anyhow::Result<()> {
+    let player = Player::Player;
+    for location in [
+        CardLocation::Deck,
+        CardLocation::Hand,
+        CardLocation::MonsterZone,
+        CardLocation::SpellTrapZone,
+        CardLocation::Graveyard,
+        CardLocation::Banishment,
+        CardLocation::ExtraDeck,
+    ] {
+        let core_cards = duel
+            .query_cards(player, location)
+            .with_context(|| format!("Cannot query {player:?} {location}"))?;
+        for card in layer.cards_mut() {
+            let CardPlacement::Zone(address) = card.placement else {
+                continue;
+            };
+            if address.controller != player || address.location != location {
+                continue;
             }
+            let data = core_cards
+                .get(address.sequence as usize)
+                .and_then(|card| *card)
+                .with_context(|| format!("No queried card at {address:?}"))?;
+            if location == CardLocation::Graveyard && data.card_code != 0 {
+                card.code = data.card_code;
+            }
+            card.data = Some(data);
         }
-        true
-    } else {
-        false
     }
+    Ok(())
 }
 
 #[cfg(test)]

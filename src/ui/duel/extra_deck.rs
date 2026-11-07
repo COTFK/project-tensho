@@ -21,7 +21,9 @@ pub fn ExtraDeck() -> Element {
     let has_summons = available_special_summons
         .iter()
         .any(|card| card.location == CardLocation::ExtraDeck);
-    let has_cards = state.extra_deck.len() > 0;
+    let has_cards = state
+        .zone_data(CardLocation::ExtraDeck)
+        .is_some_and(|cards| !cards.is_empty());
 
     // Disable if effect selection modal is active
     let suppress_actions = !state.effects_to_select_from.is_empty();
@@ -31,9 +33,7 @@ pub fn ExtraDeck() -> Element {
             class: "relative bg-slate-50/2 {ZONE_SIZE} aspect-square flex items-center justify-center border-0.5",
             class: if has_cards {"hover:outline-4 hover:outline-yellow-300"},
             onclick: move |_| if has_cards {
-                state.show_extra_deck.set(true);
-                state.show_banishment.set(false);
-                state.show_graveyard.set(false);
+                state.open_pile.set(Some(CardLocation::ExtraDeck));
             },
             if has_cards {
                 div {
@@ -51,20 +51,20 @@ pub fn ExtraDeck() -> Element {
 #[component]
 pub fn ExtraDeckModal() -> Element {
     let state = use_context::<UIState>();
-    let extra_deck = state.extra_deck;
+    let extra_deck = state.zone_data(CardLocation::ExtraDeck).unwrap_or_default();
     let available_special_summons = (state.special_summons)();
-    let mut show_extra_deck = state.show_extra_deck;
+    let mut open_pile = state.open_pile;
 
     let mut selected_card = use_signal(|| None);
 
     rsx!(
         PickerModal {
             title: "Extra Deck",
-            trigger: show_extra_deck(),
+            trigger: open_pile() == Some(CardLocation::ExtraDeck),
             div {
                 class: "flex flex-row min-w-[40vw] w-full max-w-[77vw] h-max gap-0.5 px-2",
                 class: "overflow-x-auto scroll-smooth scrollbar-thin",
-                for (index, card) in extra_deck().iter().enumerate() {
+                for (index, card) in extra_deck.iter().enumerate() {
                     {
                         let card = (*card).unwrap();
                         let special_summon_index = available_special_summons
@@ -103,7 +103,7 @@ pub fn ExtraDeckModal() -> Element {
                                                 send_response(Response::SpecialSummon { index: special_summon_index });
                                             }
                                             selected_card.set(None);
-                                            show_extra_deck.set(false);
+                                            open_pile.set(None);
                                         },
                                         SummonIcon {  }
                                     }
@@ -117,7 +117,7 @@ pub fn ExtraDeckModal() -> Element {
             OptionButton {
                 label: "Close",
                 onclick: move |_| {
-                    show_extra_deck.set(false);
+                    open_pile.set(None);
                     selected_card.set(None);
                 },
                 additional_classes: "bg-green-600/70"

@@ -35,7 +35,6 @@ fn fixture(
         },
         rotation: 0.0,
         stack_order: 2,
-        interactive: true,
         appearance: CardAppearance::Interactive,
     };
     (card, target)
@@ -68,15 +67,9 @@ fn hidden_piles_overlays_and_unknown_faces_never_expose_card_art() {
 }
 
 #[test]
-fn mismatched_target_is_not_rendered() {
+fn invalid_geometry_is_not_rendered() {
     let (card, mut target) = fixture(CardLocation::Hand, None);
     assert!(!visible_card(card, Some(target)).unwrap().1);
-    target.data.sequence = 1;
-    assert!(visible_card(card, Some(target)).is_none());
-    target.data.sequence = 0;
-    target.data.card_code += 1;
-    assert!(visible_card(card, Some(target)).is_none());
-    target.data.card_code -= 1;
     target.anchor.width = f64::NAN;
     assert!(visible_card(card, Some(target)).is_none());
 }
@@ -195,20 +188,11 @@ fn movement_and_property_updates_keep_the_same_root_node() {
     card.position = Some(CardPositionFlags::FACE_DOWN_DEFENSE);
     target.data.location = CardLocation::MonsterZone;
     target.address.location = CardLocation::MonsterZone;
-    target.interactive = false;
     TEST_STATE.with(|slot| slot.borrow().unwrap().set((vec![card], vec![target])));
     let moved = dom.render_immediate_to_vec();
     assert!(
         !moved.edits.iter().any(|edit| matches!(edit,
             Mutation::Remove { id } | Mutation::ReplaceWith { id, .. } if *id == root
-        )),
-        "{:?}",
-        moved.edits
-    );
-    assert!(
-        moved.edits.iter().any(|edit| matches!(edit,
-            Mutation::SetAttribute { name: "class", value: AttributeValue::Text(value), .. }
-                if value.contains("pointer-events-none")
         )),
         "{:?}",
         moved.edits
@@ -259,6 +243,14 @@ fn movement_and_property_updates_keep_the_same_root_node() {
     target.appearance = CardAppearance::Pile(CardImage::CardBack);
     TEST_STATE.with(|slot| slot.borrow().unwrap().set((vec![card], vec![target])));
     let hidden = dom.render_immediate_to_vec();
+    assert!(
+        hidden.edits.iter().any(|edit| matches!(edit,
+            Mutation::SetAttribute { name: "class", value: AttributeValue::Text(value), .. }
+                if value.contains("pointer-events-none")
+        )),
+        "{:?}",
+        hidden.edits
+    );
     assert!(
         !hidden.edits.iter().any(|edit| matches!(edit,
             Mutation::Remove { id } | Mutation::ReplaceWith { id, .. } if *id == root

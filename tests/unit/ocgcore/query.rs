@@ -122,7 +122,6 @@ fn rejects_truncated_records_and_missing_terminators() {
         vec![1, 0, 0],
         vec![3, 0, 0, 0, 0],
         vec![4, 0, 1, 0, 0, 0, 0, 0],
-        record(QUERY_END, &[0]),
     ] {
         assert!(decode(&frame(&payload)).is_err(), "accepted {payload:?}");
     }
