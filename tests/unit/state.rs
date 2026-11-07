@@ -75,9 +75,15 @@ fn card_layer_initializer_matches_native_decks_and_custom_hand() {
         );
     }
     duel.start();
+    let mut tracking = CardTracking::Active(layer);
     for _ in 0..1000 {
         let status = duel.process();
         let messages = duel.parse_messages();
+        for message in &messages {
+            tracking.apply(message);
+        }
+        tracking.reconcile(&duel);
+        assert!(matches!(tracking, CardTracking::Active(_)), "{tracking:?}");
         if messages
             .iter()
             .any(|message| matches!(message, CoreMessage::Draw(_)))
@@ -167,6 +173,8 @@ fn handles_real_duel_messages_until_input() {
         duel.start();
         let state = use_context_provider(UIState::default);
         use_context_provider(|| Signal::new(Some(duel.clone())));
+        let tracking =
+            use_context_provider(|| Signal::new(Some(CardTracking::Active(CardLayer::default()))));
 
         let mut phases = Vec::new();
         for _ in 0..1000 {
@@ -183,8 +191,44 @@ fn handles_real_duel_messages_until_input() {
             assert_ne!(status, OCG_DuelStatus::OCG_DUEL_STATUS_END);
         }
         assert!((state.waiting_on_input)());
+        assert!(matches!(&*tracking.read(), Some(CardTracking::Active(_))));
         assert_eq!(phases, [Phase::Draw, Phase::Standby, Phase::Main1]);
         rsx! {}
+    }
+
+    let mut dom = VirtualDom::new(app);
+    dom.rebuild_in_place();
+}
+
+#[test]
+#[cfg(not(target_arch = "wasm32"))]
+fn legacy_processing_continues_when_tracking_has_failed() {
+    fn app() -> Element {
+        let core = futures::executor::block_on(OCGCore::load(
+            |_| panic!("Unexpected card lookup"),
+            Box::new(|_| None),
+            |_, _| {},
+        ))
+        .unwrap();
+        let duel = core.create_duel(5).unwrap();
+        duel.start();
+        let state = use_context_provider(UIState::default);
+        use_context_provider(|| Signal::new(Some(duel.clone())));
+        let tracking = use_context_provider(|| {
+            Signal::new(Some(CardTracking::Failed("test failure".to_owned())))
+        });
+        for _ in 0..1000 {
+            let status = duel.process();
+            if handle_core_message() {
+                assert!((state.waiting_on_input)());
+                assert!(
+                    matches!(&*tracking.read(), Some(CardTracking::Failed(error)) if error == "test failure")
+                );
+                return rsx! {};
+            }
+            assert_ne!(status, OCG_DuelStatus::OCG_DUEL_STATUS_END);
+        }
+        panic!("Duel did not reach an input prompt");
     }
 
     let mut dom = VirtualDom::new(app);

@@ -22,6 +22,8 @@ use crate::ocgcore::messages::SelectTributeMessageData;
 use crate::ocgcore::messages::SelectUnselectMessageData;
 use crate::ocgcore::messages::SortCardMessageData;
 use crate::settings::CustomHand;
+use crate::ui::card_layer::CardLayer;
+use crate::ui::card_tracking::CardTracking;
 use crate::utility::ARCHETYPE_SCRIPT;
 use crate::utility::EXTRA_DECK_IDS;
 use crate::utility::MAIN_DECK_IDS;
@@ -164,10 +166,16 @@ pub async fn load_core(scripts: Scripts) -> anyhow::Result<OCGCore> {
     .await
 }
 
-pub async fn load_duel(
+#[derive(Clone)]
+pub(crate) struct DuelSetup {
+    pub duel: Duel,
+    pub cards: CardLayer,
+}
+
+pub(crate) async fn load_duel(
     core_resource: Resource<anyhow::Result<OCGCore>>,
     custom_hand: Option<String>,
-) -> anyhow::Result<Duel> {
+) -> anyhow::Result<DuelSetup> {
     let core = core_resource
         .read()
         .as_ref()
@@ -201,6 +209,7 @@ pub async fn load_duel(
         main_deck.reverse();
     }
 
+    let cards = CardLayer::from_decks(&main_deck, &EXTRA_DECK_IDS)?;
     let duel = core.create_duel(starting_draw_count)?;
 
     for name in ["constant.lua", "utility.lua"] {
@@ -233,7 +242,7 @@ pub async fn load_duel(
 
     duel.start();
 
-    Ok(duel)
+    Ok(DuelSetup { duel, cards })
 }
 
 pub fn send_response(response: Response) {
@@ -273,9 +282,16 @@ pub fn handle_core_message() -> bool {
     let mut state = consume_context::<UIState>();
     let duel = consume_context::<Signal<Option<Duel>>>();
     let duel = duel().expect("Duel context missing active duel");
+    let mut tracking = consume_context::<Signal<Option<CardTracking>>>();
 
     state.hand_contents.set(duel.get_raw_hand());
     for message in duel.parse_messages() {
+        tracking.with_mut(|tracking| {
+            tracking
+                .as_mut()
+                .expect("Card tracking missing for active duel")
+                .apply(&message);
+        });
         match message {
             CoreMessage::Unsupported(_) | CoreMessage::NewTurn | CoreMessage::Win(_) => {}
             CoreMessage::Hint(message) => tracing::trace!("Received hint: {message:?}"),
@@ -497,6 +513,13 @@ pub fn handle_core_message() -> bool {
             CoreMessage::Draw(_) => {}
         }
     }
+
+    tracking.with_mut(|tracking| {
+        tracking
+            .as_mut()
+            .expect("Card tracking missing for active duel")
+            .reconcile(&duel);
+    });
 
     state
         .main_deck_length

@@ -118,6 +118,27 @@ fn confirmed(address: CardAddress, code: u32) -> ConfirmedCard {
 }
 
 #[test]
+fn validation_detects_duplicate_addresses_and_missing_pile_sequences() {
+    let mut layer = CardLayer::from_decks(&[1, 2], &[]).unwrap();
+    layer.cards[1].placement = layer.cards[0].placement;
+    assert!(
+        layer
+            .validate()
+            .unwrap_err()
+            .to_string()
+            .contains("Duplicate tracked card placement")
+    );
+    layer.cards[1].placement = CardPlacement::Zone(address(Player::Player, CardLocation::Deck, 2));
+    assert!(
+        layer
+            .validate()
+            .unwrap_err()
+            .to_string()
+            .contains("not contiguous")
+    );
+}
+
+#[test]
 fn exchanges_grave_and_deck_then_applies_the_shuffle_boundary() {
     let mut layer = CardLayer::from_decks(&[7, 7], &[30, 31]).unwrap();
     let at = |location, sequence| address(Player::Player, location, sequence);

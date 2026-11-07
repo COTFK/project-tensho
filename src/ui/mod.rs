@@ -3,6 +3,7 @@
     expect(dead_code, reason = "Prepared for card layer integration")
 )]
 pub(crate) mod card_layer;
+pub(crate) mod card_tracking;
 mod components;
 mod duel;
 mod loading;
