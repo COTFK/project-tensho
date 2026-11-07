@@ -321,7 +321,7 @@ fn failure_and_restart_block_input_and_cancel_playback() {
         let generation = playback.peek().generation;
         state.fail("layout failed".into(), Some(playback));
         assert_eq!(state.failure.peek().as_deref(), Some("layout failed"));
-        assert!(!playback.peek().active);
+        assert!(!playback.peek().is_active());
         assert!(state.interaction_blocked(Some(playback)));
         playback.write().finish(generation);
         assert!(state.interaction_blocked(Some(playback)));
@@ -513,7 +513,7 @@ fn layered_loop_pauses_on_a_real_draw_and_resumes_to_the_prompt() {
         let tracking = state.cards;
         let mut playback = use_context_provider(|| Signal::new(CardAnimationState::default()));
         run_game_loop();
-        assert!(playback.peek().active);
+        assert!(playback.peek().is_active());
         assert_eq!(playback.peek().moving.len(), 5);
         let paused = tracking.peek().clone();
         run_game_loop();
@@ -522,7 +522,7 @@ fn layered_loop_pauses_on_a_real_draw_and_resumes_to_the_prompt() {
         playback.write().finish(generation);
         for _ in 0..100 {
             run_game_loop();
-            if playback.peek().active {
+            if playback.peek().is_active() {
                 let generation = playback.peek().generation;
                 playback.write().finish(generation);
             } else if *state.waiting_on_input.peek() {
@@ -534,6 +534,93 @@ fn layered_loop_pauses_on_a_real_draw_and_resumes_to_the_prompt() {
             }
         }
         panic!("Duel did not reach a prompt");
+    }
+    let mut dom = VirtualDom::new(app);
+    dom.rebuild_in_place();
+    assert!(COMPLETED.with(|completed| completed.get()));
+}
+
+#[test]
+#[cfg(not(target_arch = "wasm32"))]
+fn layered_loop_starts_gathering_for_a_real_hand_shuffle() {
+    use ocgcore_ffi::constants::{TYPE_MONSTER, TYPE_NORMAL};
+    use ocgcore_ffi::types::OCG_CardData;
+
+    thread_local! {
+        static COMPLETED: Cell<bool> = const { Cell::new(false) };
+    }
+
+    fn card_data(code: u32) -> OCG_CardData {
+        static EMPTY_SETCODES: [u16; 1] = [0];
+        OCG_CardData {
+            code,
+            alias: 0,
+            setcodes: EMPTY_SETCODES.as_ptr().cast_mut(),
+            r#type: TYPE_MONSTER | TYPE_NORMAL,
+            level: 4,
+            attribute: 1,
+            race: 1,
+            attack: 1000,
+            defense: 1000,
+            lscale: 0,
+            rscale: 0,
+            link_marker: 0,
+        }
+    }
+
+    fn app() -> Element {
+        let core =
+            futures::executor::block_on(OCGCore::load(card_data, Box::new(|_| None), |_, _| {}))
+                .unwrap();
+        let duel = core.create_duel(5).unwrap();
+        let deck = [10; 40];
+        for code in deck {
+            duel.add_card(
+                Player::Player,
+                code,
+                Player::Player,
+                CardLocation::Deck,
+                0,
+                0,
+            );
+        }
+        core.load_script(
+            &duel,
+            br#"
+            local effect = Effect.GlobalEffect()
+            effect:SetType(0x0802)
+            effect:SetCode(1113)
+            effect:SetOperation(function() Duel.ShuffleHand(0) end)
+            Duel.RegisterEffect(effect, 0)
+            "#,
+            "hand-shuffle-test.lua",
+        )
+        .unwrap();
+        duel.start();
+        let mut state = use_context_provider(UIState::default);
+        use_context_provider(|| Signal::new(Some(duel)));
+        state
+            .cards
+            .set(Some(CardLayer::from_decks(&deck, &[]).unwrap()));
+        let mut playback = use_context_provider(|| Signal::new(CardAnimationState::default()));
+        for _ in 0..100 {
+            run_game_loop();
+            if playback.peek().phase
+                == crate::ui::card_animation::AnimationPhase::HandShuffleGathering
+            {
+                assert!(state.interaction_blocked(Some(playback)));
+                assert!(playback.peek().source.is_some());
+                COMPLETED.with(|completed| completed.set(true));
+                return rsx! {};
+            }
+            if playback.peek().is_active() {
+                let generation = playback.peek().generation;
+                playback.write().finish(generation);
+            } else if *state.waiting_on_input.peek() || *state.duel_finished.peek() {
+                break;
+            }
+        }
+        panic!("Duel did not animate the hand shuffle");
     }
     let mut dom = VirtualDom::new(app);
     dom.rebuild_in_place();
@@ -560,7 +647,7 @@ fn handles_real_duel_messages_until_input() {
         let mut phases = Vec::new();
         for _ in 0..1000 {
             let status = duel.process();
-            let waiting = handle_core_message();
+            let waiting = handle_core_messages(&duel.parse_messages());
             if let Some(phase) = (state.current_phase)() {
                 if phases.last() != Some(&phase) {
                     phases.push(phase);

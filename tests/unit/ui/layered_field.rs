@@ -645,3 +645,135 @@ fn incoming_graveyard_cards_do_not_replace_the_stationary_pile_image() {
         ))
     );
 }
+
+#[test]
+fn gathering_stacks_hand_targets_until_spread() {
+    let (_, anchors) = fixture();
+    let geometry = futures::executor::block_on(measure_field(&anchors)).unwrap();
+    let mut snapshot = PreviewSnapshot {
+        cards: CardLayer::default(),
+        selected: None,
+    };
+    for sequence in 0..3 {
+        snapshot
+            .cards
+            .insert(
+                CardAddress {
+                    controller: Player::Player,
+                    location: CardLocation::Hand,
+                    sequence,
+                },
+                10 + sequence,
+            )
+            .unwrap();
+    }
+
+    refresh_data(&mut snapshot);
+    let spread_anchors: Vec<_> = targets(&snapshot, &geometry)
+        .unwrap()
+        .iter()
+        .map(|target| target.anchor)
+        .collect();
+    let mut playback = CardAnimationState::default();
+    playback.begin_gather(vec![], snapshot.cards.clone());
+    let mut gathered = targets(&snapshot, &geometry).unwrap();
+    gather_hand(geometry.hand_base, &mut gathered, &playback);
+    assert!(
+        gathered
+            .iter()
+            .all(|target| { target.anchor == geometry.hand_base && target.rotation == 0.0 })
+    );
+    playback.advance(playback.generation, AnimationPhase::HandShuffleGathering);
+    playback.advance(playback.generation, AnimationPhase::HandShuffleStacking);
+    let mut spread = targets(&snapshot, &geometry).unwrap();
+    gather_hand(geometry.hand_base, &mut spread, &playback);
+    assert_eq!(
+        spread
+            .iter()
+            .map(|target| target.anchor)
+            .collect::<Vec<_>>(),
+        spread_anchors
+    );
+}
+
+#[test]
+fn shuffle_gathers_original_cards_then_spreads_shuffled_cards() {
+    use crate::ocgcore::messages::{CoreMessage, ShuffleCardsMessageData};
+
+    let (_, anchors) = fixture();
+    let geometry = futures::executor::block_on(measure_field(&anchors)).unwrap();
+    let mut before = PreviewSnapshot {
+        cards: CardLayer::default(),
+        selected: None,
+    };
+    for (sequence, code) in [10, 20].into_iter().enumerate() {
+        before
+            .cards
+            .insert(
+                CardAddress {
+                    controller: Player::Player,
+                    location: CardLocation::Hand,
+                    sequence: sequence as u32,
+                },
+                code,
+            )
+            .unwrap();
+    }
+    refresh_data(&mut before);
+    let mut after = before.clone();
+    after
+        .cards
+        .apply(&CoreMessage::ShuffleHand(ShuffleCardsMessageData {
+            player: Player::Player,
+            card_codes: vec![20, 10],
+        }))
+        .unwrap();
+    after
+        .cards
+        .insert(
+            CardAddress {
+                controller: Player::Player,
+                location: CardLocation::Hand,
+                sequence: 2,
+            },
+            30,
+        )
+        .unwrap();
+    refresh_data(&mut after);
+
+    let mut playback = CardAnimationState::default();
+    playback.begin_gather(vec![], before.cards.clone());
+    let mut cards = after.cards.cards().to_vec();
+    shuffle_source_cards(&mut cards, &playback);
+    assert_eq!(cards, before.cards.cards());
+    let mut gathered = targets(&after, &geometry).unwrap();
+    shuffle_source_targets(&mut gathered, geometry.hand_base, &playback).unwrap();
+    gather_hand(geometry.hand_base, &mut gathered, &playback);
+    assert_eq!(gathered.len(), 2);
+    for (target, card) in gathered.iter().zip(before.cards.cards()) {
+        assert_eq!(target.id, card.id);
+        assert_eq!(target.data.card_code, card.code);
+        assert_eq!(target.anchor, geometry.hand_base);
+    }
+
+    playback.advance(playback.generation, AnimationPhase::HandShuffleGathering);
+    let mut stacked = targets(&after, &geometry).unwrap();
+    gather_hand(geometry.hand_base, &mut stacked, &playback);
+    assert!(
+        stacked
+            .iter()
+            .all(|target| target.anchor == geometry.hand_base)
+    );
+    assert_eq!(
+        stacked
+            .iter()
+            .map(|target| target.data.card_code)
+            .collect::<Vec<_>>(),
+        vec![20, 10, 30]
+    );
+    playback.advance(playback.generation, AnimationPhase::HandShuffleStacking);
+    let spread = targets(&after, &geometry).unwrap();
+    assert_eq!(spread.len(), 3);
+    assert_ne!(spread[0].anchor, spread[1].anchor);
+    assert_ne!(spread[1].anchor, spread[2].anchor);
+}

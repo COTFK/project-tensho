@@ -121,7 +121,7 @@ pub(super) fn PersistentCardLayer(cards: Vec<TrackedCard>, targets: Vec<CardTarg
 #[component]
 fn LayerCard(card: TrackedCard, target: Option<CardTarget>) -> Element {
     let playback = try_consume_context::<Signal<CardAnimationState>>();
-    let animating = playback.is_some_and(|playback| playback().active);
+    let animating = playback.is_some_and(|playback| playback().is_active());
     let moving = playback.is_some_and(|playback| playback().moving.contains(&card.id));
     let visible = visible_card(card, target);
     let hand = matches!(card.placement, CardPlacement::Zone(address) if address.location == CardLocation::Hand);

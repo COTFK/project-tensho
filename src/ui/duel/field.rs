@@ -51,7 +51,7 @@ pub fn Field() -> Element {
 fn Zone(index: u8, location: CardLocation, card: Option<CardData>) -> Element {
     let state = use_context::<UIState>();
     let animating = try_consume_context::<Signal<CardAnimationState>>()
-        .is_some_and(|playback| playback().active);
+        .is_some_and(|playback| playback().is_active());
     let placeable_on = (state.available_zones)()
         .iter()
         .any(|zone| zone.location == location && zone.sequence == index);

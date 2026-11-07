@@ -22,7 +22,7 @@ use crate::ocgcore::messages::SelectTributeMessageData;
 use crate::ocgcore::messages::SelectUnselectMessageData;
 use crate::ocgcore::messages::SortCardMessageData;
 use crate::settings::CustomHand;
-use crate::ui::card_animation::{CardAnimationState, movements};
+use crate::ui::card_animation::{CardAnimationState, plan_animation};
 use crate::ui::card_layer::{CardAddress, CardId, CardLayer, CardPlacement};
 use crate::utility::ARCHETYPE_SCRIPT;
 use crate::utility::EXTRA_DECK_IDS;
@@ -125,15 +125,15 @@ pub fn run_game_loop() {
             } else {
                 None
             };
-            let waiting = handle_core_message();
+            let messages = duel.parse_messages();
+            let waiting = handle_core_messages(&messages);
             if state.interaction_blocked(playback) {
                 return true;
             }
             if let (Some(before), Some(mut playback)) = (before, playback) {
                 if let Some(after) = &*tracking.peek() {
-                    let moving = movements(&before, after);
-                    if !moving.is_empty() {
-                        playback.write().begin(moving, before);
+                    if let Some(animation) = plan_animation(&messages, &before, after) {
+                        animation.begin(&mut playback.write(), before);
                         return true;
                     }
                 }
@@ -321,7 +321,7 @@ impl UIState {
     pub(crate) fn interaction_blocked(&self, playback: Option<Signal<CardAnimationState>>) -> bool {
         (self.restarting)()
             || (self.failure)().is_some()
-            || playback.is_some_and(|playback| playback().active)
+            || playback.is_some_and(|playback| playback().is_active())
     }
 
     pub(crate) fn fail(&mut self, error: String, playback: Option<Signal<CardAnimationState>>) {
@@ -408,7 +408,7 @@ impl UIState {
     }
 }
 
-pub fn handle_core_message() -> bool {
+fn handle_core_messages(messages: &[CoreMessage]) -> bool {
     let mut state = consume_context::<UIState>();
     let duel = consume_context::<Signal<Option<Duel>>>();
     let duel = duel().expect("Duel context missing active duel");
@@ -418,7 +418,7 @@ pub fn handle_core_message() -> bool {
         return true;
     }
 
-    for message in duel.parse_messages() {
+    for message in messages.iter().cloned() {
         tracing::trace!("Received core message: {message:?}");
         if !state.apply_card_message(&message, playback) {
             return true;

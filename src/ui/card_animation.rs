@@ -1,4 +1,5 @@
 use crate::ocgcore::constants::{CardLocation, Player};
+use crate::ocgcore::messages::CoreMessage;
 use crate::ui::card_layer::{CardId, CardLayer, CardPlacement};
 use dioxus::prelude::*;
 
@@ -6,9 +7,19 @@ pub(crate) const ANIMATION_MILLIS: u32 = 300;
 // Allow the CSS transition to finish before unblocking input.
 const COMPLETION_MARGIN_MILLIS: u32 = 50;
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum AnimationPhase {
+    #[default]
+    Idle,
+    Moving,
+    HandShuffleGathering,
+    HandShuffleStacking,
+    HandShuffleSpreading,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct CardAnimationState {
-    pub active: bool,
+    pub phase: AnimationPhase,
     // Invalidates timers from cancelled or superseded animations.
     pub generation: u64,
     pub moving: Vec<CardId>,
@@ -17,9 +28,13 @@ pub(crate) struct CardAnimationState {
 }
 
 impl CardAnimationState {
+    pub fn is_active(&self) -> bool {
+        self.phase != AnimationPhase::Idle
+    }
+
     pub fn cancel(&mut self) {
         self.generation = self.generation.wrapping_add(1);
-        self.active = false;
+        self.phase = AnimationPhase::Idle;
         self.moving.clear();
         self.source = None;
     }
@@ -28,12 +43,40 @@ impl CardAnimationState {
         self.generation = self.generation.wrapping_add(1);
         self.moving = moving;
         self.source = Some(source);
-        self.active = true;
+        self.phase = AnimationPhase::Moving;
+    }
+
+    pub fn begin_gather(&mut self, mut moving: Vec<CardId>, source: CardLayer) {
+        moving.extend(source.cards().iter().filter_map(|card| {
+            matches!(card.placement, CardPlacement::Zone(address)
+                if address.controller == Player::Player && address.location == CardLocation::Hand)
+            .then_some(card.id)
+        }));
+        self.begin(moving, source);
+        self.phase = AnimationPhase::HandShuffleGathering;
+    }
+
+    pub(crate) fn advance(&mut self, generation: u64, phase: AnimationPhase) {
+        if self.generation != generation || self.phase != phase {
+            return;
+        }
+        match phase {
+            AnimationPhase::HandShuffleGathering => {
+                self.phase = AnimationPhase::HandShuffleStacking
+            }
+            AnimationPhase::HandShuffleStacking => {
+                self.phase = AnimationPhase::HandShuffleSpreading
+            }
+            AnimationPhase::Moving | AnimationPhase::HandShuffleSpreading => {
+                self.finish(generation)
+            }
+            AnimationPhase::Idle => {}
+        }
     }
 
     pub fn finish(&mut self, generation: u64) {
-        if self.active && self.generation == generation {
-            self.active = false;
+        if self.is_active() && self.generation == generation {
+            self.phase = AnimationPhase::Idle;
             self.moving.clear();
             self.source = None;
         }
@@ -66,7 +109,40 @@ fn visible(layer: &CardLayer, placement: CardPlacement) -> bool {
         )
 }
 
-pub(crate) fn movements(before: &CardLayer, after: &CardLayer) -> Vec<CardId> {
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum CardAnimation {
+    Movement(Vec<CardId>),
+    HandShuffle(Vec<CardId>),
+}
+
+impl CardAnimation {
+    pub fn begin(self, state: &mut CardAnimationState, source: CardLayer) {
+        match self {
+            Self::Movement(moving) => state.begin(moving, source),
+            Self::HandShuffle(moving) => state.begin_gather(moving, source),
+        }
+    }
+}
+
+pub(crate) fn plan_animation(
+    messages: &[CoreMessage],
+    before: &CardLayer,
+    after: &CardLayer,
+) -> Option<CardAnimation> {
+    let mut moving = movements(before, after);
+    if messages.iter().any(|message| {
+        matches!(message, CoreMessage::ShuffleHand(data)
+            if data.player == Player::Player && data.card_codes.len() > 1)
+    }) {
+        if let Some(shuffled) = reshuffled_hand(before, after) {
+            moving.extend(shuffled);
+            return Some(CardAnimation::HandShuffle(moving));
+        }
+    }
+    (!moving.is_empty()).then_some(CardAnimation::Movement(moving))
+}
+
+fn movements(before: &CardLayer, after: &CardLayer) -> Vec<CardId> {
     // Animate only cards visible at both ends of a transition.
     before
         .cards()
@@ -81,13 +157,41 @@ pub(crate) fn movements(before: &CardLayer, after: &CardLayer) -> Vec<CardId> {
         .collect()
 }
 
+fn reshuffled_hand(before: &CardLayer, after: &CardLayer) -> Option<Vec<CardId>> {
+    let hand = |layer: &CardLayer| {
+        layer
+            .cards()
+            .iter()
+            .filter(|card| {
+                matches!(card.placement, CardPlacement::Zone(address)
+                if address.controller == Player::Player && address.location == CardLocation::Hand)
+            })
+            .map(|card| card.id)
+            .collect::<Vec<_>>()
+    };
+    let old = hand(before);
+    let new = hand(after);
+    (old.len() > 1 && !new.is_empty() && old.iter().all(|id| after.card_by_id(*id).is_none()))
+        .then_some(new)
+}
+
 pub(crate) fn use_animation_completion(mut animation: Signal<CardAnimationState>) {
     use_effect(move || {
         let current = animation();
-        if current.active {
+        if current.is_active() {
             spawn(async move {
-                wait_for_animation().await;
-                animation.write().finish(current.generation);
+                if current.phase == AnimationPhase::HandShuffleStacking {
+                    // Give newly keyed cards a frame at the stack before spreading.
+                    wait_millis(COMPLETION_MARGIN_MILLIS).await;
+                } else {
+                    wait_for_animation().await;
+                }
+                let state = animation.peek();
+                let ready = state.generation == current.generation && state.phase == current.phase;
+                drop(state);
+                if ready {
+                    animation.write().advance(current.generation, current.phase);
+                }
             });
         }
     });

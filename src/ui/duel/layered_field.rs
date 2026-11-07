@@ -10,8 +10,8 @@ use crate::ocgcore::CardData;
 use crate::ocgcore::CardType;
 use crate::ocgcore::constants::{BattlePosition, CardLocation, Player};
 use crate::state::UIState;
-use crate::ui::card_animation::{CardAnimationState, wait_millis};
-use crate::ui::card_layer::{CardAddress, CardId, CardLayer, CardPlacement};
+use crate::ui::card_animation::{AnimationPhase, CardAnimationState, wait_millis};
+use crate::ui::card_layer::{Card, CardAddress, CardId, CardLayer, CardPlacement};
 use crate::ui::components::CardImage;
 
 #[derive(Clone, PartialEq)]
@@ -66,6 +66,78 @@ fn hand_position(
         f64::from(rotation),
         if selected { count } else { index },
     )
+}
+
+fn local_hand(card: &Card) -> bool {
+    matches!(card.placement, CardPlacement::Zone(address)
+        if address.controller == Player::Player && address.location == CardLocation::Hand)
+}
+
+fn shuffle_source_cards(cards: &mut Vec<Card>, playback: &CardAnimationState) {
+    if let Some(source) = playback
+        .source
+        .as_ref()
+        .filter(|_| playback.phase == AnimationPhase::HandShuffleGathering)
+    {
+        cards.retain(|card| !local_hand(card));
+        cards.extend(
+            source
+                .cards()
+                .iter()
+                .filter(|card| local_hand(card))
+                .copied(),
+        );
+    }
+}
+
+fn shuffle_source_targets(
+    targets: &mut Vec<CardTarget>,
+    base: CardAnchor,
+    playback: &CardAnimationState,
+) -> anyhow::Result<()> {
+    if let Some(source) = playback
+        .source
+        .as_ref()
+        .filter(|_| playback.phase == AnimationPhase::HandShuffleGathering)
+    {
+        targets.retain(|target| target.address.location != CardLocation::Hand);
+        for card in source.cards().iter().filter(|card| local_hand(card)) {
+            let CardPlacement::Zone(address) = card.placement else {
+                unreachable!()
+            };
+            targets.push(CardTarget {
+                id: card.id,
+                address,
+                anchor: base,
+                data: CardData {
+                    card_code: card.data.map_or(card.code, |data| data.card_code),
+                    controller: address.controller,
+                    location: address.location,
+                    sequence: u8::try_from(address.sequence)?,
+                    ..Default::default()
+                },
+                rotation: 0.0,
+                stack_order: 50 + i32::try_from(address.sequence)?,
+                appearance: CardAppearance::Interactive,
+            });
+        }
+    }
+    Ok(())
+}
+
+fn gather_hand(base: CardAnchor, targets: &mut [CardTarget], playback: &CardAnimationState) {
+    if matches!(
+        playback.phase,
+        AnimationPhase::HandShuffleGathering | AnimationPhase::HandShuffleStacking
+    ) {
+        for target in targets.iter_mut().filter(|target| {
+            target.address.controller == Player::Player
+                && target.address.location == CardLocation::Hand
+        }) {
+            target.anchor = base;
+            target.rotation = 0.0;
+        }
+    }
 }
 
 async fn measure_field(anchors: &LayoutAnchors) -> anyhow::Result<PreviewGeometry> {
@@ -132,7 +204,7 @@ fn preserve_pile_images(
     targets: &mut [CardTarget],
     playback: &CardAnimationState,
 ) -> anyhow::Result<()> {
-    let Some(source) = playback.source.as_ref().filter(|_| playback.active) else {
+    let Some(source) = playback.source.as_ref().filter(|_| playback.is_active()) else {
         return Ok(());
     };
     for location in [CardLocation::Graveyard, CardLocation::Banishment] {
@@ -423,7 +495,10 @@ pub(super) fn LayeredField(mut startup_ready: Signal<bool>) -> Element {
             targets(input, geometry)
                 .and_then(|mut targets| {
                     if let Some(playback) = playback {
-                        preserve_pile_images(input, &mut targets, &playback())?;
+                        let playback = playback();
+                        preserve_pile_images(input, &mut targets, &playback)?;
+                        shuffle_source_targets(&mut targets, geometry.hand_base, &playback)?;
+                        gather_hand(geometry.hand_base, &mut targets, &playback);
                     }
                     Ok(targets)
                 })
@@ -509,7 +584,7 @@ pub(super) fn LayeredField(mut startup_ready: Signal<bool>) -> Element {
                                 targets_ready,
                                 artwork_ready,
                                 waiting || finished,
-                                current.active,
+                                current.is_active(),
                             ) =>
                         {
                             startup_ready.set(true)
@@ -537,10 +612,13 @@ pub(super) fn LayeredField(mut startup_ready: Signal<bool>) -> Element {
         .and_then(|result| result.as_ref().ok())
         .cloned()
         .unwrap_or_default();
-    let cards = current
+    let mut cards = current
         .as_ref()
         .map(|snapshot| snapshot.cards.cards().to_vec())
         .unwrap_or_default();
+    if let Some(playback) = playback {
+        shuffle_source_cards(&mut cards, &playback());
+    }
     rsx! {
         Field {}
         Hand {}
