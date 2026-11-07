@@ -49,7 +49,6 @@ pub(super) enum AnchorPart {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-#[allow(dead_code, reason = "Consumed by the persistent card layer")]
 pub(super) struct CardAnchor {
     pub center_x: f64,
     pub center_y: f64,
@@ -57,7 +56,7 @@ pub(super) struct CardAnchor {
     pub height: f64,
 }
 
-#[allow(dead_code, reason = "Consumed by the persistent card layer")]
+#[allow(dead_code, reason = "The opt-in preview measures anchors")]
 impl CardAnchor {
     fn from_rects(center: PixelsRect, size: PixelsRect) -> anyhow::Result<Self> {
         ensure!(
@@ -103,7 +102,7 @@ impl LayoutAnchors {
         }
     }
 
-    #[allow(dead_code, reason = "Consumed by the persistent card layer")]
+    #[allow(dead_code, reason = "The opt-in preview measures anchors")]
     pub async fn measure(&self, address: CardAddress) -> anyhow::Result<CardAnchor> {
         let anchor = Anchor::try_from(address)?;
         let (center_key, size_key) = match anchor {
