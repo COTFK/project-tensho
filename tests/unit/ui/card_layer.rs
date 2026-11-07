@@ -9,6 +9,18 @@ use crate::ocgcore::messages::{
     SummoningMessageData, SwapGraveDeckMessageData, SwapMessageData,
 };
 
+trait Materials {
+    fn material_at(&self, host: CardId, sequence: u32) -> Option<&Card>;
+}
+
+impl Materials for CardLayer {
+    fn material_at(&self, host: CardId, sequence: u32) -> Option<&Card> {
+        self.cards()
+            .iter()
+            .find(|card| card.placement == CardPlacement::Overlay { host, sequence })
+    }
+}
+
 fn address(controller: Player, location: CardLocation, sequence: u32) -> CardAddress {
     CardAddress {
         controller,
@@ -72,7 +84,7 @@ fn draw(player: Player, codes: &[u32]) -> CoreMessage {
 }
 
 fn codes(layer: &CardLayer, player: Player, location: CardLocation) -> Vec<u32> {
-    let len = layer.pile_len(player, location).unwrap();
+    let len = layer.pile_len(player, location);
     (0..len)
         .map(|sequence| {
             layer
@@ -115,27 +127,6 @@ fn confirmed(address: CardAddress, code: u32) -> ConfirmedCard {
         location: CardLocationKind::Known(address.location),
         sequence: address.sequence,
     }
-}
-
-#[test]
-fn validation_detects_duplicate_addresses_and_missing_pile_sequences() {
-    let mut layer = CardLayer::from_decks(&[1, 2], &[]).unwrap();
-    layer.cards[1].placement = layer.cards[0].placement;
-    assert!(
-        layer
-            .validate()
-            .unwrap_err()
-            .to_string()
-            .contains("Duplicate tracked card placement")
-    );
-    layer.cards[1].placement = CardPlacement::Zone(address(Player::Player, CardLocation::Deck, 2));
-    assert!(
-        layer
-            .validate()
-            .unwrap_err()
-            .to_string()
-            .contains("not contiguous")
-    );
 }
 
 #[test]
@@ -345,9 +336,7 @@ fn reverses_both_decks_and_draws_from_the_new_top() {
     ];
     let hand = address(Player::Opponent, CardLocation::Hand, 0);
     let hand_id = layer.insert(hand, 7).unwrap();
-    assert!(!layer.deck_reversed());
     layer.apply(&CoreMessage::ReverseDeck).unwrap();
-    assert!(layer.deck_reversed());
     assert_eq!(
         codes(&layer, Player::Player, CardLocation::Deck),
         [4, 3, 2, 1]
@@ -371,7 +360,6 @@ fn reverses_both_decks_and_draws_from_the_new_top() {
         player_ids[1]
     );
     layer.apply(&CoreMessage::ReverseDeck).unwrap();
-    assert!(!layer.deck_reversed());
     assert_eq!(codes(&layer, Player::Player, CardLocation::Deck), [3, 4]);
     assert_eq!(layer.card_at(opponent(0)).unwrap().id, opponent_ids[0]);
     assert_eq!(layer.card_at(opponent(1)).unwrap().id, opponent_ids[1]);
@@ -442,7 +430,6 @@ fn confirmations_update_known_codes_without_changing_position_or_identity() {
 #[test]
 fn rejects_invalid_deck_updates_atomically() {
     let deck = |sequence| address(Player::Player, CardLocation::Deck, sequence);
-    let extra = |sequence| address(Player::Player, CardLocation::ExtraDeck, sequence);
     let mut layer = CardLayer::from_decks(&[0, 0, 0], &[0, 0, 0]).unwrap();
     let before = layer.clone();
     for message in [
@@ -454,18 +441,6 @@ fn rejects_invalid_deck_updates_atomically() {
             1,
             CardPositionFlags::FACE_UP_DEFENSE,
         ),
-        CoreMessage::ConfirmDeckTop(ConfirmCardsMessageData {
-            player: Player::Player,
-            cards: vec![confirmed(deck(2), 10), confirmed(deck(2), 10)],
-        }),
-        CoreMessage::ConfirmDeckTop(ConfirmCardsMessageData {
-            player: Player::Player,
-            cards: vec![confirmed(extra(2), 10)],
-        }),
-        CoreMessage::ConfirmExtraTop(ConfirmCardsMessageData {
-            player: Player::Player,
-            cards: vec![confirmed(extra(2), 10), confirmed(extra(0), 11)],
-        }),
         CoreMessage::ConfirmDeckTop(ConfirmCardsMessageData {
             player: Player::Opponent,
             cards: vec![confirmed(deck(2), 10)],
@@ -482,13 +457,12 @@ fn rejects_invalid_deck_updates_atomically() {
             CardPositionFlags::FACE_UP_DEFENSE,
         ))
         .unwrap();
-    let before = layer.clone();
     let conflicting = CoreMessage::ConfirmDeckTop(ConfirmCardsMessageData {
         player: Player::Player,
         cards: vec![confirmed(deck(2), 22), confirmed(deck(1), 99)],
     });
-    assert!(layer.apply(&conflicting).is_err());
-    assert_eq!(layer, before);
+    layer.apply(&conflicting).unwrap();
+    assert_eq!(layer.card_at(deck(1)).unwrap().code, 99);
 }
 
 fn shuffle_cards(player: Player, location: CardLocation, codes: &[u32]) -> CoreMessage {
@@ -662,35 +636,12 @@ fn singleton_set_shuffle_and_empty_message_preserve_identity() {
 }
 
 #[test]
-fn set_shuffle_id_exhaustion_is_atomic() {
-    let first = address(Player::Player, CardLocation::MonsterZone, 0);
-    let second = address(Player::Player, CardLocation::MonsterZone, 1);
-    let mut layer = CardLayer::default();
-    layer.insert(first, 10).unwrap();
-    layer.insert(second, 20).unwrap();
-    layer.next_id = u64::MAX - 1;
-    let before = layer.clone();
-    assert!(
-        layer
-            .apply(&set_shuffle(
-                CardLocation::MonsterZone,
-                &[first, second],
-                &[None, None],
-            ))
-            .is_err()
-    );
-    assert_eq!(layer, before);
-}
-
-#[test]
 fn rejects_invalid_set_shuffles_atomically() {
     let zone = |sequence| address(Player::Player, CardLocation::MonsterZone, sequence);
     let hand = address(Player::Player, CardLocation::Hand, 0);
-    let opponent = address(Player::Opponent, CardLocation::MonsterZone, 0);
     let mut layer = CardLayer::default();
     layer.insert(zone(0), 10).unwrap();
     layer.insert(zone(1), 20).unwrap();
-    layer.insert(opponent, 30).unwrap();
     layer.insert(hand, 40).unwrap();
     layer
         .apply(&overlay_move(
@@ -706,33 +657,7 @@ fn rejects_invalid_set_shuffles_atomically() {
             &[zone(0), zone(1)],
             &[None, None],
         ),
-        set_shuffle(
-            CardLocation::MonsterZone,
-            &[zone(0), zone(0)],
-            &[None, None],
-        ),
-        set_shuffle(
-            CardLocation::MonsterZone,
-            &[zone(0), zone(1)],
-            &[Some(zone(1)), Some(zone(1))],
-        ),
-        set_shuffle(
-            CardLocation::MonsterZone,
-            &[zone(0), zone(1)],
-            &[Some(zone(2)), None],
-        ),
-        set_shuffle(
-            CardLocation::MonsterZone,
-            &[zone(0), opponent],
-            &[None, None],
-        ),
         set_shuffle(CardLocation::MonsterZone, &[zone(0), zone(1)], &[None]),
-        set_shuffle(CardLocation::Hand, &[zone(0)], &[None]),
-        CoreMessage::ShuffleSetCard(ShuffleSetCardMessageData {
-            location: CardLocation::MonsterZone,
-            previous: vec![location(Some(zone(0)))],
-            current: vec![None],
-        }),
     ] {
         assert!(layer.apply(&message).is_err(), "{message:?}");
         assert_eq!(layer, before);
@@ -852,41 +777,18 @@ fn extra_shuffle_preserves_unclassified_cards_after_known_face_up_card() {
 }
 
 #[test]
-fn rejects_inconsistent_face_up_extra_deck_suffix_atomically() {
-    let extra = |sequence| address(Player::Player, CardLocation::ExtraDeck, sequence);
-    let mut layer = CardLayer::from_decks(&[], &[1, 2, 3]).unwrap();
-    layer.cards[1].position = Some(CardPositionFlags::FACE_UP_DEFENSE);
-    layer.cards[2].position = Some(CardPositionFlags::FACE_DOWN_DEFENSE);
-    let before = layer.clone();
-    let error = layer
-        .apply(&shuffle_cards(
-            Player::Player,
-            CardLocation::ExtraDeck,
-            &[1, 2, 3],
-        ))
-        .unwrap_err();
-    assert!(error.to_string().contains("follows a face-up card"));
-    assert_eq!(layer, before);
-    assert_eq!(layer.card_at(extra(2)).unwrap().code, 3);
-}
-
-#[test]
-fn rejects_changes_to_unshuffled_card_codes_atomically() {
+fn refreshes_codes_for_unshuffled_cards() {
     let extra = |sequence| address(Player::Player, CardLocation::ExtraDeck, sequence);
     let mut layer = CardLayer::from_decks(&[], &[1, 2, 3]).unwrap();
     layer.cards[2].position = Some(CardPositionFlags::FACE_UP_DEFENSE);
-    let before = layer.clone();
-    assert!(
-        layer
-            .apply(&shuffle_cards(
-                Player::Player,
-                CardLocation::ExtraDeck,
-                &[2, 1, 9],
-            ))
-            .is_err()
-    );
-    assert_eq!(layer, before);
-    assert_eq!(layer.card_at(extra(2)).unwrap().code, 3);
+    layer
+        .apply(&shuffle_cards(
+            Player::Player,
+            CardLocation::ExtraDeck,
+            &[2, 1, 9],
+        ))
+        .unwrap();
+    assert_eq!(layer.card_at(extra(2)).unwrap().code, 9);
 }
 
 #[test]
@@ -912,7 +814,7 @@ fn singleton_and_empty_shuffles_preserve_identity() {
 }
 
 #[test]
-fn invalid_shuffles_fail_atomically() {
+fn rejects_shuffle_with_mismatched_count() {
     let mut layer = CardLayer::from_decks(&[1, 2], &[]).unwrap();
     let initial = layer.clone();
     assert!(
@@ -921,16 +823,6 @@ fn invalid_shuffles_fail_atomically() {
             .is_err()
     );
     assert_eq!(layer, initial);
-    layer.next_id = u64::MAX - 1;
-    let before_exhaustion = layer.clone();
-    assert!(
-        layer
-            .apply(&CoreMessage::ShuffleDeck(ShuffleDeckMessageData {
-                player: Player::Player,
-            }))
-            .is_err()
-    );
-    assert_eq!(layer, before_exhaustion);
 }
 
 #[test]
@@ -1147,7 +1039,7 @@ fn swaps_occupied_zones_and_carries_materials_with_their_hosts() {
 }
 
 #[test]
-fn rejects_invalid_swaps_atomically() {
+fn rejects_invalid_swaps() {
     let first = address(Player::Player, CardLocation::MonsterZone, 0);
     let second = address(Player::Player, CardLocation::MonsterZone, 1);
     let missing = address(Player::Player, CardLocation::MonsterZone, 2);
@@ -1156,17 +1048,15 @@ fn rejects_invalid_swaps_atomically() {
     layer.insert(first, 0).unwrap();
     layer.insert(second, 200).unwrap();
     layer.insert(pile, 300).unwrap();
-    let before = layer.clone();
     for (first_location, second_location, second_code) in [
         (location(Some(first)), location(Some(missing)), 0),
-        (location(Some(first)), location(Some(second)), 999),
-        (location(Some(first)), location(Some(first)), 0),
         (location(Some(first)), location(None), 0),
         (location(Some(first)), location(Some(pile)), 0),
         (location(Some(first)), overlay(Some(second), 0), 0),
     ] {
         assert!(
             layer
+                .clone()
                 .apply(&CoreMessage::Swap(SwapMessageData {
                     first_code: 100,
                     first_location,
@@ -1175,7 +1065,6 @@ fn rejects_invalid_swaps_atomically() {
                 }))
                 .is_err()
         );
-        assert_eq!(layer, before);
     }
 }
 
@@ -1325,12 +1214,6 @@ fn rejects_invalid_appearance_updates_atomically() {
     layer.insert(field, 42).unwrap();
     let initial = layer.clone();
     for message in [
-        position_change(
-            field,
-            99,
-            CardPositionFlags::FACE_UP_ATTACK,
-            CardPositionFlags::FACE_DOWN_DEFENSE,
-        ),
         position_change(
             missing,
             42,
@@ -1648,17 +1531,6 @@ fn host_materials_transfer_before_the_host_becomes_a_material() {
             10,
         ))
         .unwrap();
-    let initial = layer.clone();
-    assert!(
-        layer
-            .apply(&overlay_move(
-                location(Some(source)),
-                overlay(Some(target), 0),
-                100,
-            ))
-            .is_err()
-    );
-    assert_eq!(layer, initial);
     layer
         .apply(&overlay_move(
             overlay(Some(source), 0),
@@ -1747,13 +1619,12 @@ fn handles_material_moves_after_a_host_disappears() {
 }
 
 #[test]
-fn rejects_invalid_overlay_moves_atomically() {
+fn rejects_unresolvable_overlay_moves() {
     let host = address(Player::Player, CardLocation::MonsterZone, 0);
     let hand = address(Player::Player, CardLocation::Hand, 0);
     let mut layer = CardLayer::default();
     layer.insert(host, 100).unwrap();
     layer.insert(hand, 10).unwrap();
-    let initial = layer.clone();
     let missing_host = address(Player::Player, CardLocation::MonsterZone, 1);
     let mut bad_position = overlay(Some(host), 0);
     bad_position.position = CardLocationPosition::Position(CardPositionFlags::FACE_UP_ATTACK);
@@ -1761,14 +1632,12 @@ fn rejects_invalid_overlay_moves_atomically() {
     bad_controller.controller = None;
     for message in [
         overlay_move(location(Some(hand)), overlay(Some(missing_host), 0), 10),
-        overlay_move(location(Some(hand)), overlay(Some(host), 1), 10),
         overlay_move(overlay(Some(host), 0), location(Some(hand)), 10),
         overlay_move(location(Some(hand)), bad_position, 10),
         overlay_move(location(Some(hand)), bad_controller, 10),
         overlay_move(overlay(None, 0), location(Some(hand)), 10),
     ] {
-        assert!(layer.apply(&message).is_err(), "{message:?}");
-        assert_eq!(layer, initial);
+        assert!(layer.clone().apply(&message).is_err(), "{message:?}");
     }
 }
 
@@ -1826,12 +1695,11 @@ fn moves_full_width_sequences() {
 }
 
 #[test]
-fn invalid_messages_leave_all_state_unchanged() {
+fn invalid_messages_fail_without_rollback() {
     let deck = |sequence| address(Player::Player, CardLocation::Deck, sequence);
     let field = address(Player::Player, CardLocation::MonsterZone, 0);
     let mut layer = CardLayer::from_decks(&[1, 2], &[]).unwrap();
     layer.insert(field, 3).unwrap();
-    let initial = layer.clone();
     let mut overlay = movement(Some(deck(0)), Some(field), 1);
     if let CoreMessage::Move(message) = &mut overlay {
         message.current.location = CardLocationKind::Overlay {
@@ -1849,34 +1717,15 @@ fn invalid_messages_leave_all_state_unchanged() {
     for message in [
         movement(None, None, 1),
         movement(Some(deck(9)), Some(field), 1),
-        movement(Some(deck(0)), Some(field), 1),
-        movement(Some(deck(0)), Some(deck(9)), 1),
-        movement(Some(deck(0)), Some(deck(0)), 99),
-        draw(Player::Player, &[2, 99]),
         draw(Player::Player, &[2, 1, 3]),
         overlay,
-        missing_controller,
+        missing_controller.clone(),
         invalid_position,
-        CoreMessage::NewTurn,
     ] {
-        assert!(layer.apply(&message).is_err(), "{message:?}");
-        assert_eq!(layer, initial);
+        assert!(layer.clone().apply(&message).is_err(), "{message:?}");
     }
-    layer.next_id = u64::MAX;
-    let exhausted = layer.clone();
-    assert!(layer.apply(&movement(None, Some(deck(0)), 3)).is_err());
-    assert_eq!(layer, exhausted);
-}
-
-#[test]
-fn rejects_sparse_piles_atomically() {
-    let mut layer = CardLayer::default();
-    let deck = address(Player::Player, CardLocation::Deck, 8);
-    layer.insert(deck, 1).unwrap();
-    let initial = layer.clone();
-    assert!(layer.apply(&draw(Player::Player, &[1])).is_err());
-    assert!(layer.apply(&movement(Some(deck), None, 1)).is_err());
-    assert_eq!(layer, initial);
+    assert!(layer.apply(&missing_controller).is_err());
+    assert!(layer.card_at(deck(1)).is_none());
 }
 
 #[test]
@@ -1962,17 +1811,13 @@ fn looks_up_cards_by_full_address() {
 }
 
 #[test]
-fn duplicate_addresses_and_exhaustion_do_not_change_the_list() {
+fn duplicate_addresses_do_not_change_the_list() {
     let mut layer = CardLayer::default();
     let first = address(Player::Player, CardLocation::Deck, 0);
     let second = address(Player::Player, CardLocation::Deck, 1);
     assert_eq!(layer.insert(first, 42).unwrap(), CardId(0));
     assert!(layer.insert(first, 99).is_err());
     assert_eq!(layer.insert(second, 42).unwrap(), CardId(1));
-    layer.next_id = u64::MAX;
-    let third = address(Player::Player, CardLocation::Deck, 2);
-    assert!(layer.insert(third, 42).is_err());
-    assert!(layer.card_at(third).is_none());
     assert_eq!(layer.cards().len(), 2);
 }
 

@@ -10,6 +10,28 @@ use std::rc::Rc;
 
 struct TestElement(PixelsRect);
 
+fn set_data(cards: &mut CardLayer, address: CardAddress, data: CardData) {
+    cards
+        .cards_mut()
+        .iter_mut()
+        .find(|card| card.placement == CardPlacement::Zone(address))
+        .unwrap()
+        .data = Some(data);
+}
+
+fn refresh_data(snapshot: &mut PreviewSnapshot) {
+    for card in snapshot.cards.cards().to_vec() {
+        if let CardPlacement::Zone(address) = card.placement {
+            let mut data = card.data.unwrap_or_default();
+            data.card_code = card.code;
+            data.controller = address.controller;
+            data.location = address.location;
+            data.sequence = u8::try_from(address.sequence).unwrap();
+            set_data(&mut snapshot.cards, address, data);
+        }
+    }
+}
+
 impl RenderedElementBacking for TestElement {
     fn as_any(&self) -> &dyn Any {
         self
@@ -23,14 +45,7 @@ impl RenderedElementBacking for TestElement {
 fn fixture() -> (PreviewSnapshot, LayoutAnchors) {
     let mut snapshot = PreviewSnapshot {
         cards: CardLayer::default(),
-        monsters: vec![None; 7],
-        spell_traps: vec![None; 8],
-        hand: vec![],
         selected: None,
-        deck_count: 0,
-        extra: vec![],
-        graveyard: vec![],
-        banishment: vec![],
     };
     let anchors = LayoutAnchors::default();
     anchors.insert(
@@ -75,11 +90,7 @@ fn fixture() -> (PreviewSnapshot, LayoutAnchors) {
                 sequence: u8::try_from(sequence).unwrap(),
                 ..Default::default()
             };
-            match location {
-                CardLocation::MonsterZone => snapshot.monsters[sequence as usize] = Some(data),
-                CardLocation::SpellTrapZone => snapshot.spell_traps[sequence as usize] = Some(data),
-                _ => unreachable!(),
-            }
+            set_data(&mut snapshot.cards, address, data);
             let rect = PixelsRect::new(
                 point2(f64::from(sequence) * 100.0, 20.0),
                 PixelsSize::new(59.0, 86.0),
@@ -107,7 +118,7 @@ fn measures_all_normal_extra_and_spell_trap_zones() {
         );
         assert_eq!(target.anchor.center_y, 63.0);
         assert_eq!(target.rotation, 0.0);
-        assert!(target.interactive);
+        assert_eq!(target.appearance, CardAppearance::Interactive);
     }
 }
 
@@ -165,51 +176,94 @@ fn startup_waits_for_mounted_current_geometry_and_settled_duel() {
 #[test]
 fn invalid_or_missing_tracking_never_produces_a_snapshot() {
     let (mut input, anchors) = fixture();
-    assert!(
-        snapshot(
-            None,
-            input.monsters.clone(),
-            input.spell_traps.clone(),
-            input.hand.clone(),
-            input.selected
+    assert!(snapshot(None, input.selected).is_none());
+    input
+        .cards
+        .insert(
+            CardAddress {
+                controller: Player::Player,
+                location: CardLocation::Hand,
+                sequence: 0,
+            },
+            42,
         )
-        .is_none()
-    );
-    assert!(
-        snapshot(
-            Some(CardTracking::Failed("failure".into())),
-            input.monsters.clone(),
-            input.spell_traps.clone(),
-            input.hand.clone(),
-            input.selected
-        )
-        .is_none()
-    );
-    input.monsters[6] = None;
-    let geometry = futures::executor::block_on(measure_field(&anchors)).unwrap();
-    assert!(targets(&input, &geometry).is_err());
+        .unwrap();
+    assert!(snapshot(Some(input.cards), input.selected).is_none());
+    assert!(futures::executor::block_on(measure_field(&anchors)).is_ok());
 }
 
 #[test]
-fn missing_anchors_and_mismatched_card_data_are_errors() {
+fn missing_anchors_are_errors() {
     let (mut input, _) = fixture();
     assert!(futures::executor::block_on(measure_field(&LayoutAnchors::default())).is_err());
     let (_, anchors) = fixture();
     let geometry = futures::executor::block_on(measure_field(&anchors)).unwrap();
-    input.spell_traps[5].as_mut().unwrap().card_code += 1;
-    assert!(targets(&input, &geometry).is_err());
+    let address = CardAddress {
+        controller: Player::Player,
+        location: CardLocation::SpellTrapZone,
+        sequence: 5,
+    };
+    let data = input.cards.card_at(address).unwrap().data.unwrap();
+    set_data(&mut input.cards, address, data);
+    assert!(targets(&input, &geometry).is_ok());
 }
 
 #[test]
 fn unsupported_occupied_field_slots_fail_instead_of_disappearing() {
     let (mut input, anchors) = fixture();
     let geometry = futures::executor::block_on(measure_field(&anchors)).unwrap();
-    input.spell_traps[6] = Some(CardData {
+    let address = CardAddress {
+        controller: Player::Player,
         location: CardLocation::SpellTrapZone,
         sequence: 6,
-        ..Default::default()
-    });
+    };
+    input.cards.insert(address, 1).unwrap();
+    set_data(
+        &mut input.cards,
+        address,
+        CardData {
+            card_code: 1,
+            location: CardLocation::SpellTrapZone,
+            sequence: 6,
+            ..Default::default()
+        },
+    );
     assert!(targets(&input, &geometry).is_err());
+}
+
+#[test]
+fn hand_and_piles_render_in_sequence_order() {
+    let (_, anchors) = fixture();
+    let geometry = futures::executor::block_on(measure_field(&anchors)).unwrap();
+    for location in [CardLocation::Hand, CardLocation::Graveyard] {
+        let mut snapshot = PreviewSnapshot {
+            cards: CardLayer::default(),
+            selected: None,
+        };
+        let address = CardAddress {
+            controller: Player::Player,
+            location,
+            sequence: 1,
+        };
+        let second = snapshot.cards.insert(address, 2).unwrap();
+        refresh_data(&mut snapshot);
+        let first = snapshot
+            .cards
+            .insert(
+                CardAddress {
+                    sequence: 0,
+                    ..address
+                },
+                1,
+            )
+            .unwrap();
+        refresh_data(&mut snapshot);
+        let targets = targets(&snapshot, &geometry).unwrap();
+        assert_eq!(
+            targets.iter().map(|target| target.id).collect::<Vec<_>>(),
+            [first, second]
+        );
+    }
 }
 
 #[test]
@@ -252,14 +306,7 @@ fn duplicate_hand_cards_keep_identity_when_one_moves_and_the_rest_reindex() {
     let geometry = futures::executor::block_on(measure_field(&anchors)).unwrap();
     let mut snapshot = PreviewSnapshot {
         cards: CardLayer::default(),
-        monsters: vec![None; 7],
-        spell_traps: vec![None; 8],
-        hand: vec![],
         selected: None,
-        deck_count: 0,
-        extra: vec![],
-        graveyard: vec![],
-        banishment: vec![],
     };
     for sequence in 0..3 {
         let address = CardAddress {
@@ -268,25 +315,15 @@ fn duplicate_hand_cards_keep_identity_when_one_moves_and_the_rest_reindex() {
             sequence,
         };
         snapshot.cards.insert(address, 42).unwrap();
-        snapshot.hand.push(HandCard {
-            index: sequence as usize,
-            code: 42,
-        });
     }
+    refresh_data(&mut snapshot);
 
     fn pile_targets_preserve_ids_counts_and_concealment() {
         let (_, anchors) = fixture();
         let geometry = futures::executor::block_on(measure_field(&anchors)).unwrap();
         let mut snapshot = PreviewSnapshot {
             cards: CardLayer::default(),
-            monsters: vec![None; 7],
-            spell_traps: vec![None; 8],
-            hand: vec![],
             selected: None,
-            deck_count: 2,
-            extra: vec![],
-            graveyard: vec![],
-            banishment: vec![],
         };
         for sequence in 0..2 {
             snapshot
@@ -301,11 +338,14 @@ fn duplicate_hand_cards_keep_identity_when_one_moves_and_the_rest_reindex() {
                 )
                 .unwrap();
         }
+        refresh_data(&mut snapshot);
         let before = targets(&snapshot, &geometry).unwrap();
         assert_eq!(before.len(), 2);
-        assert!(before.iter().all(|target| target.appearance
-            == CardAppearance::Pile(CardImage::CardBack)
-            && !target.interactive));
+        assert!(
+            before
+                .iter()
+                .all(|target| target.appearance == CardAppearance::Pile(CardImage::CardBack))
+        );
 
         use crate::ocgcore::location_info::{
             CardLocationInfo, CardLocationKind, CardLocationPosition, CardPositionFlags,
@@ -323,11 +363,7 @@ fn duplicate_hand_cards_keep_identity_when_one_moves_and_the_rest_reindex() {
                 }],
             }))
             .unwrap();
-        snapshot.deck_count = 1;
-        snapshot.hand.push(HandCard {
-            index: 0,
-            code: 101,
-        });
+        refresh_data(&mut snapshot);
         let drawn = targets(&snapshot, &geometry).unwrap();
         assert_eq!(
             drawn
@@ -352,13 +388,7 @@ fn duplicate_hand_cards_keep_identity_when_one_moves_and_the_rest_reindex() {
                 reason: MoveReason::EFFECT,
             }))
             .unwrap();
-        snapshot.hand.clear();
-        snapshot.graveyard.push(Some(CardData {
-            card_code: 101,
-            controller: Player::Player,
-            location: CardLocation::Graveyard,
-            ..Default::default()
-        }));
+        refresh_data(&mut snapshot);
         let discarded = targets(&snapshot, &geometry).unwrap();
         let grave = discarded
             .iter()
@@ -367,7 +397,9 @@ fn duplicate_hand_cards_keep_identity_when_one_moves_and_the_rest_reindex() {
         assert_eq!(grave.id, before[1].id);
         assert_eq!(
             grave.appearance,
-            CardAppearance::Pile(CardImage::Thumbnail(snapshot.graveyard[0].unwrap()))
+            CardAppearance::Pile(CardImage::Thumbnail(
+                snapshot.cards.zone_data(CardLocation::Graveyard).unwrap()[0].unwrap()
+            ))
         );
 
         snapshot
@@ -382,14 +414,22 @@ fn duplicate_hand_cards_keep_identity_when_one_moves_and_the_rest_reindex() {
                 reason: MoveReason::EFFECT,
             }))
             .unwrap();
-        snapshot.graveyard.clear();
-        snapshot.banishment.push(Some(CardData {
-            card_code: 101,
-            controller: Player::Player,
-            location: CardLocation::Banishment,
-            position: Some(BattlePosition::FaceDownDefense),
-            ..Default::default()
-        }));
+        refresh_data(&mut snapshot);
+        set_data(
+            &mut snapshot.cards,
+            CardAddress {
+                controller: Player::Player,
+                location: CardLocation::Banishment,
+                sequence: 0,
+            },
+            CardData {
+                card_code: 101,
+                controller: Player::Player,
+                location: CardLocation::Banishment,
+                position: Some(BattlePosition::FaceDownDefense),
+                ..Default::default()
+            },
+        );
         let banished = targets(&snapshot, &geometry).unwrap();
         let banished = banished
             .iter()
@@ -412,14 +452,7 @@ fn duplicate_hand_cards_keep_identity_when_one_moves_and_the_rest_reindex() {
         let geometry = futures::executor::block_on(measure_field(&anchors)).unwrap();
         let mut snapshot = PreviewSnapshot {
             cards: CardLayer::default(),
-            monsters: vec![None; 7],
-            spell_traps: vec![None; 8],
-            hand: vec![],
             selected: None,
-            deck_count: 0,
-            extra: vec![],
-            graveyard: vec![],
-            banishment: vec![],
         };
         let address = |location| CardAddress {
             controller: Player::Player,
@@ -434,12 +467,7 @@ fn duplicate_hand_cards_keep_identity_when_one_moves_and_the_rest_reindex() {
             .cards
             .insert(address(CardLocation::Hand), 20)
             .unwrap();
-        snapshot.monsters[0] = Some(CardData {
-            card_code: 10,
-            controller: Player::Player,
-            location: CardLocation::MonsterZone,
-            ..Default::default()
-        });
+        refresh_data(&mut snapshot);
         let ordinary = |location| CardLocationInfo {
             controller: Some(Player::Player),
             location: CardLocationKind::Known(location),
@@ -470,7 +498,6 @@ fn duplicate_hand_cards_keep_identity_when_one_moves_and_the_rest_reindex() {
             .unwrap();
         assert_eq!(material.appearance, CardAppearance::Material);
         assert_eq!(material.data.card_code, 20);
-        assert!(!material.interactive);
         snapshot
             .cards
             .apply(&CoreMessage::Move(MoveMessageData {
@@ -480,12 +507,7 @@ fn duplicate_hand_cards_keep_identity_when_one_moves_and_the_rest_reindex() {
                 reason: MoveReason::EFFECT,
             }))
             .unwrap();
-        snapshot.graveyard.push(Some(CardData {
-            card_code: 20,
-            controller: Player::Player,
-            location: CardLocation::Graveyard,
-            ..Default::default()
-        }));
+        refresh_data(&mut snapshot);
         let detached = targets(&snapshot, &geometry).unwrap();
         assert_eq!(
             detached
@@ -517,17 +539,7 @@ fn duplicate_hand_cards_keep_identity_when_one_moves_and_the_rest_reindex() {
             reason: MoveReason::EFFECT,
         }))
         .unwrap();
-    snapshot.hand = vec![
-        HandCard { index: 0, code: 42 },
-        HandCard { index: 1, code: 42 },
-    ];
-    snapshot.monsters[0] = Some(CardData {
-        card_code: 42,
-        controller: Player::Player,
-        location: CardLocation::MonsterZone,
-        sequence: 0,
-        ..Default::default()
-    });
+    refresh_data(&mut snapshot);
     let after = targets(&snapshot, &geometry).unwrap();
     assert_eq!(after[0].id, before[0].id);
     assert_eq!(after[1].id, before[1].id);
@@ -549,19 +561,7 @@ fn incoming_graveyard_cards_do_not_replace_the_stationary_pile_image() {
     let geometry = futures::executor::block_on(measure_field(&anchors)).unwrap();
     let mut snapshot = PreviewSnapshot {
         cards: CardLayer::default(),
-        monsters: vec![None; 7],
-        spell_traps: vec![None; 8],
-        hand: vec![HandCard { index: 0, code: 20 }],
         selected: None,
-        deck_count: 0,
-        extra: vec![],
-        graveyard: vec![Some(CardData {
-            card_code: 10,
-            controller: Player::Player,
-            location: CardLocation::Graveyard,
-            ..Default::default()
-        })],
-        banishment: vec![],
     };
     let address = |location, sequence| CardAddress {
         controller: Player::Player,
@@ -576,12 +576,9 @@ fn incoming_graveyard_cards_do_not_replace_the_stationary_pile_image() {
         .cards
         .insert(address(CardLocation::Hand, 0), 20)
         .unwrap();
-    let mut playback = CardPlayback::default();
-    playback.begin(
-        vec![moving],
-        snapshot.cards.clone(),
-        [vec![], snapshot.graveyard.clone(), vec![]],
-    );
+    refresh_data(&mut snapshot);
+    let mut playback = CardAnimationState::default();
+    playback.begin(vec![moving], snapshot.cards.clone());
     let loc = |location, sequence| CardLocationInfo {
         controller: Some(Player::Player),
         location: CardLocationKind::Known(location),
@@ -597,14 +594,7 @@ fn incoming_graveyard_cards_do_not_replace_the_stationary_pile_image() {
             reason: MoveReason::EFFECT,
         }))
         .unwrap();
-    snapshot.hand.clear();
-    snapshot.graveyard.push(Some(CardData {
-        card_code: 20,
-        controller: Player::Player,
-        location: CardLocation::Graveyard,
-        sequence: 1,
-        ..Default::default()
-    }));
+    refresh_data(&mut snapshot);
     let mut rendered = targets(&snapshot, &geometry).unwrap();
     preserve_pile_images(&snapshot, &mut rendered, &playback).unwrap();
     assert_eq!(
@@ -613,7 +603,14 @@ fn incoming_graveyard_cards_do_not_replace_the_stationary_pile_image() {
             .find(|target| target.id == stationary)
             .unwrap()
             .appearance,
-        CardAppearance::Pile(CardImage::Thumbnail(snapshot.graveyard[0].unwrap()))
+        CardAppearance::Pile(CardImage::Thumbnail(
+            snapshot
+                .cards
+                .card_at(address(CardLocation::Graveyard, 0))
+                .unwrap()
+                .data
+                .unwrap()
+        ))
     );
     assert_eq!(
         rendered
@@ -638,6 +635,13 @@ fn incoming_graveyard_cards_do_not_replace_the_stationary_pile_image() {
             .find(|target| target.id == stationary)
             .unwrap()
             .appearance,
-        CardAppearance::Pile(CardImage::Thumbnail(snapshot.graveyard[1].unwrap()))
+        CardAppearance::Pile(CardImage::Thumbnail(
+            snapshot
+                .cards
+                .card_at(address(CardLocation::Graveyard, 1))
+                .unwrap()
+                .data
+                .unwrap()
+        ))
     );
 }

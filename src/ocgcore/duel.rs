@@ -1,6 +1,10 @@
 use std::ffi::c_void;
 use std::rc::Rc;
 
+use ocgcore_ffi::constants::{
+    QUERY_ATTACK, QUERY_CODE, QUERY_DEFENSE, QUERY_LEVEL, QUERY_LINK, QUERY_POSITION, QUERY_RANK,
+    QUERY_TYPE,
+};
 use ocgcore_ffi::types::OCG_Duel;
 use ocgcore_ffi::types::OCG_NewCardInfo;
 use ocgcore_ffi::types::OCG_QueryInfo;
@@ -10,7 +14,6 @@ use super::constants::CardLocation;
 use crate::ocgcore::CardData;
 use crate::ocgcore::Response;
 use crate::ocgcore::constants::Player;
-use crate::ocgcore::data::HandCard;
 use crate::ocgcore::messages::CoreMessage;
 use crate::ocgcore::messages::parse_messages;
 use crate::ocgcore::query::decode_location;
@@ -86,14 +89,21 @@ impl Duel {
         OCG_DuelStatus::try_from(status).unwrap()
     }
 
-    pub fn count_location(&self, team: Player, location: CardLocation) -> u32 {
-        unsafe { ocgcore_ffi::OCG_DuelQueryCount(self.inner.handle, team as u8, location as u32) }
-    }
-
-    fn query_location(&self, flags: u32, team: Player, location: CardLocation) -> Vec<u8> {
+    pub(crate) fn query_cards(
+        &self,
+        player: Player,
+        location: CardLocation,
+    ) -> anyhow::Result<Vec<Option<CardData>>> {
+        let mut flags = QUERY_CODE | QUERY_POSITION | QUERY_TYPE;
+        if matches!(
+            location,
+            CardLocation::MonsterZone | CardLocation::SpellTrapZone
+        ) {
+            flags |= QUERY_LEVEL | QUERY_RANK | QUERY_ATTACK | QUERY_DEFENSE | QUERY_LINK;
+        }
         let query = OCG_QueryInfo {
             flags,
-            con: team as u8,
+            con: player as u8,
             loc: location as u32,
             seq: 0,
             overlay_seq: 0,
@@ -101,41 +111,15 @@ impl Duel {
 
         let mut length = 0;
         let ptr = unsafe {
-            ocgcore_ffi::OCG_DuelQueryLocation(self.inner.handle, &mut length, &query) as *mut u8
+            ocgcore_ffi::OCG_DuelQueryLocation(self.inner.handle, &mut length, &query) as *const u8
         };
         if length == 0 {
-            return Vec::new();
+            anyhow::bail!("Core returned an empty query buffer");
         }
         assert!(!ptr.is_null(), "Core returned a null query buffer");
-        unsafe { std::slice::from_raw_parts(ptr, length as usize) }.to_vec()
-    }
-
-    pub fn get_raw_hand(&self) -> Vec<HandCard> {
-        let mut hand = Vec::new();
-        let raw_cards = self.get_cards(CardLocation::Hand);
-
-        for (index, card) in raw_cards.iter().enumerate() {
-            hand.push(HandCard {
-                index,
-                code: card.unwrap().card_code,
-            });
-        }
-
-        hand
-    }
-
-    pub fn get_cards(&self, location: CardLocation) -> Vec<Option<CardData>> {
-        self.query_cards(Player::Player, location)
-            .unwrap_or_else(|error| panic!("Invalid {location} query: {error:#}"))
-    }
-
-    pub(crate) fn query_cards(
-        &self,
-        player: Player,
-        location: CardLocation,
-    ) -> anyhow::Result<Vec<Option<CardData>>> {
-        let data = self.query_location(u32::MAX, player, location);
-        decode_location(&data, player, location)
+        // Decode before another core call can invalidate the query buffer.
+        let data = unsafe { std::slice::from_raw_parts(ptr, length as usize) };
+        decode_location(data, player, location)
     }
 
     pub fn add_card(

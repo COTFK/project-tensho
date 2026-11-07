@@ -14,30 +14,38 @@ use crate::ui::components::PickerModal;
 use crate::ui::components::svg::LightningTrioIcon;
 
 #[component]
-pub fn Banishment() -> Element {
+pub fn EffectPile(location: CardLocation) -> Element {
     let mut state = use_context::<UIState>();
 
-    let has_cards = state.banishment.len() > 0;
+    let has_cards = state
+        .zone_data(location)
+        .is_some_and(|cards| !cards.is_empty());
     let has_trigger_effects = state
         .card_prompting_to_activate
         .iter()
-        .any(|card| card.location == CardLocation::Banishment);
+        .any(|card| card.location == location);
 
     // Disable if effect selection modal is active
     let suppress_actions = !state.effects_to_select_from.is_empty();
 
     rsx!(
         div {
-            class: "relative flex items-center justify-center border-0.5",
+            class: if location == CardLocation::Banishment {
+                "relative w-full h-full flex items-center justify-center border-0.5"
+            } else {
+                "relative bg-slate-50/2 {ZONE_SIZE} aspect-square flex items-center justify-center border-0.5"
+            },
             class: if has_cards {"hover:outline-4 hover:outline-yellow-300"},
             onclick: move |_| if has_cards {
-                state.show_extra_deck.set(false);
-                state.show_banishment.set(true);
-                state.show_graveyard.set(false);
+                state.open_pile.set(Some(location));
             },
             if has_cards {
                 div {
-                    class: "relative {ZONE_SIZE} aspect-[59/86] -rotate-90",
+                    class: if location == CardLocation::Banishment {
+                        "relative h-full aspect-[59/86] -rotate-90"
+                    } else {
+                        "relative h-full aspect-[59/86]"
+                    },
                     div {
                         class: "absolute inset-[2px] md:inset-[4px] my-0.5 md:my-1 rounded-[2px] blur-[1px] mix-blend-screen pointer-events-none",
                         class: if has_trigger_effects && !suppress_actions { "bg-yellow-400" },
@@ -49,26 +57,31 @@ pub fn Banishment() -> Element {
 }
 
 #[component]
-pub fn BanishmentModal() -> Element {
+pub fn EffectPileModal(location: CardLocation) -> Element {
     let state = use_context::<UIState>();
-    let banishment = state.banishment;
+    let cards = state.zone_data(location).unwrap_or_default();
     let cards_prompting_to_activate = state.card_prompting_to_activate;
-    let mut show_banishment = state.show_banishment;
+    let mut open_pile = state.open_pile;
+    let title = if location == CardLocation::Banishment {
+        "Banishment"
+    } else {
+        "Graveyard"
+    };
 
     let mut selected_card = use_signal(|| None);
 
     rsx!(
         PickerModal {
-            title: "Banishment",
-            trigger: show_banishment(),
+            title,
+            trigger: open_pile() == Some(location),
             div {
                 class: "flex flex-row min-w-[40vw] w-full max-w-[77vw] h-max gap-0.5 px-2",
                 class: "overflow-x-auto scroll-smooth scrollbar-thin",
-                for (index, card) in banishment().iter().enumerate() {
+                for (index, card) in cards.iter().enumerate() {
                     {
                         let prompted_card = cards_prompting_to_activate()
                             .iter()
-                            .find(|card| card.location == CardLocation::Banishment && card.sequence == index as u8)
+                            .find(|card| card.location == location && card.sequence == index as u8)
                             .copied();
                         let chain_index = prompted_card.and_then(|card| card.action_index);
 
@@ -102,10 +115,6 @@ pub fn BanishmentModal() -> Element {
                                                     send_response(Response::Yes);
                                                 }
 
-                                                // if activatable {
-                                                //     send_user_response(UserResponse::Activate { index: activatable_eff_index as u8 });
-                                                // }
-
                                                 selected_card.set(None);
                                             }
                                         },
@@ -121,7 +130,7 @@ pub fn BanishmentModal() -> Element {
             OptionButton {
                 label: "Close",
                 onclick: move |_| {
-                    show_banishment.set(false);
+                    open_pile.set(None);
                     selected_card.set(None);
                 },
                 additional_classes: "bg-green-600/70"

@@ -5,8 +5,8 @@ use super::layout_anchors::CardAnchor;
 use crate::ocgcore::CardData;
 use crate::ocgcore::constants::{BattlePosition, CardLocation, Player};
 use crate::ocgcore::location_info::CardPositionFlags;
+use crate::ui::card_animation::CardAnimationState;
 use crate::ui::card_layer::{Card as TrackedCard, CardAddress, CardId, CardPlacement};
-use crate::ui::card_playback::CardPlayback;
 use crate::ui::components::CardImage;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -24,7 +24,6 @@ pub(super) struct CardTarget {
     pub data: CardData,
     pub rotation: f64,
     pub stack_order: i32,
-    pub interactive: bool,
     pub appearance: CardAppearance,
 }
 
@@ -54,19 +53,6 @@ fn visible_card(card: TrackedCard, target: Option<CardTarget>) -> Option<(CardTa
         _ => return None,
     };
     if address.controller != Player::Player {
-        return None;
-    }
-    if target.id != card.id
-        || target.address != address
-        || target.data.controller != address.controller
-        || target.data.location != address.location
-        || u32::from(target.data.sequence) != address.sequence
-        || (card.code != 0 && target.data.card_code != card.code)
-    {
-        tracing::error!(
-            "Card layer target does not match tracked card {:?}",
-            card.id
-        );
         return None;
     }
     if !target.anchor.center_x.is_finite()
@@ -134,10 +120,9 @@ pub(super) fn PersistentCardLayer(cards: Vec<TrackedCard>, targets: Vec<CardTarg
 
 #[component]
 fn LayerCard(card: TrackedCard, target: Option<CardTarget>) -> Element {
-    let playback = try_consume_context::<Signal<CardPlayback>>();
+    let playback = try_consume_context::<Signal<CardAnimationState>>();
     let animating = playback.is_some_and(|playback| playback().active);
     let moving = playback.is_some_and(|playback| playback().moving.contains(&card.id));
-    let layout_pending = playback.is_some_and(|playback| playback().layout_pending);
     let visible = visible_card(card, target);
     let hand = matches!(card.placement, CardPlacement::Zone(address) if address.location == CardLocation::Hand);
     let style = visible.map(|(target, _)| {
@@ -168,19 +153,17 @@ fn LayerCard(card: TrackedCard, target: Option<CardTarget>) -> Element {
         div {
             "data-card-id": "{card.id}",
             class: "fixed left-0 top-0 pointer-events-none [transform:translate(var(--card-x),var(--card-y))] w-[var(--card-width)] h-[var(--card-height)] z-[var(--card-z)]",
-            class: if animating { "[transition:transform_300ms_ease-in-out,width_300ms_ease-in-out,height_300ms_ease-in-out]" } else if hand && !layout_pending { "[transition:transform_150ms_ease-in-out]" },
-            class: "motion-reduce:transition-none",
+            class: if animating { "[transition:transform_300ms_ease-in-out,width_300ms_ease-in-out,height_300ms_ease-in-out]" } else if hand { "[transition:transform_150ms_ease-in-out]" },
             class: if visible.is_none() { "hidden" },
             style,
             if let Some((target, facedown)) = visible {
                 div {
                     class: "w-full h-full [transform:rotate(var(--card-rotation))]",
-                    class: if animating { "[transition:transform_300ms_ease-in-out]" } else if hand && !layout_pending { "[transition:transform_150ms_ease-in-out]" },
-                    class: "motion-reduce:transition-none",
+                    class: if animating { "[transition:transform_300ms_ease-in-out]" } else if hand { "[transition:transform_150ms_ease-in-out]" },
                     style: "--card-rotation: {target.rotation}deg;",
                     div {
                         class: "w-full h-full",
-                        class: if target.interactive { "pointer-events-auto" } else { "pointer-events-none" },
+                        class: if target.appearance == CardAppearance::Interactive { "pointer-events-auto" } else { "pointer-events-none" },
                         InteractiveCard {
                             card: target.data,
                             address: target.address,

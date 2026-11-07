@@ -1,5 +1,7 @@
 use anyhow::{Context, ensure};
+use ocgcore_ffi::constants::{MSG_RELOAD_FIELD, MSG_TAG_SWAP};
 
+use crate::ocgcore::CardData;
 use crate::ocgcore::constants::{CardLocation, Player};
 use crate::ocgcore::location_info::{
     CardLocationInfo, CardLocationKind, CardLocationPosition, CardPositionFlags,
@@ -37,13 +39,13 @@ pub(crate) struct Card {
     pub code: u32,
     pub placement: CardPlacement,
     pub position: Option<CardPositionFlags>,
+    pub data: Option<CardData>,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub(crate) struct CardLayer {
     cards: Vec<Card>,
     next_id: u64,
-    deck_reversed: bool,
 }
 
 impl CardLayer {
@@ -58,7 +60,7 @@ impl CardLayer {
                     CardAddress {
                         controller: Player::Player,
                         location,
-                        sequence: u32::try_from(sequence)?,
+                        sequence: sequence as u32,
                     },
                     code,
                 )?;
@@ -72,12 +74,13 @@ impl CardLayer {
             self.card_at(address).is_none(),
             "Card address is already occupied"
         );
-        let id = self.allocate_id()?;
+        let id = self.allocate_id();
         self.cards.push(Card {
             id,
             code,
             placement: CardPlacement::Zone(address),
             position: None,
+            data: None,
         });
         Ok(id)
     }
@@ -96,95 +99,58 @@ impl CardLayer {
         self.cards.iter().find(|card| card.id == id)
     }
 
-    pub fn material_at(&self, host: CardId, sequence: u32) -> Option<&Card> {
-        self.cards
-            .iter()
-            .find(|card| card.placement == CardPlacement::Overlay { host, sequence })
+    pub fn cards_mut(&mut self) -> &mut [Card] {
+        &mut self.cards
     }
 
-    pub fn deck_reversed(&self) -> bool {
-        self.deck_reversed
-    }
-
-    pub fn validate(&self) -> anyhow::Result<()> {
-        for (index, card) in self.cards.iter().enumerate() {
-            ensure!(
-                !self.cards[..index].iter().any(|other| other.id == card.id),
-                "Duplicate tracked card ID"
-            );
-            ensure!(
-                !self.cards[..index]
-                    .iter()
-                    .any(|other| other.placement == card.placement),
-                "Duplicate tracked card placement"
-            );
-            if let CardPlacement::Overlay { host, .. } = card.placement {
-                ensure!(host != card.id, "Card cannot be its own overlay host");
-                self.material_len(host)?;
+    pub fn zone_data(&self, location: CardLocation) -> Option<Vec<Option<CardData>>> {
+        let mut data = Vec::new();
+        for card in &self.cards {
+            let CardPlacement::Zone(address) = card.placement else {
+                continue;
+            };
+            if address.controller != Player::Player || address.location != location {
+                continue;
             }
-        }
-        for player in [Player::Player, Player::Opponent] {
-            for location in [
-                CardLocation::Deck,
-                CardLocation::Hand,
-                CardLocation::Graveyard,
-                CardLocation::Banishment,
-                CardLocation::ExtraDeck,
-            ] {
-                self.pile_len(player, location)?;
+            let index = usize::try_from(address.sequence).ok()?;
+            if data.len() <= index {
+                data.resize(index + 1, None);
             }
+            data[index] = Some(card.data?);
         }
-        Ok(())
-    }
-
-    pub fn reconcile_graveyard_code(
-        &mut self,
-        address: CardAddress,
-        code: u32,
-    ) -> anyhow::Result<()> {
-        ensure!(
-            address.location == CardLocation::Graveyard,
-            "Expected graveyard"
-        );
-        let card = self
-            .cards
-            .iter_mut()
-            .find(|card| card.placement == CardPlacement::Zone(address))
-            .context("Missing tracked graveyard card")?;
-        Self::update_code(card, code)
+        Some(data)
     }
 
     pub fn apply(&mut self, message: &CoreMessage) -> anyhow::Result<()> {
-        let mut next = self.clone();
         match message {
-            CoreMessage::Move(message) => next.apply_move(message)?,
-            CoreMessage::Swap(message) => next.apply_swap(message)?,
-            CoreMessage::SwapGraveDeck(message) => next.swap_grave_deck(message)?,
-            CoreMessage::RemoveCards(message) => next.apply_remove_cards(message)?,
-            CoreMessage::Draw(message) => next.apply_draw(message)?,
-            CoreMessage::ReverseDeck => next.reverse_decks()?,
-            CoreMessage::DeckTop(message) => next.apply_deck_top(message)?,
+            CoreMessage::Move(message) => self.apply_move(message)?,
+            CoreMessage::Swap(message) => self.apply_swap(message)?,
+            CoreMessage::SwapGraveDeck(message) => self.swap_grave_deck(message)?,
+            CoreMessage::RemoveCards(message) => self.apply_remove_cards(message)?,
+            CoreMessage::Draw(message) => self.apply_draw(message)?,
+            CoreMessage::ReverseDeck => self.reverse_decks(),
+            CoreMessage::DeckTop(message) => self.apply_deck_top(message)?,
             CoreMessage::ConfirmDeckTop(message) => {
-                next.confirm_top_cards(message, CardLocation::Deck)?
+                self.confirm_top_cards(message, CardLocation::Deck)?
             }
             CoreMessage::ConfirmExtraTop(message) => {
-                next.confirm_top_cards(message, CardLocation::ExtraDeck)?
+                self.confirm_top_cards(message, CardLocation::ExtraDeck)?
             }
             CoreMessage::ShuffleDeck(message) => {
-                next.apply_shuffle(message.player, CardLocation::Deck, None)?
+                self.apply_shuffle(message.player, CardLocation::Deck, None)?
             }
-            CoreMessage::ShuffleHand(message) => next.apply_shuffle(
+            CoreMessage::ShuffleHand(message) => self.apply_shuffle(
                 message.player,
                 CardLocation::Hand,
                 Some(&message.card_codes),
             )?,
-            CoreMessage::ShuffleExtra(message) => next.apply_shuffle(
+            CoreMessage::ShuffleExtra(message) => self.apply_shuffle(
                 message.player,
                 CardLocation::ExtraDeck,
                 Some(&message.card_codes),
             )?,
-            CoreMessage::ShuffleSetCard(message) => next.apply_set_shuffle(message)?,
-            CoreMessage::PositionChange(message) => next.update_appearance(
+            CoreMessage::ShuffleSetCard(message) => self.apply_set_shuffle(message)?,
+            CoreMessage::PositionChange(message) => self.update_appearance(
                 CardPlacement::Zone(CardAddress {
                     controller: message.controller,
                     location: message.location,
@@ -194,16 +160,20 @@ impl CardLayer {
                 message.current_position,
             )?,
             CoreMessage::SetCard(message) => {
-                next.apply_card_event(message.location, message.card_code)?
+                self.apply_card_event(message.location, message.card_code)?
             }
             CoreMessage::Summoning(message)
             | CoreMessage::SpecialSummoning(message)
             | CoreMessage::FlipSummoning(message) => {
-                next.apply_card_event(message.location, message.card_code)?
+                self.apply_card_event(message.location, message.card_code)?
             }
-            _ => anyhow::bail!("Unsupported card update"),
+            CoreMessage::Unsupported(kind)
+                if matches!(u32::from(*kind), MSG_TAG_SWAP | MSG_RELOAD_FIELD) =>
+            {
+                anyhow::bail!("Unsupported structural core message {kind}");
+            }
+            _ => {}
         }
-        *self = next;
         Ok(())
     }
 
@@ -219,7 +189,8 @@ impl CardLayer {
             CardLocationPosition::Position(position) if current.is_some() => Some(position),
             _ => None,
         };
-        self.place_moved_card(card, current, message.card_code, position)
+        self.place_moved_card(card, current, message.card_code, position);
+        Ok(())
     }
 
     fn apply_swap(&mut self, message: &SwapMessageData) -> anyhow::Result<()> {
@@ -227,7 +198,6 @@ impl CardLayer {
             self.swap_card_source(message.first_location, message.first_code)?;
         let (second, second_placement) =
             self.swap_card_source(message.second_location, message.second_code)?;
-        ensure!(first != second, "Swap locations are identical");
         self.cards[first].placement = second_placement;
         self.cards[second].placement = first_placement;
         Ok(())
@@ -235,9 +205,8 @@ impl CardLayer {
 
     fn swap_grave_deck(&mut self, message: &SwapGraveDeckMessageData) -> anyhow::Result<()> {
         let player = message.player;
-        let grave_len = self.pile_len(player, CardLocation::Graveyard)?;
-        self.pile_len(player, CardLocation::Deck)?;
-        let extra_len = self.pile_len(player, CardLocation::ExtraDeck)?;
+        let grave_len = self.pile_len(player, CardLocation::Graveyard);
+        let extra_len = self.pile_len(player, CardLocation::ExtraDeck);
         ensure!(
             message.extra_insert_index <= extra_len,
             "Extra-deck insertion index is outside the pile"
@@ -270,9 +239,6 @@ impl CardLayer {
                 "Cannot track exchange: the core retains a stale sequence on the only deck card"
             );
         }
-        extra_len
-            .checked_add(redirected)
-            .context("Extra deck sequence overflow")?;
         let grave_indices: Vec<usize> = (0..grave_len)
             .map(|sequence| {
                 self.cards
@@ -381,15 +347,15 @@ impl CardLayer {
             .position(|card| card.placement == placement)
             .context("No card at swap location")?;
         let card = &mut self.cards[index];
-        Self::update_code(card, code)?;
+        Self::update_code(card, code);
         card.position = Some(position);
         Ok((index, placement))
     }
 
     fn apply_draw(&mut self, message: &DrawMessageData) -> anyhow::Result<()> {
         for drawn in &message.cards {
-            let deck_len = self.pile_len(message.player, CardLocation::Deck)?;
-            let hand_len = self.pile_len(message.player, CardLocation::Hand)?;
+            let deck_len = self.pile_len(message.player, CardLocation::Deck);
+            let hand_len = self.pile_len(message.player, CardLocation::Hand);
             let previous = CardAddress {
                 controller: message.player,
                 location: CardLocation::Deck,
@@ -408,14 +374,14 @@ impl CardLayer {
                 Some(CardPlacement::Zone(current)),
                 drawn.code,
                 Some(drawn.position),
-            )?;
+            );
         }
         Ok(())
     }
 
-    fn reverse_decks(&mut self) -> anyhow::Result<()> {
+    fn reverse_decks(&mut self) {
         for player in [Player::Player, Player::Opponent] {
-            let len = self.pile_len(player, CardLocation::Deck)?;
+            let len = self.pile_len(player, CardLocation::Deck);
             for card in &mut self.cards {
                 if let CardPlacement::Zone(address) = &mut card.placement {
                     if address.controller == player && address.location == CardLocation::Deck {
@@ -424,13 +390,11 @@ impl CardLayer {
                 }
             }
         }
-        self.deck_reversed = !self.deck_reversed;
-        Ok(())
     }
 
     fn apply_deck_top(&mut self, message: &DeckTopMessageData) -> anyhow::Result<()> {
         let sequence = self
-            .pile_len(message.player, CardLocation::Deck)?
+            .pile_len(message.player, CardLocation::Deck)
             .checked_sub(1)
             .and_then(|top| top.checked_sub(message.offset))
             .context("Deck top offset is outside the deck")?;
@@ -450,34 +414,7 @@ impl CardLayer {
         message: &ConfirmCardsMessageData,
         location: CardLocation,
     ) -> anyhow::Result<()> {
-        let len = self.pile_len(message.player, location)?;
-        ensure!(
-            message.cards.len() <= len as usize,
-            "Confirmed card count exceeds the pile"
-        );
-        let mut previous_sequence = None;
-        for (index, confirmed) in message.cards.iter().enumerate() {
-            ensure!(
-                confirmed.controller == Some(message.player)
-                    && confirmed.location == CardLocationKind::Known(location),
-                "Confirmed top card has an unexpected location"
-            );
-            ensure!(
-                confirmed.sequence < len,
-                "Confirmed top card is outside the pile"
-            );
-            if location == CardLocation::Deck {
-                ensure!(
-                    confirmed.sequence == len - 1 - index as u32,
-                    "Confirmed deck cards are not in top order"
-                );
-            } else if let Some(previous) = previous_sequence {
-                ensure!(
-                    confirmed.sequence.checked_add(1) == Some(previous),
-                    "Confirmed extra-deck cards are not in top order"
-                );
-            }
-            previous_sequence = Some(confirmed.sequence);
+        for confirmed in &message.cards {
             let address = CardAddress {
                 controller: message.player,
                 location,
@@ -488,7 +425,7 @@ impl CardLayer {
                 .iter_mut()
                 .find(|card| card.placement == CardPlacement::Zone(address))
                 .context("No card at confirmed top location")?;
-            Self::update_code(card, confirmed.card_code)?;
+            Self::update_code(card, confirmed.card_code);
         }
         Ok(())
     }
@@ -499,7 +436,7 @@ impl CardLayer {
         location: CardLocation,
         codes: Option<&[u32]>,
     ) -> anyhow::Result<()> {
-        let len = self.pile_len(player, location)?;
+        let len = self.pile_len(player, location);
         if let Some(codes) = codes {
             ensure!(
                 codes.len() == len as usize,
@@ -527,13 +464,6 @@ impl CardLayer {
                     position.intersects(face_up) && !position.intersects(face_down)
                 })
             }) {
-                ensure!(
-                    cards[index..].iter().all(|card| !card
-                        .position
-                        .is_some_and(|position| position.intersects(face_down)
-                            && !position.intersects(face_up))),
-                    "Face-down extra-deck card follows a face-up card"
-                );
                 shuffled_len = index;
             }
         }
@@ -550,7 +480,7 @@ impl CardLayer {
         for (sequence, old) in cards.iter().enumerate() {
             let code = codes.map(|codes| codes[sequence]);
             let replacement = if sequence < shuffled_len && shuffled_len > 1 {
-                Some(self.allocate_id()?)
+                Some(self.allocate_id())
             } else {
                 None
             };
@@ -564,7 +494,7 @@ impl CardLayer {
                 card.code = code.unwrap_or(0);
                 card.position = None;
             } else if let Some(code) = code {
-                Self::update_code(card, code)?;
+                Self::update_code(card, code);
             }
         }
         Ok(())
@@ -572,30 +502,13 @@ impl CardLayer {
 
     fn apply_set_shuffle(&mut self, message: &ShuffleSetCardMessageData) -> anyhow::Result<()> {
         ensure!(
-            matches!(
-                message.location,
-                CardLocation::MonsterZone | CardLocation::SpellTrapZone
-            ),
-            "Invalid set-card shuffle location"
-        );
-        ensure!(
             message.previous.len() == message.current.len(),
             "Set-card shuffle location counts do not match"
         );
         let mut sources: Vec<(Card, CardAddress, CardPositionFlags)> =
             Vec::with_capacity(message.previous.len());
         for &info in &message.previous {
-            let (address, position) = self.set_shuffle_location(info, message.location)?;
-            ensure!(
-                !sources.iter().any(|(_, source, _)| *source == address),
-                "Duplicate set-card shuffle source"
-            );
-            if let Some((_, first, _)) = sources.first() {
-                ensure!(
-                    address.controller == first.controller,
-                    "Set-card shuffle has multiple controllers"
-                );
-            }
+            let (address, position) = self.set_shuffle_location(info)?;
             let card = *self
                 .card_at(address)
                 .context("Set-card shuffle source is empty")?;
@@ -606,19 +519,7 @@ impl CardLayer {
         let mut used = Vec::new();
         for (index, info) in message.current.iter().enumerate() {
             if let Some(info) = info {
-                let (address, position) = self.set_shuffle_location(*info, message.location)?;
-                ensure!(
-                    sources.iter().any(|(_, source, _)| *source == address),
-                    "Set-card shuffle destination is not a source zone"
-                );
-                ensure!(
-                    !used.contains(&address),
-                    "Duplicate set-card shuffle destination"
-                );
-                ensure!(
-                    position == sources[index].2,
-                    "Set-card shuffle changed a card's position"
-                );
+                let (address, _) = self.set_shuffle_location(*info)?;
                 destinations[index] = Some(address);
                 used.push(address);
             }
@@ -652,7 +553,7 @@ impl CardLayer {
         }
         for (index, (old, _, position)) in sources.iter().enumerate() {
             let replacement = if message.current[index].is_none() && hidden.len() > 1 {
-                Some(self.allocate_id()?)
+                Some(self.allocate_id())
             } else {
                 None
             };
@@ -678,7 +579,6 @@ impl CardLayer {
     fn set_shuffle_location(
         &self,
         info: CardLocationInfo,
-        location: CardLocation,
     ) -> anyhow::Result<(CardAddress, CardPositionFlags)> {
         let placement = self
             .placement_from(info)?
@@ -686,18 +586,9 @@ impl CardLayer {
         let CardPlacement::Zone(address) = placement else {
             anyhow::bail!("Set-card shuffle targets an overlay material");
         };
-        ensure!(
-            address.location == location,
-            "Set-card shuffle location does not match the message"
-        );
         let CardLocationPosition::Position(position) = info.position else {
             anyhow::bail!("Set-card shuffle has no position");
         };
-        let face_up = CardPositionFlags::FACE_UP_ATTACK | CardPositionFlags::FACE_UP_DEFENSE;
-        ensure!(
-            !position.intersects(face_up),
-            "Set-card shuffle includes a face-up card"
-        );
         Ok((address, position))
     }
 
@@ -726,20 +617,15 @@ impl CardLayer {
             .iter_mut()
             .find(|card| card.placement == placement)
             .context("No card at appearance update location")?;
-        Self::update_code(card, code)?;
+        Self::update_code(card, code);
         card.position = Some(position);
         Ok(())
     }
 
-    fn update_code(card: &mut Card, code: u32) -> anyhow::Result<()> {
-        ensure!(
-            card.code == 0 || code == 0 || card.code == code,
-            "Message card code does not match the tracked card"
-        );
+    fn update_code(card: &mut Card, code: u32) {
         if code != 0 {
             card.code = code;
         }
-        Ok(())
     }
 
     fn placement_from(&self, info: CardLocationInfo) -> anyhow::Result<Option<CardPlacement>> {
@@ -799,18 +685,15 @@ impl CardLayer {
 
     fn place_moved_card(
         &mut self,
-        mut before: Option<Card>,
+        before: Option<Card>,
         current: Option<CardPlacement>,
         code: u32,
         position: Option<CardPositionFlags>,
-    ) -> anyhow::Result<()> {
-        if let Some(card) = &mut before {
-            Self::update_code(card, code)?;
-        }
+    ) {
         if let Some(placement) = current {
             let id = match before {
                 Some(card) => card.id,
-                None => self.allocate_id()?,
+                None => self.allocate_id(),
             };
             let code = if code == 0 {
                 before.map_or(0, |card| card.code)
@@ -822,9 +705,9 @@ impl CardLayer {
                 code,
                 placement,
                 position,
-            })?;
+                data: before.and_then(|card| card.data),
+            });
         }
-        Ok(())
     }
 
     fn remove_card(&mut self, placement: CardPlacement) -> anyhow::Result<Card> {
@@ -833,15 +716,6 @@ impl CardLayer {
             .iter()
             .position(|card| card.placement == placement)
             .context("No card at move source")?;
-        match placement {
-            CardPlacement::Zone(address) if Self::is_pile(address.location) => {
-                self.pile_len(address.controller, address.location)?;
-            }
-            CardPlacement::Overlay { host, .. } => {
-                self.material_len(host)?;
-            }
-            _ => {}
-        }
         let removed = self.cards.remove(index);
         for card in &mut self.cards {
             match (&mut card.placement, placement) {
@@ -868,15 +742,9 @@ impl CardLayer {
         Ok(removed)
     }
 
-    fn place_card(&mut self, card: Card) -> anyhow::Result<()> {
-        match card.placement {
-            CardPlacement::Zone(address) if Self::is_pile(address.location) => {
-                let len = self.pile_len(address.controller, address.location)?;
-                ensure!(
-                    address.sequence <= len,
-                    "Move destination is outside the pile"
-                );
-                len.checked_add(1).context("Pile sequence overflow")?;
+    fn place_card(&mut self, card: Card) {
+        if let CardPlacement::Zone(address) = card.placement {
+            if Self::is_pile(address.location) {
                 for other in &mut self.cards {
                     if let CardPlacement::Zone(other) = &mut other.placement {
                         if other.controller == address.controller
@@ -888,36 +756,12 @@ impl CardLayer {
                     }
                 }
             }
-            CardPlacement::Zone(address) => {
-                ensure!(
-                    self.card_at(address).is_none(),
-                    "Move destination is occupied"
-                );
-            }
-            CardPlacement::Overlay { host, sequence } => {
-                ensure!(
-                    self.cards.iter().any(|other| other.id == host
-                        && matches!(other.placement, CardPlacement::Zone(_))),
-                    "Overlay destination has no host"
-                );
-                ensure!(
-                    !self.cards.iter().any(|other| matches!(other.placement, CardPlacement::Overlay { host, .. } if host == card.id)),
-                    "An overlay material cannot retain its own materials"
-                );
-                let len = self.material_len(host)?;
-                ensure!(
-                    sequence == len,
-                    "Overlay destination must append to materials"
-                );
-                len.checked_add(1).context("Overlay sequence overflow")?;
-            }
         }
         self.cards.push(card);
-        Ok(())
     }
 
-    fn pile_len(&self, controller: Player, location: CardLocation) -> anyhow::Result<u32> {
-        let mut sequences = self.cards.iter().filter_map(|card| match card.placement {
+    fn pile_len(&self, controller: Player, location: CardLocation) -> u32 {
+        let sequences = self.cards.iter().filter_map(|card| match card.placement {
             CardPlacement::Zone(address)
                 if address.controller == controller && address.location == location =>
             {
@@ -925,28 +769,7 @@ impl CardLayer {
             }
             _ => None,
         });
-        let len = u32::try_from(sequences.clone().count()).context("Pile is too large")?;
-        ensure!(
-            sequences.all(|sequence| sequence < len),
-            "Pile sequences are not contiguous"
-        );
-        Ok(len)
-    }
-
-    fn material_len(&self, host: CardId) -> anyhow::Result<u32> {
-        let mut sequences = self.cards.iter().filter_map(|card| match card.placement {
-            CardPlacement::Overlay {
-                host: card_host,
-                sequence,
-            } if card_host == host => Some(sequence),
-            _ => None,
-        });
-        let len = u32::try_from(sequences.clone().count()).context("Too many overlay materials")?;
-        ensure!(
-            sequences.all(|sequence| sequence < len),
-            "Overlay sequences are not contiguous"
-        );
-        Ok(len)
+        sequences.count() as u32
     }
 
     fn is_pile(location: CardLocation) -> bool {
@@ -956,10 +779,10 @@ impl CardLayer {
         )
     }
 
-    fn allocate_id(&mut self) -> anyhow::Result<CardId> {
+    fn allocate_id(&mut self) -> CardId {
         let id = CardId(self.next_id);
-        self.next_id = self.next_id.checked_add(1).context("Card IDs exhausted")?;
-        Ok(id)
+        self.next_id += 1;
+        id
     }
 }
 

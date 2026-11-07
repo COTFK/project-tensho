@@ -1,64 +1,33 @@
-use crate::ocgcore::CardData;
 use crate::ocgcore::constants::{CardLocation, Player};
 use crate::ui::card_layer::{CardId, CardLayer, CardPlacement};
+use dioxus::prelude::*;
 
 pub(crate) const ANIMATION_MILLIS: u32 = 300;
+// Allow the CSS transition to finish before unblocking input.
 const COMPLETION_MARGIN_MILLIS: u32 = 50;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct CardPlayback {
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct CardAnimationState {
     pub active: bool,
-    pub finished: bool,
+    // Invalidates timers from cancelled or superseded animations.
     pub generation: u64,
     pub moving: Vec<CardId>,
+    // Previous state for preserving pile images during movement.
     pub source: Option<CardLayer>,
-    pub piles: [Vec<Option<CardData>>; 3],
-    pub reduced_motion: bool,
-    pub layout_pending: bool,
-    pub restarting: bool,
-    pub failure: Option<String>,
 }
 
-impl Default for CardPlayback {
-    fn default() -> Self {
-        Self {
-            active: false,
-            finished: false,
-            generation: 0,
-            moving: Vec::new(),
-            source: None,
-            piles: Default::default(),
-            reduced_motion: true,
-            layout_pending: false,
-            restarting: false,
-            failure: None,
-        }
-    }
-}
-
-impl CardPlayback {
-    pub fn blocked(&self) -> bool {
-        self.active || self.layout_pending || self.restarting || self.failure.is_some()
-    }
-
-    fn cancel(&mut self) {
+impl CardAnimationState {
+    pub fn cancel(&mut self) {
         self.generation = self.generation.wrapping_add(1);
         self.active = false;
         self.moving.clear();
         self.source = None;
-        self.piles = Default::default();
     }
 
-    pub fn begin(
-        &mut self,
-        moving: Vec<CardId>,
-        source: CardLayer,
-        piles: [Vec<Option<CardData>>; 3],
-    ) {
+    pub fn begin(&mut self, moving: Vec<CardId>, source: CardLayer) {
         self.generation = self.generation.wrapping_add(1);
         self.moving = moving;
         self.source = Some(source);
-        self.piles = piles;
         self.active = true;
     }
 
@@ -67,34 +36,7 @@ impl CardPlayback {
             self.active = false;
             self.moving.clear();
             self.source = None;
-            self.piles = Default::default();
         }
-    }
-
-    pub fn set_reduced_motion(&mut self, reduced: bool) {
-        self.reduced_motion = reduced;
-        if reduced && self.active {
-            self.cancel();
-        }
-    }
-
-    pub fn resize(&mut self) {
-        if self.active {
-            self.cancel();
-            self.layout_pending = true;
-        }
-    }
-
-    pub fn restart(&mut self) {
-        self.cancel();
-        self.layout_pending = false;
-        self.restarting = true;
-    }
-
-    pub fn fail(&mut self, error: String) {
-        self.cancel();
-        self.layout_pending = false;
-        self.failure = Some(error);
     }
 }
 
@@ -125,6 +67,7 @@ fn visible(layer: &CardLayer, placement: CardPlacement) -> bool {
 }
 
 pub(crate) fn movements(before: &CardLayer, after: &CardLayer) -> Vec<CardId> {
+    // Animate only cards visible at both ends of a transition.
     before
         .cards()
         .iter()
@@ -138,7 +81,19 @@ pub(crate) fn movements(before: &CardLayer, after: &CardLayer) -> Vec<CardId> {
         .collect()
 }
 
-pub(crate) async fn wait_for_animation() {
+pub(crate) fn use_animation_completion(mut animation: Signal<CardAnimationState>) {
+    use_effect(move || {
+        let current = animation();
+        if current.active {
+            spawn(async move {
+                wait_for_animation().await;
+                animation.write().finish(current.generation);
+            });
+        }
+    });
+}
+
+async fn wait_for_animation() {
     wait_millis(ANIMATION_MILLIS + COMPLETION_MARGIN_MILLIS).await;
 }
 
@@ -161,5 +116,5 @@ pub(crate) async fn wait_millis(millis: u32) {
 }
 
 #[cfg(test)]
-#[path = "../../tests/unit/ui/card_playback.rs"]
+#[path = "../../tests/unit/ui/card_animation.rs"]
 mod tests;

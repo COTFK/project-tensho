@@ -13,7 +13,6 @@ pub(crate) use callbacks::log_core_message;
 pub use core::OCGCore;
 pub use data::CardData;
 pub use data::CardType;
-pub use data::HandCard;
 pub use data::Zone;
 pub use duel::Duel;
 pub use response::Response;

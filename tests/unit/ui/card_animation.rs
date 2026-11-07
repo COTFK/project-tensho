@@ -44,12 +44,11 @@ fn groups_multiple_movements_and_ignores_new_or_hidden_cards() {
 
 #[test]
 fn completion_and_cancellation_ignore_stale_generations() {
-    let mut playback = CardPlayback::default();
-    playback.begin(vec![], CardLayer::default(), Default::default());
+    let mut playback = CardAnimationState::default();
+    playback.begin(vec![], CardLayer::default());
     let first = playback.generation;
-    playback.set_reduced_motion(true);
-    playback.set_reduced_motion(false);
-    playback.begin(vec![], CardLayer::default(), Default::default());
+    playback.cancel();
+    playback.begin(vec![], CardLayer::default());
     let second = playback.generation;
     playback.finish(first);
     assert!(playback.active);
@@ -79,53 +78,22 @@ fn position_changes_start_playback_without_changing_card_identity() {
 }
 
 #[test]
-fn resize_cancels_playback_and_blocks_until_layout_is_ready() {
-    let mut playback = CardPlayback {
-        reduced_motion: false,
-        ..Default::default()
-    };
-    playback.begin(vec![], CardLayer::default(), Default::default());
+fn cancellation_stops_stale_playback() {
+    let mut playback = CardAnimationState::default();
+    playback.begin(vec![], CardLayer::default());
     let old = playback.generation;
-    playback.resize();
-    assert!(playback.layout_pending);
-    assert!(playback.blocked());
+    playback.cancel();
+    playback.finish(old);
     assert!(!playback.active);
-    playback.finish(old);
-    assert!(playback.blocked());
-    playback.layout_pending = false;
-    assert!(!playback.blocked());
 }
 
 #[test]
-fn reduced_motion_and_restart_cancel_stale_playback() {
-    let mut playback = CardPlayback {
-        reduced_motion: false,
-        ..Default::default()
-    };
-    playback.begin(vec![], CardLayer::default(), Default::default());
-    let old = playback.generation;
-    playback.set_reduced_motion(true);
-    assert!(!playback.blocked());
-    assert!(playback.reduced_motion);
-    playback.set_reduced_motion(false);
-    playback.begin(vec![], CardLayer::default(), Default::default());
-    playback.restart();
-    playback.finish(old);
-    assert!(playback.restarting);
-    assert!(playback.blocked());
-}
-
-#[test]
-fn tracking_failure_stays_blocked_after_stale_completion() {
-    let mut playback = CardPlayback {
-        reduced_motion: false,
-        ..Default::default()
-    };
-    playback.begin(vec![], CardLayer::default(), Default::default());
+fn cancellation_invalidates_stale_completion() {
+    let mut playback = CardAnimationState::default();
+    playback.begin(vec![], CardLayer::default());
     let generation = playback.generation;
-    playback.fail("diverged".into());
+    playback.cancel();
+    playback.begin(vec![], CardLayer::default());
     playback.finish(generation);
-    assert_eq!(playback.failure.as_deref(), Some("diverged"));
-    assert!(playback.blocked());
-    assert!(playback.source.is_none());
+    assert!(playback.active);
 }

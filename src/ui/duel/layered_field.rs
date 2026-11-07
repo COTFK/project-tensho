@@ -6,47 +6,27 @@ use super::field::Field;
 use super::hand::{Hand, hand_transform};
 use super::layout_anchors::{AnchorNotReady, CardAnchor, LayoutAnchors, LayoutRevision};
 use super::persistent_card_layer::{CardAppearance, CardTarget, PersistentCardLayer, card_image};
+use crate::ocgcore::CardData;
 use crate::ocgcore::CardType;
 use crate::ocgcore::constants::{BattlePosition, CardLocation, Player};
-use crate::ocgcore::{CardData, HandCard};
-use crate::state::{SelectedCard, UIState};
-use crate::ui::card_layer::{CardAddress, CardLayer, CardPlacement};
-use crate::ui::card_playback::{CardPlayback, wait_millis};
-use crate::ui::card_tracking::CardTracking;
+use crate::state::UIState;
+use crate::ui::card_animation::{CardAnimationState, wait_millis};
+use crate::ui::card_layer::{CardAddress, CardId, CardLayer, CardPlacement};
 use crate::ui::components::CardImage;
 
 #[derive(Clone, PartialEq)]
 struct PreviewSnapshot {
     cards: CardLayer,
-    monsters: Vec<Option<CardData>>,
-    spell_traps: Vec<Option<CardData>>,
-    hand: Vec<HandCard>,
-    selected: Option<SelectedCard>,
-    deck_count: usize,
-    extra: Vec<Option<CardData>>,
-    graveyard: Vec<Option<CardData>>,
-    banishment: Vec<Option<CardData>>,
+    selected: Option<CardId>,
 }
 
-fn snapshot(
-    tracking: Option<CardTracking>,
-    monsters: Vec<Option<CardData>>,
-    spell_traps: Vec<Option<CardData>>,
-    hand: Vec<HandCard>,
-    selected: Option<SelectedCard>,
-) -> Option<PreviewSnapshot> {
+fn snapshot(tracking: Option<CardLayer>, selected: Option<CardId>) -> Option<PreviewSnapshot> {
     match tracking {
-        Some(CardTracking::Active(cards)) => Some(PreviewSnapshot {
-            cards,
-            monsters,
-            spell_traps,
-            hand,
-            selected,
-            deck_count: 0,
-            extra: Vec::new(),
-            graveyard: Vec::new(),
-            banishment: Vec::new(),
-        }),
+        Some(cards)
+            if cards.cards().iter().all(|card| {
+                !matches!(card.placement, CardPlacement::Zone(address) if address.controller == Player::Player)
+                    || card.data.is_some()
+            }) => Some(PreviewSnapshot { cards, selected }),
         _ => None,
     }
 }
@@ -150,12 +130,12 @@ async fn measure_field_when_ready(anchors: &LayoutAnchors) -> anyhow::Result<Pre
 fn preserve_pile_images(
     snapshot: &PreviewSnapshot,
     targets: &mut [CardTarget],
-    playback: &CardPlayback,
+    playback: &CardAnimationState,
 ) -> anyhow::Result<()> {
     let Some(source) = playback.source.as_ref().filter(|_| playback.active) else {
         return Ok(());
     };
-    for (location, index) in [(CardLocation::Graveyard, 1), (CardLocation::Banishment, 2)] {
+    for location in [CardLocation::Graveyard, CardLocation::Banishment] {
         let surviving_top = source
             .cards()
             .iter()
@@ -175,10 +155,13 @@ fn preserve_pile_images(
             })
             .max();
         let old_image = if let Some(sequence) = surviving_top {
-            let data = playback.piles[index]
-                .get(usize::try_from(sequence)?)
-                .copied()
-                .flatten()
+            let data = source
+                .card_at(CardAddress {
+                    controller: Player::Player,
+                    location,
+                    sequence,
+                })
+                .and_then(|card| card.data)
                 .context("Previous pile card is missing")?;
             Some(pile_face(location, data))
         } else {
@@ -239,197 +222,129 @@ fn targets(
     geometry: &PreviewGeometry,
 ) -> anyhow::Result<Vec<CardTarget>> {
     let mut targets = Vec::new();
-    for (location, cards, offset, count) in [
-        (CardLocation::MonsterZone, &snapshot.monsters, 0, 7),
-        (CardLocation::SpellTrapZone, &snapshot.spell_traps, 7, 6),
+    for location in [
+        CardLocation::MonsterZone,
+        CardLocation::SpellTrapZone,
+        CardLocation::Hand,
+        CardLocation::Deck,
+        CardLocation::ExtraDeck,
+        CardLocation::Graveyard,
+        CardLocation::Banishment,
     ] {
-        for (sequence, data) in cards.iter().enumerate() {
-            let address = CardAddress {
-                controller: Player::Player,
-                location,
-                sequence: u32::try_from(sequence)?,
-            };
-            if sequence >= count {
-                ensure!(
-                    data.is_none() && snapshot.cards.card_at(address).is_none(),
-                    "No visible field zone for {address:?}"
-                );
-                continue;
-            }
-
-            match (snapshot.cards.card_at(address), data) {
-                (Some(card), Some(data)) => {
-                    ensure!(
-                        data.controller == address.controller
-                            && data.location == address.location
-                            && u32::from(data.sequence) == address.sequence
-                            && (card.code == 0 || data.card_code == card.code),
-                        "Tracked card and field query disagree at {address:?}"
-                    );
-                    targets.push(CardTarget {
-                        id: card.id,
-                        address,
-                        anchor: *geometry
-                            .field
-                            .get(offset + sequence)
-                            .context("Field anchor missing")?,
-                        data: *data,
-                        rotation: 0.0,
-                        stack_order: 2,
-                        interactive: true,
-                        appearance: CardAppearance::Interactive,
-                    });
-                }
-                (None, None) => {}
-                _ => anyhow::bail!("Tracked card and field occupancy disagree at {address:?}"),
-            }
-        }
-        let tracked_count = snapshot
+        let mut cards: Vec<_> = snapshot
             .cards
             .cards()
             .iter()
-            .filter(|card| {
-                matches!(card.placement, CardPlacement::Zone(address)
-                if address.controller == Player::Player && address.location == location)
+            .filter_map(|card| match card.placement {
+                CardPlacement::Zone(address)
+                    if address.controller == Player::Player && address.location == location =>
+                {
+                    Some((address, card))
+                }
+                _ => None,
             })
-            .count();
-        ensure!(
-            tracked_count == cards.iter().flatten().count(),
-            "Tracked {location} count differs from the field"
-        );
-    }
-    let count = snapshot.hand.len();
-    let tracked_count = snapshot
-        .cards
-        .cards()
-        .iter()
-        .filter(|card| {
-            matches!(card.placement, CardPlacement::Zone(address)
-            if address.controller == Player::Player && address.location == CardLocation::Hand)
-        })
-        .count();
-    ensure!(
-        tracked_count == count,
-        "Tracked hand count differs from the hand query"
-    );
-    for (index, card) in snapshot.hand.iter().enumerate() {
-        ensure!(card.index == index, "Hand query sequence is out of order");
-        let address = CardAddress {
-            controller: Player::Player,
-            location: CardLocation::Hand,
-            sequence: u32::try_from(index)?,
+            .collect();
+        cards.sort_by_key(|(address, _)| address.sequence);
+        let count = cards.len();
+        let pile_image = match location {
+            CardLocation::Deck => Some(CardImage::CardBack),
+            CardLocation::ExtraDeck => Some(CardImage::ExtraDeckBack),
+            CardLocation::Graveyard | CardLocation::Banishment => cards
+                .last()
+                .map(|(_, card)| {
+                    card.data
+                        .map(|data| pile_face(location, data))
+                        .context("Pile top data is missing")
+                })
+                .transpose()?,
+            _ => None,
         };
-        let tracked = snapshot
-            .cards
-            .card_at(address)
-            .with_context(|| format!("Untracked hand card at {address:?}"))?;
-        ensure!(
-            tracked.code == 0 || tracked.code == card.code,
-            "Tracked hand card differs at {address:?}"
-        );
-        let selected = snapshot
-            .selected
-            .is_some_and(|selected| selected.matches(address));
-        let (anchor, rotation, stack) = hand_position(geometry.hand_base, index, count, selected);
-        targets.push(CardTarget {
-            id: tracked.id,
-            address,
-            anchor,
-            data: CardData {
-                card_code: card.code,
-                controller: Player::Player,
-                location: CardLocation::Hand,
-                sequence: u8::try_from(index)?,
-                ..Default::default()
-            },
-            rotation,
-            stack_order: 50 + i32::try_from(stack)?,
-            interactive: true,
-            appearance: CardAppearance::Interactive,
-        });
-    }
-    for (pile_index, (location, count, queried)) in [
-        (CardLocation::Deck, snapshot.deck_count, None),
-        (
-            CardLocation::ExtraDeck,
-            snapshot.extra.len(),
-            Some(&snapshot.extra),
-        ),
-        (
-            CardLocation::Graveyard,
-            snapshot.graveyard.len(),
-            Some(&snapshot.graveyard),
-        ),
-        (
-            CardLocation::Banishment,
-            snapshot.banishment.len(),
-            Some(&snapshot.banishment),
-        ),
-    ]
-    .into_iter()
-    .enumerate()
-    {
-        let tracked_count = snapshot.cards.cards().iter().filter(|card| matches!(card.placement,
-            CardPlacement::Zone(address) if address.controller == Player::Player && address.location == location)).count();
-        ensure!(
-            tracked_count == count,
-            "Tracked {location} count differs from the pile"
-        );
-        let image = match location {
-            CardLocation::Deck => CardImage::CardBack,
-            CardLocation::ExtraDeck => CardImage::ExtraDeckBack,
-            CardLocation::Graveyard | CardLocation::Banishment if count > 0 => {
-                let top = queried
-                    .context("Pile query missing")?
-                    .last()
-                    .and_then(|card| *card)
-                    .context("Pile top missing")?;
-                pile_face(location, top)
-            }
-            _ => continue,
-        };
-        for sequence in 0..count {
-            let address = CardAddress {
-                controller: Player::Player,
-                location,
-                sequence: u32::try_from(sequence)?,
+        for (index, (address, card)) in cards.into_iter().enumerate() {
+            let data = card
+                .data
+                .with_context(|| format!("Card data is missing at {address:?}"))?;
+            let (anchor, rotation, stack_order, appearance) = match location {
+                CardLocation::MonsterZone | CardLocation::SpellTrapZone => {
+                    let sequence = usize::try_from(address.sequence)?;
+                    let (offset, count) = if location == CardLocation::MonsterZone {
+                        (0, 7)
+                    } else {
+                        (7, 6)
+                    };
+                    ensure!(sequence < count, "No visible field zone for {address:?}");
+                    (
+                        *geometry
+                            .field
+                            .get(offset + sequence)
+                            .context("Field anchor missing")?,
+                        0.0,
+                        2,
+                        CardAppearance::Interactive,
+                    )
+                }
+                CardLocation::Hand => {
+                    let (anchor, rotation, stack) = hand_position(
+                        geometry.hand_base,
+                        index,
+                        count,
+                        snapshot.selected == Some(card.id),
+                    );
+                    (
+                        anchor,
+                        rotation,
+                        50 + i32::try_from(stack)?,
+                        CardAppearance::Interactive,
+                    )
+                }
+                _ => {
+                    let pile_index = match location {
+                        CardLocation::Deck => 0,
+                        CardLocation::ExtraDeck => 1,
+                        CardLocation::Graveyard => 2,
+                        CardLocation::Banishment => 3,
+                        _ => unreachable!(),
+                    };
+                    (
+                        *geometry
+                            .piles
+                            .get(pile_index)
+                            .context("Pile anchor missing")?,
+                        if location == CardLocation::Banishment {
+                            -90.0
+                        } else {
+                            0.0
+                        },
+                        1,
+                        CardAppearance::Pile(pile_image.context("Pile image is missing")?),
+                    )
+                }
             };
-            let card = snapshot
-                .cards
-                .card_at(address)
-                .with_context(|| format!("Untracked pile card at {address:?}"))?;
-            if let Some(queried) = queried {
-                let data = queried[sequence].context("Empty pile query slot")?;
-                ensure!(
-                    data.controller == address.controller
-                        && data.location == location
-                        && u32::from(data.sequence) == address.sequence
-                        && (card.code == 0 || data.card_code == 0 || card.code == data.card_code),
-                    "Tracked card and pile query disagree at {address:?}"
-                );
-            }
+            let interactive = appearance == CardAppearance::Interactive;
             targets.push(CardTarget {
                 id: card.id,
                 address,
-                anchor: *geometry
-                    .piles
-                    .get(pile_index)
-                    .context("Pile anchor missing")?,
-                data: CardData {
-                    card_code: card.code,
-                    controller: Player::Player,
+                anchor,
+                data: if matches!(
                     location,
-                    sequence: u8::try_from(sequence)?,
-                    ..Default::default()
-                },
-                rotation: if location == CardLocation::Banishment {
-                    -90.0
+                    CardLocation::MonsterZone | CardLocation::SpellTrapZone
+                ) {
+                    data
                 } else {
-                    0.0
+                    CardData {
+                        card_code: if interactive {
+                            data.card_code
+                        } else {
+                            card.code
+                        },
+                        controller: address.controller,
+                        location,
+                        sequence: u8::try_from(address.sequence)?,
+                        ..Default::default()
+                    }
                 },
-                stack_order: 1,
-                interactive: false,
-                appearance: CardAppearance::Pile(image),
+                rotation,
+                stack_order,
+                appearance,
             });
         }
     }
@@ -467,7 +382,6 @@ fn targets(
             },
             rotation: 0.0,
             stack_order: 1,
-            interactive: false,
             appearance: CardAppearance::Material,
         });
     }
@@ -476,13 +390,13 @@ fn targets(
 
 #[component]
 pub(super) fn LayeredField(mut startup_ready: Signal<bool>) -> Element {
-    let state = use_context::<UIState>();
-    let tracking = use_context::<Signal<Option<CardTracking>>>();
+    let mut state = use_context::<UIState>();
+    let tracking = state.cards;
     let anchors = use_context::<LayoutAnchors>();
     let revision = use_context::<LayoutRevision>();
     let mut layered_mounted = use_signal(|| false);
     let mut artwork = use_signal(HashMap::<String, ArtworkStatus>::new);
-    let playback = try_consume_context::<Signal<CardPlayback>>();
+    let playback = try_consume_context::<Signal<CardAnimationState>>();
     let resource = use_resource(move || {
         let layout_revision = revision;
         let revision = (revision.0)();
@@ -498,19 +412,7 @@ pub(super) fn LayeredField(mut startup_ready: Signal<bool>) -> Element {
             (revision, result)
         }
     });
-    let mut current = snapshot(
-        tracking(),
-        (state.monsters)(),
-        (state.spell_traps)(),
-        (state.hand_contents)(),
-        (state.selected_card)(),
-    );
-    if let Some(current) = &mut current {
-        current.deck_count = (state.main_deck_length)() as usize;
-        current.extra = (state.extra_deck)();
-        current.graveyard = (state.graveyard)();
-        current.banishment = (state.banishment)();
-    }
+    let current = snapshot(tracking(), (state.selected_card)());
     let current_revision = (revision.0)();
     let result = resource.read();
     let geometry = result.as_ref().and_then(|(measured_revision, result)| {
@@ -571,39 +473,32 @@ pub(super) fn LayeredField(mut startup_ready: Signal<bool>) -> Element {
         let mounted = layered_mounted();
         let ready = startup_ready();
         let waiting = (state.waiting_on_input)();
+        let finished = (state.duel_finished)();
         let _ = artwork();
         let _ = tracking();
-        let _ = (state.monsters)();
-        let _ = (state.spell_traps)();
-        let _ = (state.hand_contents)();
-        let _ = (state.main_deck_length)();
-        let _ = (state.extra_deck)();
-        let _ = (state.graveyard)();
-        let _ = (state.banishment)();
-        let Some(mut playback) = playback else { return };
+        let Some(playback) = playback else { return };
         let current = playback();
-        if current.failure.is_some() || current.restarting {
+        if (state.failure)().is_some() || (state.restarting)() {
             return;
         }
         if let Some(error) = &target_failure {
             tracing::error!("Card layer synchronization failed: {error}");
-            playback.write().fail(error.clone());
+            state.fail(error.clone(), Some(playback));
             return;
         }
         if !ready {
             if let Some(url) = &artwork_failure {
                 let error = format!("Cannot load card artwork: {url}");
                 tracing::error!("{error}");
-                playback.write().fail(error);
+                state.fail(error, Some(playback));
                 return;
             }
             if let Some((measured_revision, result)) = measured.as_ref() {
                 if *measured_revision == current_revision {
                     match result {
                         Err(error) => {
-                            playback
-                                .write()
-                                .fail(format!("Cannot measure the field: {error}"));
+                            state
+                                .fail(format!("Cannot measure the field: {error}"), Some(playback));
                             return;
                         }
                         Ok(_)
@@ -613,8 +508,8 @@ pub(super) fn LayeredField(mut startup_ready: Signal<bool>) -> Element {
                                 current_revision,
                                 targets_ready,
                                 artwork_ready,
-                                waiting || current.finished,
-                                current.blocked(),
+                                waiting || finished,
+                                current.active,
                             ) =>
                         {
                             startup_ready.set(true)
@@ -627,11 +522,11 @@ pub(super) fn LayeredField(mut startup_ready: Signal<bool>) -> Element {
         if let Some((measured_revision, result)) = measured.as_ref() {
             if *measured_revision == current_revision {
                 match result {
-                    Ok(_) if current.layout_pending => playback.write().layout_pending = false,
                     Ok(_) => {}
-                    Err(error) => playback
-                        .write()
-                        .fail(format!("Cannot remeasure the field: {error}")),
+                    Err(error) => state.fail(
+                        format!("Cannot remeasure the field: {error}"),
+                        Some(playback),
+                    ),
                 }
             }
         }

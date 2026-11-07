@@ -68,32 +68,36 @@ fn replaces_tracking_and_ui_state_when_a_duel_restarts() {
         let second = core.create_duel(0).unwrap();
         let mut state = use_context_provider(UIState::default);
         let mut duel = use_context_provider(|| Signal::new(None::<Duel>));
-        let mut tracking = use_context_provider(|| Signal::new(None::<CardTracking>));
+        let mut tracking = state.cards;
         let initial = DuelSetup {
             duel: first.clone(),
             cards: CardLayer::from_decks(&[1, 2], &[]).unwrap(),
         };
-        install_duel(&mut state, &mut duel, &mut tracking, Some(initial.clone()));
+        install_duel(&mut state, &mut duel, Some(initial.clone()));
         state.waiting_on_input.set(true);
-        tracking.set(Some(CardTracking::Failed("test failure".into())));
-        install_duel(&mut state, &mut duel, &mut tracking, Some(initial));
+        state.restarting.set(true);
+        state.failure.set(Some("test failure".into()));
+        tracking.set(None);
+        install_duel(&mut state, &mut duel, Some(initial));
         assert!((state.waiting_on_input)());
-        assert!(matches!(&*tracking.read(), Some(CardTracking::Failed(_))));
+        assert!(tracking.read().is_none());
         let replacement = DuelSetup {
             duel: second.clone(),
             cards: CardLayer::from_decks(&[3], &[]).unwrap(),
         };
-        install_duel(&mut state, &mut duel, &mut tracking, Some(replacement));
+        install_duel(&mut state, &mut duel, Some(replacement));
         assert!(!(state.waiting_on_input)());
+        assert!(!(state.restarting)());
+        assert!((state.failure)().is_none());
         assert!(duel.read().as_ref().unwrap().ptr_eq(&second));
         let guard = tracking.read();
-        let Some(CardTracking::Active(layer)) = &*guard else {
+        let Some(layer) = &*guard else {
             panic!("Restart did not initialize a fresh tracker");
         };
         assert_eq!(layer.cards().len(), 1);
         assert_eq!(layer.cards()[0].code, 3);
         drop(guard);
-        install_duel(&mut state, &mut duel, &mut tracking, None);
+        install_duel(&mut state, &mut duel, None);
         assert!(duel.read().is_none());
         assert!(tracking.read().is_none());
         rsx! {}

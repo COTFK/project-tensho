@@ -4,12 +4,6 @@ use super::constants::BattlePosition;
 use super::constants::CardLocation;
 use super::constants::Player;
 
-#[derive(Hash, Debug, PartialEq, Eq, Clone, Copy)]
-pub struct HandCard {
-    pub index: usize,
-    pub code: u32,
-}
-
 #[derive(Hash, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Zone {
     pub location: CardLocation,

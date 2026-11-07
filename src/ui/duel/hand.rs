@@ -1,6 +1,7 @@
 use dioxus::prelude::*;
 
 use super::layout_anchors::{Anchor, AnchorPart, LayoutAnchor};
+use crate::ocgcore::constants::CardLocation;
 use crate::state::UIState;
 
 pub(super) fn hand_transform(index: usize, hand_size: usize) -> (i32, i32) {
@@ -13,7 +14,7 @@ pub(super) fn hand_transform(index: usize, hand_size: usize) -> (i32, i32) {
 #[component]
 pub fn Hand() -> Element {
     let state = use_context::<UIState>();
-    let hand_cards = (state.hand_contents)();
+    let hand_cards = state.zone_data(CardLocation::Hand).unwrap_or_default();
     let hand_size = hand_cards.len();
 
     rsx!(
@@ -25,9 +26,9 @@ pub fn Hand() -> Element {
                 part: AnchorPart::Card,
                 class: "absolute left-1/2 top-0 w-[10vw] aspect-[59/86] -translate-x-1/2 pointer-events-none",
             }
-            for (index, card) in hand_cards.into_iter().enumerate() {
+            for (index, _card) in hand_cards.into_iter().enumerate() {
                 div {
-                    key: "{card.code}-{index}",
+                    key: "{index}",
                     class: "w-[10vw] aspect-[59/86] shrink-0 -mx-[1.1vw] relative",
                 }
             }
