@@ -3,6 +3,7 @@ use super::*;
 use dioxus::html::geometry::{PixelsRect, PixelsSize, euclid::point2};
 use dioxus::html::{MountedResult, RenderedElementBacking};
 use std::any::Any;
+use std::cell::Cell;
 use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
@@ -108,6 +109,57 @@ fn measures_all_normal_extra_and_spell_trap_zones() {
         assert_eq!(target.rotation, 0.0);
         assert!(target.interactive);
     }
+}
+
+#[test]
+fn retries_an_anchor_that_is_initially_zero_sized() {
+    struct DelayedElement(Cell<u32>);
+
+    impl RenderedElementBacking for DelayedElement {
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+
+        fn get_client_rect(&self) -> Pin<Box<dyn Future<Output = MountedResult<PixelsRect>>>> {
+            let attempts = self.0.get();
+            self.0.set(attempts + 1);
+            let size = if attempts == 0 {
+                PixelsSize::new(0.0, 0.0)
+            } else {
+                PixelsSize::new(59.0, 86.0)
+            };
+            Box::pin(async move { Ok(PixelsRect::new(point2(0.0, 0.0), size)) })
+        }
+    }
+
+    let (_, anchors) = fixture();
+    anchors.insert(
+        (Anchor::Zone(CardLocation::MonsterZone, 0), AnchorPart::Card),
+        Rc::new(()),
+        Rc::new(MountedData::new(DelayedElement(Cell::new(0)))),
+    );
+    assert!(futures::executor::block_on(measure_field_when_ready(&anchors)).is_ok());
+}
+
+#[test]
+fn persistent_missing_anchors_are_reported() {
+    let error =
+        match futures::executor::block_on(measure_field_when_ready(&LayoutAnchors::default())) {
+            Ok(_) => panic!("missing anchors should fail"),
+            Err(error) => error,
+        };
+    assert!(error.is::<AnchorNotReady>());
+}
+
+#[test]
+fn startup_waits_for_mounted_current_geometry_and_settled_duel() {
+    assert!(!startup_layout_ready(false, 2, 2, true, true, true, false));
+    assert!(!startup_layout_ready(true, 1, 2, true, true, true, false));
+    assert!(!startup_layout_ready(true, 2, 2, false, true, true, false));
+    assert!(!startup_layout_ready(true, 2, 2, true, false, true, false));
+    assert!(!startup_layout_ready(true, 2, 2, true, true, false, false));
+    assert!(!startup_layout_ready(true, 2, 2, true, true, true, true));
+    assert!(startup_layout_ready(true, 2, 2, true, true, true, false));
 }
 
 #[test]

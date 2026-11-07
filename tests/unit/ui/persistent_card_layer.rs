@@ -81,6 +81,32 @@ fn mismatched_target_is_not_rendered() {
     assert!(visible_card(card, Some(target)).is_none());
 }
 
+#[test]
+fn startup_artwork_matches_visible_card_images() {
+    let (card, target) = fixture(CardLocation::Hand, None);
+    assert_eq!(
+        card_image(card, Some(target)),
+        Some(CardImage::Face(target.data))
+    );
+
+    let (card, mut target) = fixture(
+        CardLocation::MonsterZone,
+        Some(CardPositionFlags::FACE_DOWN_DEFENSE),
+    );
+    assert_eq!(card_image(card, Some(target)), Some(CardImage::CardBack));
+    target.data.position = Some(BattlePosition::FaceDownAttack);
+    let mut face_up = card;
+    face_up.position = Some(CardPositionFlags::FACE_UP_ATTACK);
+    assert_eq!(card_image(face_up, Some(target)), Some(CardImage::CardBack));
+
+    let (card, mut target) = fixture(CardLocation::ExtraDeck, None);
+    target.appearance = CardAppearance::Pile(CardImage::ExtraDeckBack);
+    assert_eq!(
+        card_image(card, Some(target)),
+        Some(CardImage::ExtraDeckBack)
+    );
+}
+
 thread_local! {
     static TEST_STATE: RefCell<Option<Signal<(Vec<TrackedCard>, Vec<CardTarget>)>>> = const { RefCell::new(None) };
 }

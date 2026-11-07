@@ -15,7 +15,7 @@ pub enum CardImage {
 }
 
 impl CardImage {
-    fn url(self) -> String {
+    pub(crate) fn url(self) -> String {
         match self {
             Self::Face(card) => card_image_url(card.card_code),
             Self::Thumbnail(card) => card_thumbnail_url(card.card_code),

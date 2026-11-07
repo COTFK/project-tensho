@@ -99,8 +99,14 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>) -> Element {
     let tracking = use_context::<Signal<Option<CardTracking>>>();
     use_context_provider(layout_anchors::LayoutAnchors::default);
     let revision = use_context_provider(|| layout_anchors::LayoutRevision(Signal::new(0)));
-    let mut layered_preview = use_signal(|| false);
-    let mut playback = use_context_provider(|| Signal::new(CardPlayback::default()));
+    let mut layered_preview = use_signal(|| true);
+    let startup_ready = use_signal(|| false);
+    let mut playback = use_context_provider(|| {
+        Signal::new(CardPlayback {
+            enabled: *layered_preview.peek(),
+            ..Default::default()
+        })
+    });
 
     use_effect(move || {
         if playback().enabled && playback.peek().failure.is_none() {
@@ -125,6 +131,7 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>) -> Element {
     // Start game loop
     use_effect(run_game_loop);
 
+    let loading = !startup_ready() && playback().failure.is_none();
     rsx!(
         main {
             class: "portrait:hidden relative h-dvh w-dvw bg-gray-800 select-none",
@@ -141,6 +148,8 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>) -> Element {
                 }
 
             },
+            InteractionGate {
+                active: loading,
             UIButton {
                 class: "fixed top-3 left-3 z-50 w-max h-max p-2",
                 label: "Restart game",
@@ -178,12 +187,12 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>) -> Element {
                 FullscreenIcon {}
             }
             div {
-                class: if playback().blocked() { "hidden" },
+                class: if loading || playback().blocked() { "hidden" },
                 ModalContainer {}
             }
             InteractionGate {
                 active: playback().blocked(),
-                FieldPreview { enabled: layered_preview }
+                FieldPreview { enabled: layered_preview, startup_ready }
             }
             MotionPreference {}
             if let Some(error) = &playback().failure {
@@ -204,6 +213,13 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>) -> Element {
                     class: "fixed bottom-3 right-3 z-50 rounded-md bg-gray-950/70 px-2 py-1 font-mono text-gray-200 text-[8px] md:text-xs lg:text-base shadow-lg ring-1 ring-white/10 backdrop-blur-sm pointer-events-none",
                     title: "Current phase",
                     "{phase}"
+                }
+            }
+            }
+            if loading {
+                div {
+                    class: "fixed inset-0 z-[100]",
+                    LoadingScreen {}
                 }
             }
         }

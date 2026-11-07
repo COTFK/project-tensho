@@ -10,6 +10,10 @@ fn selection_tracks_moves_and_invalidates_on_shuffle_or_failure() {
     use crate::ocgcore::messages::{MoveMessageData, ShuffleCardsMessageData};
     use crate::ui::card_layer::CardAddress;
 
+    thread_local! {
+        static COMPLETED: Cell<bool> = const { Cell::new(false) };
+    }
+
     fn app() -> Element {
         let mut state = use_context_provider(UIState::default);
         let mut layer = CardLayer::default();
@@ -24,6 +28,15 @@ fn selection_tracks_moves_and_invalidates_on_shuffle_or_failure() {
             sequence: 0,
         };
         layer.insert(hand, 42).unwrap();
+        layer
+            .insert(
+                CardAddress {
+                    sequence: 1,
+                    ..hand
+                },
+                43,
+            )
+            .unwrap();
         let mut tracking = use_context_provider(|| Signal::new(Some(CardTracking::Active(layer))));
         select_card(hand);
         let selected = state.selected_card.peek().unwrap();
@@ -63,7 +76,7 @@ fn selection_tracks_moves_and_invalidates_on_shuffle_or_failure() {
             .unwrap()
             .apply(&CoreMessage::ShuffleHand(ShuffleCardsMessageData {
                 player: Player::Player,
-                card_codes: vec![42],
+                card_codes: vec![42, 43],
             }));
         reconcile_selected_card(&mut state, tracking.peek().as_ref().unwrap());
         assert!(state.selected_card.peek().is_none());
@@ -78,10 +91,13 @@ fn selection_tracks_moves_and_invalidates_on_shuffle_or_failure() {
         select_card(hand);
         assert!(state.selected_card.peek().unwrap().matches(hand));
         assert!(state.selected_card.peek().unwrap().card_id.is_none());
+        COMPLETED.with(|completed| completed.set(true));
         rsx! {}
     }
+    COMPLETED.with(|completed| completed.set(false));
     let mut dom = VirtualDom::new(app);
     dom.rebuild_in_place();
+    assert!(COMPLETED.with(|completed| completed.get()));
 }
 
 #[test]

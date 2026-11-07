@@ -1,16 +1,17 @@
 use anyhow::{Context, ensure};
 use dioxus::prelude::*;
+use std::collections::{BTreeSet, HashMap};
 
 use super::field::Field;
 use super::hand::{Hand, hand_transform};
-use super::layout_anchors::{CardAnchor, LayoutAnchors, LayoutRevision};
-use super::persistent_card_layer::{CardAppearance, CardTarget, PersistentCardLayer};
+use super::layout_anchors::{AnchorNotReady, CardAnchor, LayoutAnchors, LayoutRevision};
+use super::persistent_card_layer::{CardAppearance, CardTarget, PersistentCardLayer, card_image};
 use crate::ocgcore::CardType;
 use crate::ocgcore::constants::{BattlePosition, CardLocation, Player};
 use crate::ocgcore::{CardData, HandCard};
 use crate::state::{SelectedCard, UIState};
 use crate::ui::card_layer::{CardAddress, CardLayer, CardPlacement};
-use crate::ui::card_playback::CardPlayback;
+use crate::ui::card_playback::{CardPlayback, wait_millis};
 use crate::ui::card_tracking::CardTracking;
 use crate::ui::components::CardImage;
 
@@ -55,6 +56,12 @@ struct PreviewGeometry {
     field: Vec<CardAnchor>,
     hand_base: CardAnchor,
     piles: Vec<CardAnchor>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ArtworkStatus {
+    Loaded,
+    Failed,
 }
 
 fn hand_position(
@@ -129,6 +136,16 @@ async fn measure_field(anchors: &LayoutAnchors) -> anyhow::Result<PreviewGeometr
             .await
             .context("Cannot measure hand")?,
     })
+}
+
+async fn measure_field_when_ready(anchors: &LayoutAnchors) -> anyhow::Result<PreviewGeometry> {
+    for _ in 0..10 {
+        match measure_field(anchors).await {
+            Err(error) if error.is::<AnchorNotReady>() => wait_millis(100).await,
+            result => return result,
+        }
+    }
+    measure_field(anchors).await
 }
 
 fn preserve_pile_images(
@@ -459,21 +476,26 @@ fn targets(
 }
 
 #[component]
-pub(super) fn FieldPreview(enabled: Signal<bool>) -> Element {
+pub(super) fn FieldPreview(enabled: Signal<bool>, mut startup_ready: Signal<bool>) -> Element {
     let state = use_context::<UIState>();
     let tracking = use_context::<Signal<Option<CardTracking>>>();
     let anchors = use_context::<LayoutAnchors>();
     let revision = use_context::<LayoutRevision>();
+    let mut layered_mounted = use_signal(|| false);
+    let mut artwork = use_signal(HashMap::<String, ArtworkStatus>::new);
     let playback = try_consume_context::<Signal<CardPlayback>>();
     let resource = use_resource(move || {
         let enabled = enabled();
+        let layout_revision = revision;
         let revision = (revision.0)();
         let anchors = anchors.clone();
         async move {
             if enabled {
-                let result = measure_field(&anchors).await.map_err(|error| {
+                let result = measure_field_when_ready(&anchors).await.map_err(|error| {
                     let error = format!("{error:#}");
-                    tracing::error!("Layered field unavailable: {error}");
+                    if *layout_revision.0.peek() == revision {
+                        tracing::error!("Layered field unavailable: {error}");
+                    }
                     error
                 });
                 Some((revision, result))
@@ -528,9 +550,40 @@ pub(super) fn FieldPreview(enabled: Signal<bool>) -> Element {
     } else {
         None
     };
+    let targets_ready = resolved.as_ref().is_some_and(Result::is_ok);
+    let required_artwork: BTreeSet<String> = current
+        .as_ref()
+        .zip(resolved.as_ref().and_then(|result| result.as_ref().ok()))
+        .map(|(snapshot, targets)| {
+            snapshot
+                .cards
+                .cards()
+                .iter()
+                .filter_map(|card| {
+                    card_image(
+                        *card,
+                        targets.iter().find(|target| target.id == card.id).copied(),
+                    )
+                })
+                .map(CardImage::url)
+                .collect()
+        })
+        .unwrap_or_default();
+    let artwork_state = artwork();
+    let artwork_failure = required_artwork
+        .iter()
+        .find(|url| artwork_state.get(*url) == Some(&ArtworkStatus::Failed))
+        .cloned();
+    let artwork_ready = required_artwork
+        .iter()
+        .all(|url| artwork_state.get(url) == Some(&ArtworkStatus::Loaded));
     use_effect(move || {
         let current_revision = (revision.0)();
         let measured = resource.read();
+        let mounted = layered_mounted();
+        let ready = startup_ready();
+        let waiting = (state.waiting_on_input)();
+        let _ = artwork();
         let _ = enabled();
         let _ = tracking();
         let _ = (state.monsters)();
@@ -549,6 +602,40 @@ pub(super) fn FieldPreview(enabled: Signal<bool>) -> Element {
             tracing::error!("Card layer synchronization failed: {error}");
             playback.write().fail(error.clone());
             return;
+        }
+        if !ready {
+            if let Some(url) = &artwork_failure {
+                let error = format!("Cannot load card artwork: {url}");
+                tracing::error!("{error}");
+                playback.write().fail(error);
+                return;
+            }
+            if let Some((measured_revision, result)) = measured.as_ref().and_then(Option::as_ref) {
+                if *measured_revision == current_revision {
+                    match result {
+                        Err(error) => {
+                            playback
+                                .write()
+                                .fail(format!("Cannot measure the field: {error}"));
+                            return;
+                        }
+                        Ok(_)
+                            if startup_layout_ready(
+                                mounted,
+                                *measured_revision,
+                                current_revision,
+                                targets_ready,
+                                artwork_ready,
+                                waiting || current.finished,
+                                current.blocked(),
+                            ) =>
+                        {
+                            startup_ready.set(true)
+                        }
+                        Ok(_) => {}
+                    }
+                }
+            }
         }
         if !current.layout_pending {
             return;
@@ -577,8 +664,40 @@ pub(super) fn FieldPreview(enabled: Signal<bool>) -> Element {
     rsx! {
         Field { layered }
         Hand { layered }
+        // The hand layout can shift when legacy cards are replaced.
+        if layered {
+            div {
+                class: "hidden",
+                onmounted: move |_| {
+                    revision.invalidate();
+                    layered_mounted.set(true);
+                },
+            }
+        }
         if enabled() {
             PersistentCardLayer { cards, targets: visible_targets }
+        }
+        if !startup_ready() {
+            for url in required_artwork {
+                {
+                    let loaded_url = url.clone();
+                    let failed_url = url.clone();
+                    rsx! {
+                        img {
+                            key: "{url}",
+                            class: "hidden",
+                            alt: "",
+                            src: "{url}",
+                            onload: move |_| {
+                                artwork.write().insert(loaded_url.clone(), ArtworkStatus::Loaded);
+                            },
+                            onerror: move |_| {
+                                artwork.write().insert(failed_url.clone(), ArtworkStatus::Failed);
+                            },
+                        }
+                    }
+                }
+            }
         }
         if let Some(Err(error)) = resolved {
             div {
@@ -588,6 +707,23 @@ pub(super) fn FieldPreview(enabled: Signal<bool>) -> Element {
             }
         }
     }
+}
+
+fn startup_layout_ready(
+    layered_mounted: bool,
+    measured_revision: u64,
+    current_revision: u64,
+    targets_ready: bool,
+    artwork_ready: bool,
+    duel_settled: bool,
+    playback_blocked: bool,
+) -> bool {
+    layered_mounted
+        && measured_revision == current_revision
+        && targets_ready
+        && artwork_ready
+        && duel_settled
+        && !playback_blocked
 }
 
 #[cfg(test)]
