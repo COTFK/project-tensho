@@ -9,6 +9,11 @@ mod hand;
 mod layout_anchors;
 mod main_deck;
 mod modal;
+#[allow(
+    dead_code,
+    reason = "The opt-in preview mounts this layer in the next step"
+)]
+mod persistent_card_layer;
 
 pub use hand::Hand;
 
