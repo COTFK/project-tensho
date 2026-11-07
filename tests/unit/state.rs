@@ -89,8 +89,7 @@ fn selection_tracks_moves_and_invalidates_on_shuffle_or_failure() {
         reconcile_selected_card(&mut state, tracking.peek().as_ref().unwrap());
         assert!(state.selected_card.peek().is_none());
         select_card(hand);
-        assert!(state.selected_card.peek().unwrap().matches(hand));
-        assert!(state.selected_card.peek().unwrap().card_id.is_none());
+        assert!(state.selected_card.peek().is_none());
         COMPLETED.with(|completed| completed.set(true));
         rsx! {}
     }
@@ -304,9 +303,8 @@ fn failed_tracking_blocks_layered_actions_until_restart() {
         use_context_provider(|| {
             Signal::new(Some(CardTracking::Failed("injected divergence".into())))
         });
-        let mut playback = use_context_provider(|| {
+        let playback = use_context_provider(|| {
             Signal::new(CardPlayback {
-                enabled: true,
                 reduced_motion: false,
                 ..Default::default()
             })
@@ -317,9 +315,6 @@ fn failed_tracking_blocks_layered_actions_until_restart() {
             playback.peek().failure.as_deref(),
             Some("injected divergence")
         );
-        send_response(Response::No);
-        assert!(*state.waiting_on_input.peek());
-        playback.write().set_enabled(false);
         send_response(Response::No);
         assert!(*state.waiting_on_input.peek());
         COMPLETED.with(|completed| completed.set(true));
@@ -424,7 +419,6 @@ fn layered_loop_pauses_on_a_real_draw_and_resumes_to_the_prompt() {
         });
         let mut playback = use_context_provider(|| {
             Signal::new(CardPlayback {
-                enabled: true,
                 reduced_motion: REDUCED.with(|reduced| reduced.get()),
                 ..Default::default()
             })
@@ -512,35 +506,20 @@ fn handles_real_duel_messages_until_input() {
 
 #[test]
 #[cfg(not(target_arch = "wasm32"))]
-fn legacy_processing_continues_when_tracking_has_failed() {
+fn failed_tracking_stops_processing_without_playback_context() {
+    thread_local! {
+        static COMPLETED: Cell<bool> = const { Cell::new(false) };
+    }
     fn app() -> Element {
-        let core = futures::executor::block_on(OCGCore::load(
-            |_| panic!("Unexpected card lookup"),
-            Box::new(|_| None),
-            |_, _| {},
-        ))
-        .unwrap();
-        let duel = core.create_duel(5).unwrap();
-        duel.start();
-        let state = use_context_provider(UIState::default);
-        use_context_provider(|| Signal::new(Some(duel.clone())));
         let tracking = use_context_provider(|| {
             Signal::new(Some(CardTracking::Failed("test failure".to_owned())))
         });
-        for _ in 0..1000 {
-            let status = duel.process();
-            if handle_core_message() {
-                assert!((state.waiting_on_input)());
-                assert!(
-                    matches!(&*tracking.read(), Some(CardTracking::Failed(error)) if error == "test failure")
-                );
-                return rsx! {};
-            }
-            assert_ne!(status, OCG_DuelStatus::OCG_DUEL_STATUS_END);
-        }
-        panic!("Duel did not reach an input prompt");
+        assert!(stop_failed_tracking(tracking, None));
+        COMPLETED.with(|completed| completed.set(true));
+        rsx! {}
     }
 
     let mut dom = VirtualDom::new(app);
     dom.rebuild_in_place();
+    assert!(COMPLETED.with(|completed| completed.get()));
 }

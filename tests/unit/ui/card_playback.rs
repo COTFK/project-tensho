@@ -45,11 +45,10 @@ fn groups_multiple_movements_and_ignores_new_or_hidden_cards() {
 #[test]
 fn completion_and_cancellation_ignore_stale_generations() {
     let mut playback = CardPlayback::default();
-    playback.set_enabled(true);
     playback.begin(vec![], CardLayer::default(), Default::default());
     let first = playback.generation;
-    playback.set_enabled(false);
-    playback.set_enabled(true);
+    playback.set_reduced_motion(true);
+    playback.set_reduced_motion(false);
     playback.begin(vec![], CardLayer::default(), Default::default());
     let second = playback.generation;
     playback.finish(first);
@@ -82,7 +81,6 @@ fn position_changes_start_playback_without_changing_card_identity() {
 #[test]
 fn resize_cancels_playback_and_blocks_until_layout_is_ready() {
     let mut playback = CardPlayback {
-        enabled: true,
         reduced_motion: false,
         ..Default::default()
     };
@@ -101,7 +99,6 @@ fn resize_cancels_playback_and_blocks_until_layout_is_ready() {
 #[test]
 fn reduced_motion_and_restart_cancel_stale_playback() {
     let mut playback = CardPlayback {
-        enabled: true,
         reduced_motion: false,
         ..Default::default()
     };
@@ -119,16 +116,14 @@ fn reduced_motion_and_restart_cancel_stale_playback() {
 }
 
 #[test]
-fn tracking_failure_stays_blocked_even_if_preview_is_disabled() {
+fn tracking_failure_stays_blocked_after_stale_completion() {
     let mut playback = CardPlayback {
-        enabled: true,
         reduced_motion: false,
         ..Default::default()
     };
     playback.begin(vec![], CardLayer::default(), Default::default());
     let generation = playback.generation;
     playback.fail("diverged".into());
-    playback.set_enabled(false);
     playback.finish(generation);
     assert_eq!(playback.failure.as_deref(), Some("diverged"));
     assert!(playback.blocked());

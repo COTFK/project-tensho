@@ -12,7 +12,6 @@ use crate::ui::card_layer::CardAddress;
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub(super) enum Anchor {
     Zone(CardLocation, u32),
-    Hand(u32),
     HandBase,
     Pile(CardLocation),
 }
@@ -32,7 +31,6 @@ impl TryFrom<CardAddress> for Anchor {
             CardLocation::SpellTrapZone if address.sequence < 6 => {
                 Ok(Self::Zone(address.location, address.sequence))
             }
-            CardLocation::Hand => Ok(Self::Hand(address.sequence)),
             CardLocation::Deck
             | CardLocation::ExtraDeck
             | CardLocation::Graveyard
@@ -45,8 +43,6 @@ impl TryFrom<CardAddress> for Anchor {
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub(super) enum AnchorPart {
     Card,
-    HandCenter,
-    HandSize,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -122,50 +118,27 @@ impl LayoutAnchors {
 
     pub async fn measure(&self, address: CardAddress) -> anyhow::Result<CardAnchor> {
         let anchor = Anchor::try_from(address)?;
-        let (center_key, size_key) = match anchor {
-            Anchor::Hand(_) => (
-                (anchor, AnchorPart::HandCenter),
-                (anchor, AnchorPart::HandSize),
-            ),
-            _ => ((anchor, AnchorPart::Card), (anchor, AnchorPart::Card)),
-        };
-        let (center, size) = {
+        let key = (anchor, AnchorPart::Card);
+        let element = {
             let anchors = self.0.borrow();
-            (
-                anchors
-                    .get(&center_key)
-                    .context(AnchorNotReady("Card center anchor not mounted"))?
-                    .1
-                    .clone(),
-                anchors
-                    .get(&size_key)
-                    .context(AnchorNotReady("Card size anchor not mounted"))?
-                    .1
-                    .clone(),
-            )
+            anchors
+                .get(&key)
+                .context(AnchorNotReady("Card anchor not mounted"))?
+                .1
+                .clone()
         };
-        let center_rect = center
+        let rect = element
             .get_client_rect()
             .await
-            .map_err(|error| anyhow::anyhow!("Measuring card center: {error}"))?;
-        let size_rect = if Rc::ptr_eq(&center, &size) {
-            center_rect
-        } else {
-            size.get_client_rect()
-                .await
-                .map_err(|error| anyhow::anyhow!("Measuring card size: {error}"))?
-        };
+            .map_err(|error| anyhow::anyhow!("Measuring card anchor: {error}"))?;
         let anchors = self.0.borrow();
         ensure!(
             anchors
-                .get(&center_key)
-                .is_some_and(|entry| Rc::ptr_eq(&entry.1, &center))
-                && anchors
-                    .get(&size_key)
-                    .is_some_and(|entry| Rc::ptr_eq(&entry.1, &size)),
+                .get(&key)
+                .is_some_and(|entry| Rc::ptr_eq(&entry.1, &element)),
             "Card anchor changed while measuring"
         );
-        CardAnchor::from_rects(center_rect, size_rect)
+        CardAnchor::from_rects(rect, rect)
     }
 
     pub async fn measure_hand_base(&self) -> anyhow::Result<CardAnchor> {

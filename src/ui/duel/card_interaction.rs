@@ -127,7 +127,6 @@ fn current_menu_actions(state: &UIState, address: CardAddress) -> Option<CardAct
 pub(super) fn InteractiveCard(
     card: CardData,
     address: CardAddress,
-    #[props(default)] layered: bool,
     #[props(default)] force_facedown: bool,
     #[props(default)] passive: bool,
     #[props(default)] animated: bool,
@@ -180,7 +179,7 @@ pub(super) fn InteractiveCard(
             );
     rsx! {
         div {
-            class: if passive || (layered && !hand) { "relative w-full h-full" } else if hand { "" } else { "relative h-full aspect-[59/86] mx-auto p-[clamp(1px,0.3vw,5px)]" },
+            class: if passive || !hand { "relative w-full h-full" } else { "" },
             CardActionMenu {
                 class: menu_class,
                 trigger: selected && !suppress && (can_activate || (hand && (actions.summon.is_some() || can_set))),

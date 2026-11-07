@@ -9,14 +9,12 @@ use crate::ui::components::ActionButton;
 use crate::ui::components::Card;
 use crate::ui::components::CardActionMenu;
 use crate::ui::components::CardImage;
-use crate::ui::components::CardStack;
 use crate::ui::components::OptionButton;
 use crate::ui::components::PickerModal;
 use crate::ui::components::svg::LightningTrioIcon;
-use crate::utility::card_thumbnail_url;
 
 #[component]
-pub fn Graveyard(#[props(default)] layered: bool) -> Element {
+pub fn Graveyard() -> Element {
     let mut state = use_context::<UIState>();
 
     let has_cards = state.graveyard.len() > 0;
@@ -43,12 +41,6 @@ pub fn Graveyard(#[props(default)] layered: bool) -> Element {
                     div {
                         class: "absolute inset-[2px] md:inset-[4px] my-0.5 md:my-1 rounded-[2px] blur-[1px] mix-blend-screen pointer-events-none",
                         class: if has_trigger_effects && !suppress_actions { "bg-yellow-400" },
-                    }
-                    if !layered {
-                        CardStack {
-                            length: state.graveyard.len(),
-                            image_url: card_thumbnail_url((state.graveyard)().last().unwrap().unwrap().card_code),
-                        }
                     }
                 }
             }

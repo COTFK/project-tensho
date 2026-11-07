@@ -7,7 +7,6 @@ const COMPLETION_MARGIN_MILLIS: u32 = 50;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct CardPlayback {
-    pub enabled: bool,
     pub active: bool,
     pub finished: bool,
     pub generation: u64,
@@ -23,7 +22,6 @@ pub(crate) struct CardPlayback {
 impl Default for CardPlayback {
     fn default() -> Self {
         Self {
-            enabled: false,
             active: false,
             finished: false,
             generation: 0,
@@ -73,14 +71,6 @@ impl CardPlayback {
         }
     }
 
-    pub fn set_enabled(&mut self, enabled: bool) {
-        self.enabled = enabled;
-        if !enabled {
-            self.cancel();
-            self.layout_pending = false;
-        }
-    }
-
     pub fn set_reduced_motion(&mut self, reduced: bool) {
         self.reduced_motion = reduced;
         if reduced && self.active {
@@ -89,7 +79,7 @@ impl CardPlayback {
     }
 
     pub fn resize(&mut self) {
-        if self.enabled && self.active {
+        if self.active {
             self.cancel();
             self.layout_pending = true;
         }

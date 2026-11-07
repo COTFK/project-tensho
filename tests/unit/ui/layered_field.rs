@@ -163,12 +163,11 @@ fn startup_waits_for_mounted_current_geometry_and_settled_duel() {
 }
 
 #[test]
-fn invalid_or_missing_tracking_never_enables_the_preview() {
+fn invalid_or_missing_tracking_never_produces_a_snapshot() {
     let (mut input, anchors) = fixture();
     assert!(
         snapshot(
-            false,
-            Some(CardTracking::Active(input.cards.clone())),
+            None,
             input.monsters.clone(),
             input.spell_traps.clone(),
             input.hand.clone(),
@@ -178,7 +177,6 @@ fn invalid_or_missing_tracking_never_enables_the_preview() {
     );
     assert!(
         snapshot(
-            true,
             Some(CardTracking::Failed("failure".into())),
             input.monsters.clone(),
             input.spell_traps.clone(),

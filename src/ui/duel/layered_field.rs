@@ -29,15 +29,14 @@ struct PreviewSnapshot {
 }
 
 fn snapshot(
-    enabled: bool,
     tracking: Option<CardTracking>,
     monsters: Vec<Option<CardData>>,
     spell_traps: Vec<Option<CardData>>,
     hand: Vec<HandCard>,
     selected: Option<SelectedCard>,
 ) -> Option<PreviewSnapshot> {
-    match (enabled, tracking) {
-        (true, Some(CardTracking::Active(cards))) => Some(PreviewSnapshot {
+    match tracking {
+        Some(CardTracking::Active(cards)) => Some(PreviewSnapshot {
             cards,
             monsters,
             spell_traps,
@@ -476,7 +475,7 @@ fn targets(
 }
 
 #[component]
-pub(super) fn FieldPreview(enabled: Signal<bool>, mut startup_ready: Signal<bool>) -> Element {
+pub(super) fn LayeredField(mut startup_ready: Signal<bool>) -> Element {
     let state = use_context::<UIState>();
     let tracking = use_context::<Signal<Option<CardTracking>>>();
     let anchors = use_context::<LayoutAnchors>();
@@ -485,27 +484,21 @@ pub(super) fn FieldPreview(enabled: Signal<bool>, mut startup_ready: Signal<bool
     let mut artwork = use_signal(HashMap::<String, ArtworkStatus>::new);
     let playback = try_consume_context::<Signal<CardPlayback>>();
     let resource = use_resource(move || {
-        let enabled = enabled();
         let layout_revision = revision;
         let revision = (revision.0)();
         let anchors = anchors.clone();
         async move {
-            if enabled {
-                let result = measure_field_when_ready(&anchors).await.map_err(|error| {
-                    let error = format!("{error:#}");
-                    if *layout_revision.0.peek() == revision {
-                        tracing::error!("Layered field unavailable: {error}");
-                    }
-                    error
-                });
-                Some((revision, result))
-            } else {
-                None
-            }
+            let result = measure_field_when_ready(&anchors).await.map_err(|error| {
+                let error = format!("{error:#}");
+                if *layout_revision.0.peek() == revision {
+                    tracing::error!("Cannot measure card layer: {error}");
+                }
+                error
+            });
+            (revision, result)
         }
     });
     let mut current = snapshot(
-        enabled(),
         tracking(),
         (state.monsters)(),
         (state.spell_traps)(),
@@ -520,14 +513,9 @@ pub(super) fn FieldPreview(enabled: Signal<bool>, mut startup_ready: Signal<bool
     }
     let current_revision = (revision.0)();
     let result = resource.read();
-    let geometry =
-        result
-            .as_ref()
-            .and_then(Option::as_ref)
-            .and_then(|(measured_revision, result)| {
-                (enabled() && (*measured_revision == current_revision || result.is_ok()))
-                    .then_some(result)
-            });
+    let geometry = result.as_ref().and_then(|(measured_revision, result)| {
+        (*measured_revision == current_revision || result.is_ok()).then_some(result)
+    });
     let resolved = match (current.as_ref(), geometry) {
         (Some(input), Some(Ok(geometry))) => Some(
             targets(input, geometry)
@@ -584,7 +572,6 @@ pub(super) fn FieldPreview(enabled: Signal<bool>, mut startup_ready: Signal<bool
         let ready = startup_ready();
         let waiting = (state.waiting_on_input)();
         let _ = artwork();
-        let _ = enabled();
         let _ = tracking();
         let _ = (state.monsters)();
         let _ = (state.spell_traps)();
@@ -595,7 +582,7 @@ pub(super) fn FieldPreview(enabled: Signal<bool>, mut startup_ready: Signal<bool
         let _ = (state.banishment)();
         let Some(mut playback) = playback else { return };
         let current = playback();
-        if !current.enabled || current.failure.is_some() || current.restarting {
+        if current.failure.is_some() || current.restarting {
             return;
         }
         if let Some(error) = &target_failure {
@@ -610,7 +597,7 @@ pub(super) fn FieldPreview(enabled: Signal<bool>, mut startup_ready: Signal<bool
                 playback.write().fail(error);
                 return;
             }
-            if let Some((measured_revision, result)) = measured.as_ref().and_then(Option::as_ref) {
+            if let Some((measured_revision, result)) = measured.as_ref() {
                 if *measured_revision == current_revision {
                     match result {
                         Err(error) => {
@@ -637,13 +624,11 @@ pub(super) fn FieldPreview(enabled: Signal<bool>, mut startup_ready: Signal<bool
                 }
             }
         }
-        if !current.layout_pending {
-            return;
-        }
-        if let Some((measured_revision, result)) = measured.as_ref().and_then(Option::as_ref) {
+        if let Some((measured_revision, result)) = measured.as_ref() {
             if *measured_revision == current_revision {
                 match result {
-                    Ok(_) => playback.write().layout_pending = false,
+                    Ok(_) if current.layout_pending => playback.write().layout_pending = false,
+                    Ok(_) => {}
                     Err(error) => playback
                         .write()
                         .fail(format!("Cannot remeasure the field: {error}")),
@@ -662,9 +647,9 @@ pub(super) fn FieldPreview(enabled: Signal<bool>, mut startup_ready: Signal<bool
         .map(|snapshot| snapshot.cards.cards().to_vec())
         .unwrap_or_default();
     rsx! {
-        Field { layered }
-        Hand { layered }
-        // The hand layout can shift when legacy cards are replaced.
+        Field {}
+        Hand {}
+        // Remeasure after the card layer is first ready.
         if layered {
             div {
                 class: "hidden",
@@ -674,9 +659,7 @@ pub(super) fn FieldPreview(enabled: Signal<bool>, mut startup_ready: Signal<bool
                 },
             }
         }
-        if enabled() {
-            PersistentCardLayer { cards, targets: visible_targets }
-        }
+        PersistentCardLayer { cards, targets: visible_targets }
         if !startup_ready() {
             for url in required_artwork {
                 {
@@ -697,13 +680,6 @@ pub(super) fn FieldPreview(enabled: Signal<bool>, mut startup_ready: Signal<bool
                         }
                     }
                 }
-            }
-        }
-        if let Some(Err(error)) = resolved {
-            div {
-                class: "fixed top-16 left-1/2 z-50 max-w-lg -translate-x-1/2 rounded bg-red-950 p-3 text-sm text-white shadow-lg",
-                role: "alert",
-                "Layered field unavailable; using the legacy field: {error}"
             }
         }
     }
@@ -727,5 +703,5 @@ fn startup_layout_ready(
 }
 
 #[cfg(test)]
-#[path = "../../../tests/unit/ui/field_preview.rs"]
+#[path = "../../../tests/unit/ui/layered_field.rs"]
 mod tests;
