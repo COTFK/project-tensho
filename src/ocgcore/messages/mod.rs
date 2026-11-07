@@ -23,8 +23,8 @@ mod select_tribute;
 mod select_unselect_card;
 mod select_yes_no;
 mod set_card;
+mod shuffle_cards;
 mod shuffle_deck;
-mod shuffle_hand;
 mod sort_card;
 mod summoning;
 mod swap;
@@ -53,8 +53,8 @@ pub use select_tribute::SelectTributeMessageData;
 pub use select_unselect_card::SelectUnselectMessageData;
 pub use select_yes_no::SelectYesNoMessageData;
 pub use set_card::SetCardMessageData;
+pub use shuffle_cards::ShuffleCardsMessageData;
 pub use shuffle_deck::ShuffleDeckMessageData;
-pub use shuffle_hand::ShuffleHandMessageData;
 pub use sort_card::SortCardMessageData;
 pub use summoning::SummoningMessageData;
 pub use swap::SwapMessageData;
@@ -68,8 +68,8 @@ use ocgcore_ffi::constants::{
     MSG_NEW_PHASE, MSG_NEW_TURN, MSG_POS_CHANGE, MSG_REMOVE_CARDS, MSG_RETRY, MSG_SELECT_CARD,
     MSG_SELECT_CHAIN, MSG_SELECT_EFFECTYN, MSG_SELECT_IDLECMD, MSG_SELECT_OPTION, MSG_SELECT_PLACE,
     MSG_SELECT_POSITION, MSG_SELECT_TRIBUTE, MSG_SELECT_UNSELECT_CARD, MSG_SELECT_YESNO, MSG_SET,
-    MSG_SHUFFLE_DECK, MSG_SHUFFLE_HAND, MSG_SORT_CARD, MSG_SPSUMMONED, MSG_SPSUMMONING,
-    MSG_SUMMONED, MSG_SUMMONING, MSG_SWAP, MSG_WIN,
+    MSG_SHUFFLE_DECK, MSG_SHUFFLE_EXTRA, MSG_SHUFFLE_HAND, MSG_SORT_CARD, MSG_SPSUMMONED,
+    MSG_SPSUMMONING, MSG_SUMMONED, MSG_SUMMONING, MSG_SWAP, MSG_WIN,
 };
 
 #[derive(Hash, Debug, Clone, PartialEq, Eq)]
@@ -83,7 +83,8 @@ pub enum CoreMessage {
     CardSelected(CardSelectedMessageData),
     ConfirmCards(ConfirmCardsMessageData),
     ShuffleDeck(ShuffleDeckMessageData),
-    ShuffleHand(ShuffleHandMessageData),
+    ShuffleHand(ShuffleCardsMessageData),
+    ShuffleExtra(ShuffleCardsMessageData),
     Move(MoveMessageData),
     Swap(SwapMessageData),
     RemoveCards(RemoveCardsMessageData),
@@ -140,9 +141,12 @@ impl TryFrom<&[u8]> for CoreMessage {
             MSG_SHUFFLE_DECK => Ok(CoreMessage::ShuffleDeck(ShuffleDeckMessageData::try_from(
                 bytes,
             )?)),
-            MSG_SHUFFLE_HAND => Ok(CoreMessage::ShuffleHand(ShuffleHandMessageData::try_from(
+            MSG_SHUFFLE_HAND => Ok(CoreMessage::ShuffleHand(ShuffleCardsMessageData::try_from(
                 bytes,
             )?)),
+            MSG_SHUFFLE_EXTRA => Ok(CoreMessage::ShuffleExtra(
+                ShuffleCardsMessageData::try_from(bytes)?,
+            )),
             MSG_MOVE => Ok(CoreMessage::Move(MoveMessageData::try_from(bytes)?)),
             MSG_SWAP => Ok(CoreMessage::Swap(SwapMessageData::try_from(bytes)?)),
             MSG_REMOVE_CARDS => Ok(CoreMessage::RemoveCards(RemoveCardsMessageData::try_from(

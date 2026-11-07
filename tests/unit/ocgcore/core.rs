@@ -515,6 +515,154 @@ fn tracks_native_overlay_moves_and_host_removal() {
 }
 
 #[test]
+fn tracks_native_hidden_shuffles_and_subsequent_draw() {
+    fn card_data(code: u32) -> OCG_CardData {
+        let mut data = test_card_data(code);
+        if (201..=203).contains(&code) {
+            data.r#type = TYPE_MONSTER | ocgcore_ffi::constants::TYPE_FUSION;
+        } else if code == 301 {
+            data.r#type |= ocgcore_ffi::constants::TYPE_PENDULUM;
+        }
+        data
+    }
+
+    let core = futures::executor::block_on(OCGCore::load(
+        card_data,
+        Box::new(|_| None),
+        super::super::callbacks::log_core_message,
+    ))
+    .unwrap();
+    let duel = core.create_duel(0).unwrap();
+    let address = |location, sequence| CardAddress {
+        controller: Player::Player,
+        location,
+        sequence,
+    };
+    let mut layer = CardLayer::default();
+    for (location, codes) in [
+        (CardLocation::Deck, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+        (CardLocation::Hand, vec![101, 101, 102]),
+        (CardLocation::ExtraDeck, vec![201, 202, 203]),
+        (CardLocation::MonsterZone, vec![301]),
+    ] {
+        for (sequence, code) in codes.into_iter().enumerate() {
+            let position = if location == CardLocation::MonsterZone {
+                POS_FACEUP_ATTACK
+            } else {
+                ocgcore_ffi::constants::POS_FACEDOWN
+            };
+            duel.add_card(
+                Player::Player,
+                code,
+                Player::Player,
+                location,
+                sequence as u32,
+                position,
+            );
+            layer
+                .insert(address(location, sequence as u32), code)
+                .unwrap();
+        }
+    }
+    let pendulum = layer
+        .card_at(address(CardLocation::MonsterZone, 0))
+        .unwrap()
+        .id;
+    core.load_script(
+        &duel,
+        br#"
+        local effect = Effect.GlobalEffect()
+        effect:SetType(0x0802)
+        effect:SetCode(1113)
+        effect:SetOperation(function()
+            Duel.ShuffleHand(0)
+            Duel.ShuffleDeck(0)
+            Duel.SendtoGrave(Duel.GetFieldCard(0, 4, 0), 0x40)
+            Duel.ShuffleExtra(0)
+            Duel.Draw(0, 1, 0x40)
+        end)
+        Duel.RegisterEffect(effect, 0)
+    "#,
+        "shuffle-test.lua",
+    )
+    .unwrap();
+
+    duel.start();
+    let mut hand_shuffled = false;
+    let mut deck_shuffled = false;
+    let mut extra_shuffled = false;
+    let mut drew_after_shuffle = false;
+    for _ in 0..1000 {
+        let status = duel.process();
+        for message in duel.parse_messages() {
+            let shuffled_location = match &message {
+                CoreMessage::ShuffleHand(data) if data.player == Player::Player => {
+                    Some(CardLocation::Hand)
+                }
+                CoreMessage::ShuffleDeck(data) if data.player == Player::Player => {
+                    Some(CardLocation::Deck)
+                }
+                CoreMessage::ShuffleExtra(data) if data.player == Player::Player => {
+                    Some(CardLocation::ExtraDeck)
+                }
+                _ => None,
+            };
+            if let Some(location) = shuffled_location {
+                let old_ids: Vec<_> = layer
+                    .cards()
+                    .iter()
+                    .filter(|card| {
+                        matches!(card.placement, CardPlacement::Zone(a)
+                        if a.controller == Player::Player && a.location == location)
+                    })
+                    .map(|card| card.id)
+                    .collect();
+                layer.apply(&message).unwrap();
+                let core_cards = duel.get_cards(location);
+                assert_eq!(core_cards.len(), old_ids.len());
+                for (sequence, core_card) in core_cards.iter().enumerate() {
+                    let tracked = layer.card_at(address(location, sequence as u32)).unwrap();
+                    if location == CardLocation::ExtraDeck && tracked.id == pendulum {
+                        assert_eq!(tracked.code, 301);
+                        assert_eq!(tracked.position, Some(CardPositionFlags::FACE_UP_DEFENSE));
+                    } else {
+                        assert!(!old_ids.contains(&tracked.id));
+                        if location == CardLocation::Deck {
+                            assert_eq!(tracked.code, 0);
+                        } else {
+                            assert_eq!(tracked.code, core_card.unwrap().card_code);
+                        }
+                    }
+                }
+                match location {
+                    CardLocation::Hand => hand_shuffled = true,
+                    CardLocation::Deck => deck_shuffled = true,
+                    CardLocation::ExtraDeck => {
+                        assert_eq!(layer.card_at(address(location, 3)).unwrap().id, pendulum);
+                        extra_shuffled = true;
+                    }
+                    _ => unreachable!(),
+                }
+            } else if matches!(message, CoreMessage::Draw(_) | CoreMessage::Move(_)) {
+                if matches!(message, CoreMessage::Draw(_)) && deck_shuffled {
+                    drew_after_shuffle = true;
+                }
+                layer.apply(&message).unwrap();
+            }
+        }
+        if matches!(status, OCG_DuelStatus::OCG_DUEL_STATUS_AWAITING) {
+            assert!(hand_shuffled);
+            assert!(deck_shuffled);
+            assert!(extra_shuffled);
+            assert!(drew_after_shuffle);
+            return;
+        }
+        assert_ne!(status, OCG_DuelStatus::OCG_DUEL_STATUS_END);
+    }
+    panic!("Shuffle test did not reach an input prompt");
+}
+
+#[test]
 fn tracks_native_bulk_removal_and_later_material_move() {
     let core = test_core();
     let duel = core.create_duel(0).unwrap();
