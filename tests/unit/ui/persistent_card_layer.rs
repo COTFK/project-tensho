@@ -100,10 +100,144 @@ fn startup_artwork_matches_visible_card_images() {
     );
 }
 
+#[test]
+fn chain_indicators_follow_cards_and_collect_buried_pile_links() {
+    let mut layer = CardLayer::default();
+    let field = layer
+        .insert(address(CardLocation::MonsterZone), 10)
+        .unwrap();
+    let bottom = layer.insert(address(CardLocation::Graveyard), 11).unwrap();
+    let top = layer
+        .insert(
+            CardAddress {
+                sequence: 1,
+                ..address(CardLocation::Graveyard)
+            },
+            12,
+        )
+        .unwrap();
+    let links = [
+        ChainLink {
+            number: 1,
+            card: Some(bottom),
+        },
+        ChainLink {
+            number: 2,
+            card: Some(field),
+        },
+        ChainLink {
+            number: 3,
+            card: Some(bottom),
+        },
+        ChainLink {
+            number: 4,
+            card: Some(top),
+        },
+        ChainLink {
+            number: 5,
+            card: None,
+        },
+    ];
+    let indicators = chain_indicators(layer.cards(), &links);
+    assert_eq!(indicators.get(&field), Some(&vec![2]));
+    assert_eq!(indicators.get(&top), Some(&vec![1, 3, 4]));
+    assert!(!indicators.contains_key(&bottom));
+
+    layer
+        .cards_mut()
+        .iter_mut()
+        .find(|card| card.id == bottom)
+        .unwrap()
+        .placement = CardPlacement::Zone(CardAddress {
+        sequence: 0,
+        ..address(CardLocation::Hand)
+    });
+    let moved = chain_indicators(layer.cards(), &links);
+    assert_eq!(moved.get(&bottom), Some(&vec![1, 3]));
+    assert_eq!(moved.get(&top), Some(&vec![4]));
+}
+
+#[test]
+fn chain_indicators_for_overlay_materials_use_the_host() {
+    let mut layer = CardLayer::default();
+    let host = layer
+        .insert(address(CardLocation::MonsterZone), 10)
+        .unwrap();
+    let material = layer.insert(address(CardLocation::Graveyard), 11).unwrap();
+    layer
+        .cards_mut()
+        .iter_mut()
+        .find(|card| card.id == material)
+        .unwrap()
+        .placement = CardPlacement::Overlay { host, sequence: 0 };
+    assert_eq!(
+        chain_indicators(
+            layer.cards(),
+            &[ChainLink {
+                number: 2,
+                card: Some(material)
+            }]
+        )
+        .get(&host),
+        Some(&vec![2])
+    );
+}
+
 thread_local! {
     static TEST_STATE: RefCell<Option<Signal<(Vec<TrackedCard>, Vec<CardTarget>)>>> = const { RefCell::new(None) };
     static TEST_SELECTION: RefCell<Option<Signal<Option<CardId>>>> = const { RefCell::new(None) };
     static TEST_PLAYBACK: RefCell<Option<Signal<CardAnimationState>>> = const { RefCell::new(None) };
+    static TEST_CHAIN: RefCell<Option<Signal<ChainPlayback>>> = const { RefCell::new(None) };
+}
+
+fn chain_badge_app() -> Element {
+    use_context_provider(UIState::default);
+    let chain = use_context_provider(|| Signal::new(ChainPlayback::default()));
+    TEST_CHAIN.with(|slot| *slot.borrow_mut() = Some(chain));
+    let (card, target) = fixture(
+        CardLocation::MonsterZone,
+        Some(CardPositionFlags::FACE_UP_ATTACK),
+    );
+    rsx! { PersistentCardLayer { cards: vec![card], targets: vec![target] } }
+}
+
+#[test]
+fn rendered_card_displays_chain_numbers_and_removes_them_when_resolved() {
+    let (card, _) = fixture(
+        CardLocation::MonsterZone,
+        Some(CardPositionFlags::FACE_UP_ATTACK),
+    );
+    let mut dom = VirtualDom::new(chain_badge_app);
+    dom.rebuild_in_place();
+    TEST_CHAIN.with(|slot| {
+        slot.borrow().unwrap().write().displayed = vec![
+            ChainLink {
+                number: 1,
+                card: Some(card.id),
+            },
+            ChainLink {
+                number: 2,
+                card: Some(card.id),
+            },
+        ];
+    });
+    let displayed = dom.render_immediate_to_vec();
+    for number in [1, 2] {
+        assert!(displayed.edits.iter().any(|edit| matches!(edit,
+            Mutation::SetAttribute { name: "aria-label", value: AttributeValue::Text(value), .. }
+                if value == &format!("Chain link {number}; higher links resolve first")
+        )), "{:?}", displayed.edits);
+    }
+    TEST_CHAIN.with(|slot| slot.borrow().unwrap().write().displayed.clear());
+    let cleared = dom.render_immediate_to_vec();
+    assert!(
+        cleared
+            .edits
+            .iter()
+            .any(|edit| matches!(edit, Mutation::Remove { .. } | Mutation::ReplaceWith { .. })),
+        "{:?}",
+        cleared.edits
+    );
 }
 
 fn field_app() -> Element {

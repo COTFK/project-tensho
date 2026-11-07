@@ -99,6 +99,13 @@ impl CardLayer {
         self.cards.iter().find(|card| card.id == id)
     }
 
+    pub fn card_at_location(&self, info: CardLocationInfo) -> anyhow::Result<Option<&Card>> {
+        let Some(placement) = self.placement_from(info)? else {
+            return Ok(None);
+        };
+        Ok(self.cards.iter().find(|card| card.placement == placement))
+    }
+
     pub fn cards_mut(&mut self) -> &mut [Card] {
         &mut self.cards
     }

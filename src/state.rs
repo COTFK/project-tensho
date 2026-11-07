@@ -24,6 +24,7 @@ use crate::ocgcore::messages::SortCardMessageData;
 use crate::settings::CustomHand;
 use crate::ui::card_animation::{CardAnimationState, plan_animation};
 use crate::ui::card_layer::{CardAddress, CardId, CardLayer, CardPlacement};
+use crate::ui::chain::ChainPlayback;
 use crate::utility::ARCHETYPE_SCRIPT;
 use crate::utility::EXTRA_DECK_IDS;
 use crate::utility::MAIN_DECK_IDS;
@@ -127,7 +128,7 @@ pub fn run_game_loop() {
             };
             let messages = duel.parse_messages();
             let waiting = handle_core_messages(&messages);
-            if state.interaction_blocked(playback) {
+            if (state.restarting)() || (state.failure)().is_some() {
                 return true;
             }
             if let (Some(before), Some(mut playback)) = (before, playback) {
@@ -138,7 +139,7 @@ pub fn run_game_loop() {
                     }
                 }
             }
-            waiting
+            waiting || state.interaction_blocked(playback)
         },
     );
 }
@@ -322,12 +323,16 @@ impl UIState {
         (self.restarting)()
             || (self.failure)().is_some()
             || playback.is_some_and(|playback| playback().is_active())
+            || try_consume_context::<Signal<ChainPlayback>>().is_some_and(|chain| chain().active)
     }
 
     pub(crate) fn fail(&mut self, error: String, playback: Option<Signal<CardAnimationState>>) {
         if self.failure.peek().is_none() {
             if let Some(mut playback) = playback {
                 playback.write().cancel();
+            }
+            if let Some(mut chain) = try_consume_context::<Signal<ChainPlayback>>() {
+                chain.write().cancel();
             }
             self.failure.set(Some(error));
         }
@@ -414,6 +419,7 @@ fn handle_core_messages(messages: &[CoreMessage]) -> bool {
     let duel = duel().expect("Duel context missing active duel");
     let mut tracking = state.cards;
     let playback = try_consume_context::<Signal<CardAnimationState>>();
+    let chain = try_consume_context::<Signal<ChainPlayback>>();
     if state.interaction_blocked(playback) {
         return true;
     }
@@ -422,6 +428,17 @@ fn handle_core_messages(messages: &[CoreMessage]) -> bool {
         tracing::trace!("Received core message: {message:?}");
         if !state.apply_card_message(&message, playback) {
             return true;
+        }
+        if matches!(
+            message,
+            CoreMessage::Chaining(_) | CoreMessage::ChainSolved(_) | CoreMessage::ChainEnd
+        ) && let Some(mut chain) = chain
+        {
+            let cards = tracking.peek();
+            let layer = cards
+                .as_ref()
+                .expect("Card tracking missing for active duel");
+            chain.write().record(&message, layer);
         }
         match message {
             CoreMessage::Retry => {
@@ -520,6 +537,11 @@ fn handle_core_messages(messages: &[CoreMessage]) -> bool {
         return true;
     }
 
+    if let Some(mut chain) = chain
+        && chain.peek().has_pending_frames()
+    {
+        chain.write().start();
+    }
     (state.waiting_on_input)()
 }
 

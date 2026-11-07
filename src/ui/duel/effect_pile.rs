@@ -1,10 +1,13 @@
 use dioxus::prelude::*;
 
+use super::chain_badges::ChainBadges;
 use super::constants::ZONE_SIZE;
 use crate::ocgcore::Response;
-use crate::ocgcore::constants::CardLocation;
+use crate::ocgcore::constants::{CardLocation, Player};
 use crate::state::UIState;
 use crate::state::send_response;
+use crate::ui::card_layer::CardAddress;
+use crate::ui::chain::ChainPlayback;
 use crate::ui::components::ActionButton;
 use crate::ui::components::Card;
 use crate::ui::components::CardActionMenu;
@@ -60,6 +63,8 @@ pub fn EffectPile(location: CardLocation) -> Element {
 pub fn EffectPileModal(location: CardLocation) -> Element {
     let state = use_context::<UIState>();
     let cards = state.zone_data(location).unwrap_or_default();
+    let tracking = (state.cards)();
+    let chain = try_consume_context::<Signal<ChainPlayback>>().map(|chain| chain());
     let cards_prompting_to_activate = state.card_prompting_to_activate;
     let mut open_pile = state.open_pile;
     let title = if location == CardLocation::Banishment {
@@ -84,6 +89,14 @@ pub fn EffectPileModal(location: CardLocation) -> Element {
                             .find(|card| card.location == location && card.sequence == index as u8)
                             .copied();
                         let chain_index = prompted_card.and_then(|card| card.action_index);
+                        let links = tracking.as_ref()
+                            .and_then(|layer| layer.card_at(CardAddress {
+                                controller: Player::Player,
+                                location,
+                                sequence: index as u32,
+                            }))
+                            .and_then(|card| chain.as_ref().map(|chain| chain.links_for_card(card.id)))
+                            .unwrap_or_default();
 
                         // Disable if effect selection modal is active
                         let suppress_actions = !state.effects_to_select_from.is_empty();
@@ -101,8 +114,9 @@ pub fn EffectPileModal(location: CardLocation) -> Element {
                                     show_orange_aura: prompted_card.is_some() && !suppress_actions,
                                     onclick: move |_| selected_card.set(Some(index))
                                 }
+                                ChainBadges { links }
                                 CardActionMenu {
-                                    class: "absolute left-1/2 bottom-1/2 -translate-x-[50%] translate-y-[50%] px-3 py-2 md:px-6",
+                                    class: "absolute left-1/2 bottom-1/2 -translate-x-[50%] translate-y-[50%] px-3 py-2 md:px-6 z-20",
                                     trigger: selected_card() == Some(index) && prompted_card.is_some() && !suppress_actions,
                                     ActionButton {
                                         label: "Activate",

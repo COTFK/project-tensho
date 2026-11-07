@@ -629,6 +629,85 @@ fn layered_loop_starts_gathering_for_a_real_hand_shuffle() {
 
 #[test]
 #[cfg(not(target_arch = "wasm32"))]
+fn batched_chain_messages_pause_the_loop_and_track_source_cards() {
+    use crate::ui::chain::{ChainLink, ChainPlayback};
+    use ocgcore_ffi::constants::{POS_FACEUP_ATTACK, TYPE_MONSTER, TYPE_NORMAL};
+    use ocgcore_ffi::types::OCG_CardData;
+
+    thread_local! {
+        static COMPLETED: Cell<bool> = const { Cell::new(false) };
+    }
+
+    fn card_data(code: u32) -> OCG_CardData {
+        static EMPTY_SETCODES: [u16; 1] = [0];
+        OCG_CardData {
+            code,
+            alias: 0,
+            setcodes: EMPTY_SETCODES.as_ptr().cast_mut(),
+            r#type: TYPE_MONSTER | TYPE_NORMAL,
+            level: 4,
+            attribute: 1,
+            race: 1,
+            attack: 1000,
+            defense: 1000,
+            lscale: 0,
+            rscale: 0,
+            link_marker: 0,
+        }
+    }
+
+    fn app() -> Element {
+        let core =
+            futures::executor::block_on(OCGCore::load(card_data, Box::new(|_| None), |_, _| {}))
+                .unwrap();
+        let duel = core.create_duel(0).unwrap();
+        let address = CardAddress {
+            controller: Player::Player,
+            location: CardLocation::MonsterZone,
+            sequence: 0,
+        };
+        duel.add_card(
+            Player::Player,
+            10,
+            Player::Player,
+            CardLocation::MonsterZone,
+            0,
+            POS_FACEUP_ATTACK,
+        );
+        let mut layer = CardLayer::default();
+        let card = layer.insert(address, 10).unwrap();
+        let mut state = use_context_provider(UIState::default);
+        state.cards.set(Some(layer));
+        use_context_provider(|| Signal::new(Some(duel)));
+        let mut chain = use_context_provider(|| Signal::new(ChainPlayback::default()));
+        let bytes = [
+            33, 0, 0, 0, 70, 10, 0, 0, 0, 0, 4, 0, 0, 0, 0, 1, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 73, 1, 1, 0, 0, 0, 74,
+        ];
+        let messages = crate::ocgcore::messages::parse_messages(&bytes).unwrap();
+        assert!(!handle_core_messages(&messages));
+        assert!(chain.peek().active);
+        assert_eq!(
+            chain.peek().displayed,
+            [ChainLink {
+                number: 1,
+                card: Some(card)
+            }]
+        );
+        assert!(state.interaction_blocked(None));
+        chain.write().cancel();
+        assert!(!state.interaction_blocked(None));
+        COMPLETED.with(|completed| completed.set(true));
+        rsx! {}
+    }
+
+    let mut dom = VirtualDom::new(app);
+    dom.rebuild_in_place();
+    assert!(COMPLETED.with(|completed| completed.get()));
+}
+
+#[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn handles_real_duel_messages_until_input() {
     fn app() -> Element {
         let core = futures::executor::block_on(OCGCore::load(

@@ -1,10 +1,13 @@
 use dioxus::prelude::*;
 
+use super::chain_badges::ChainBadges;
 use super::constants::ZONE_SIZE;
 use crate::ocgcore::Response;
-use crate::ocgcore::constants::CardLocation;
+use crate::ocgcore::constants::{CardLocation, Player};
 use crate::state::UIState;
 use crate::state::send_response;
+use crate::ui::card_layer::CardAddress;
+use crate::ui::chain::ChainPlayback;
 use crate::ui::components::ActionButton;
 use crate::ui::components::Card;
 use crate::ui::components::CardActionMenu;
@@ -52,6 +55,8 @@ pub fn ExtraDeck() -> Element {
 pub fn ExtraDeckModal() -> Element {
     let state = use_context::<UIState>();
     let extra_deck = state.zone_data(CardLocation::ExtraDeck).unwrap_or_default();
+    let tracking = (state.cards)();
+    let chain = try_consume_context::<Signal<ChainPlayback>>().map(|chain| chain());
     let available_special_summons = (state.special_summons)();
     let mut open_pile = state.open_pile;
 
@@ -67,6 +72,14 @@ pub fn ExtraDeckModal() -> Element {
                 for (index, card) in extra_deck.iter().enumerate() {
                     {
                         let card = (*card).unwrap();
+                        let links = tracking.as_ref()
+                            .and_then(|layer| layer.card_at(CardAddress {
+                                controller: Player::Player,
+                                location: CardLocation::ExtraDeck,
+                                sequence: index as u32,
+                            }))
+                            .and_then(|card| chain.as_ref().map(|chain| chain.links_for_card(card.id)))
+                            .unwrap_or_default();
                         let special_summon_index = available_special_summons
                             .iter()
                             .position(|summon| {
@@ -92,8 +105,9 @@ pub fn ExtraDeckModal() -> Element {
                                     show_orange_aura: is_special_summonable && !suppress_actions,
                                     onclick: move |_| selected_card.set(Some(index))
                                 }
+                                ChainBadges { links }
                                 CardActionMenu {
-                                    class: "absolute left-1/2 bottom-1/2 -translate-x-[50%] translate-y-[50%] px-3 py-2 md:px-6",
+                                    class: "absolute left-1/2 bottom-1/2 -translate-x-[50%] translate-y-[50%] px-3 py-2 md:px-6 z-20",
                                     trigger: selected_card() == Some(index) && is_special_summonable && !suppress_actions,
                                     ActionButton {
                                         label: "Summon",

@@ -1,5 +1,6 @@
 mod card_interaction;
 mod card_stats;
+mod chain_badges;
 mod constants;
 mod effect_pile;
 mod extra_deck;
@@ -23,6 +24,7 @@ use crate::state::load_duel;
 use crate::state::run_game_loop;
 use crate::ui::LoadingScreen;
 use crate::ui::card_animation::{CardAnimationState, use_animation_completion};
+use crate::ui::chain::{ChainPlayback, use_chain_playback};
 use crate::ui::components::UIButton;
 use crate::ui::components::svg::FullscreenIcon;
 use crate::ui::components::svg::ResetIcon;
@@ -96,8 +98,10 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>) -> Element {
     let revision = use_context_provider(|| layout_anchors::LayoutRevision(Signal::new(0)));
     let startup_ready = use_signal(|| false);
     let mut playback = use_context_provider(|| Signal::new(CardAnimationState::default()));
+    let mut chain = use_context_provider(|| Signal::new(ChainPlayback::default()));
 
     use_animation_completion(playback);
+    use_chain_playback(chain);
 
     // Start game loop
     use_effect(run_game_loop);
@@ -121,6 +125,7 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>) -> Element {
                 label: "Restart game",
                 onclick: move |_| {
                     playback.write().cancel();
+                    chain.write().cancel();
                     state.reset();
                     state.restarting.set(true);
                     duel_resource.clear();

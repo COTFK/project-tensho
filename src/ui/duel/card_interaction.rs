@@ -145,9 +145,9 @@ pub(super) fn InteractiveCard(
     };
     let can_set = actions.monster_set.is_some() || actions.spell_trap_set.is_some();
     let menu_class = if hand {
-        "absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-[110%] flex flex-row items-center justify-center px-10 py-1 md:px-12"
+        "absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-[110%] flex flex-row items-center justify-center px-10 py-1 md:px-12 z-20"
     } else {
-        "absolute left-1/2 bottom-1/2 -translate-x-[50%] translate-y-[50%] px-3 py-1 z-10"
+        "absolute left-1/2 bottom-1/2 -translate-x-[50%] translate-y-[50%] px-3 py-1 z-20"
     };
     let card_class = if passive {
         "w-full"

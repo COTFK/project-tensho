@@ -1,7 +1,9 @@
 use dioxus::prelude::*;
+use std::collections::BTreeMap;
 
 use super::card_interaction::InteractiveCard;
 use super::card_stats::CardStats;
+use super::chain_badges::ChainBadges;
 use super::layout_anchors::CardAnchor;
 use crate::ocgcore::CardData;
 use crate::ocgcore::constants::{BattlePosition, CardLocation, Player};
@@ -9,6 +11,7 @@ use crate::ocgcore::location_info::CardPositionFlags;
 use crate::state::UIState;
 use crate::ui::card_animation::CardAnimationState;
 use crate::ui::card_layer::{Card as TrackedCard, CardAddress, CardId, CardPlacement};
+use crate::ui::chain::{ChainLink, ChainPlayback};
 use crate::ui::components::CardImage;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -102,8 +105,56 @@ pub(super) fn card_image(card: TrackedCard, target: Option<CardTarget>) -> Optio
     })
 }
 
+fn chain_indicators(cards: &[TrackedCard], links: &[ChainLink]) -> BTreeMap<CardId, Vec<u32>> {
+    let mut indicators = BTreeMap::<CardId, Vec<u32>>::new();
+    for link in links {
+        let Some(card) = link
+            .card
+            .and_then(|id| cards.iter().find(|card| card.id == id))
+        else {
+            continue;
+        };
+        let card = match card.placement {
+            CardPlacement::Overlay { host, .. } => cards.iter().find(|card| card.id == host),
+            CardPlacement::Zone(_) => Some(card),
+        };
+        let Some(card) = card else { continue };
+        let CardPlacement::Zone(address) = card.placement else {
+            continue;
+        };
+        if address.controller != Player::Player {
+            continue;
+        }
+        let target = match address.location {
+            CardLocation::Hand | CardLocation::MonsterZone | CardLocation::SpellTrapZone => card,
+            CardLocation::Deck
+            | CardLocation::ExtraDeck
+            | CardLocation::Graveyard
+            | CardLocation::Banishment => cards
+                .iter()
+                .filter(|candidate| {
+                    matches!(candidate.placement,
+                        CardPlacement::Zone(other) if other.controller == address.controller
+                            && other.location == address.location
+                    )
+                })
+                .max_by_key(|candidate| match candidate.placement {
+                    CardPlacement::Zone(other) => other.sequence,
+                    CardPlacement::Overlay { .. } => unreachable!(),
+                })
+                .expect("Chain source belongs to its pile"),
+        };
+        indicators.entry(target.id).or_default().push(link.number);
+    }
+    indicators
+}
+
 #[component]
 pub(super) fn PersistentCardLayer(cards: Vec<TrackedCard>, targets: Vec<CardTarget>) -> Element {
+    let chain = try_consume_context::<Signal<ChainPlayback>>();
+    let indicators = chain
+        .map(|chain| chain_indicators(&cards, &chain().displayed))
+        .unwrap_or_default();
     let mut cards = cards;
     cards.sort_by_key(|card| card.id);
     rsx! {
@@ -114,6 +165,7 @@ pub(super) fn PersistentCardLayer(cards: Vec<TrackedCard>, targets: Vec<CardTarg
                     key: "{card.id}",
                     card,
                     target: targets.iter().find(|target| target.id == card.id).copied(),
+                    chain_links: indicators.get(&card.id).cloned().unwrap_or_default(),
                 }
             }
         }
@@ -121,7 +173,7 @@ pub(super) fn PersistentCardLayer(cards: Vec<TrackedCard>, targets: Vec<CardTarg
 }
 
 #[component]
-fn LayerCard(card: TrackedCard, target: Option<CardTarget>) -> Element {
+fn LayerCard(card: TrackedCard, target: Option<CardTarget>, chain_links: Vec<u32>) -> Element {
     let state = use_context::<UIState>();
     let playback = try_consume_context::<Signal<CardAnimationState>>();
     let animating = playback.is_some_and(|playback| playback().is_active());
@@ -178,6 +230,7 @@ fn LayerCard(card: TrackedCard, target: Option<CardTarget>) -> Element {
                             image: card_image(card, Some(target)),
                         }
                     }
+                    ChainBadges { links: chain_links, rotation: target.rotation }
                     if !moving && target.appearance == CardAppearance::Interactive && matches!(target.address.location, CardLocation::MonsterZone | CardLocation::SpellTrapZone) {
                         div {
                             "data-card-stats": "{card.id}",
