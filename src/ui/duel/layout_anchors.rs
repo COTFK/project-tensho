@@ -56,7 +56,6 @@ pub(super) struct CardAnchor {
     pub height: f64,
 }
 
-#[allow(dead_code, reason = "The opt-in preview measures anchors")]
 impl CardAnchor {
     fn from_rects(center: PixelsRect, size: PixelsRect) -> anyhow::Result<Self> {
         ensure!(
@@ -88,7 +87,7 @@ type AnchorEntry = (Rc<()>, Rc<MountedData>);
 pub(super) struct LayoutAnchors(Rc<RefCell<HashMap<AnchorKey, AnchorEntry>>>);
 
 impl LayoutAnchors {
-    fn insert(&self, key: AnchorKey, owner: Rc<()>, element: Rc<MountedData>) {
+    pub(super) fn insert(&self, key: AnchorKey, owner: Rc<()>, element: Rc<MountedData>) {
         self.0.borrow_mut().insert(key, (owner, element));
     }
 
@@ -102,7 +101,6 @@ impl LayoutAnchors {
         }
     }
 
-    #[allow(dead_code, reason = "The opt-in preview measures anchors")]
     pub async fn measure(&self, address: CardAddress) -> anyhow::Result<CardAnchor> {
         let anchor = Anchor::try_from(address)?;
         let (center_key, size_key) = match anchor {
@@ -152,9 +150,20 @@ impl LayoutAnchors {
     }
 }
 
+#[derive(Clone, Copy)]
+pub(super) struct LayoutRevision(pub Signal<u64>);
+
+impl LayoutRevision {
+    pub fn invalidate(self) {
+        let mut revision = self.0;
+        revision += 1;
+    }
+}
+
 #[component]
 pub(super) fn LayoutAnchor(anchor: Anchor, part: AnchorPart, class: &'static str) -> Element {
     let anchors = use_context::<LayoutAnchors>();
+    let revision = use_context::<LayoutRevision>();
     let owner = use_hook(|| Rc::new(()));
     let key = (anchor, part);
     use_drop({
@@ -168,7 +177,11 @@ pub(super) fn LayoutAnchor(anchor: Anchor, part: AnchorPart, class: &'static str
             "aria-hidden": "true",
             div {
                 class: "w-full h-full",
-                onmounted: move |event| anchors.insert(key, owner.clone(), event.data()),
+                onmounted: move |event| {
+                    anchors.insert(key, owner.clone(), event.data());
+                    revision.invalidate();
+                },
+                onresize: move |_| revision.invalidate(),
             }
         }
     }

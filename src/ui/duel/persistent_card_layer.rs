@@ -1,5 +1,6 @@
 use dioxus::prelude::*;
 
+use super::card_interaction::InteractiveCard;
 use super::layout_anchors::CardAnchor;
 use crate::ocgcore::CardData;
 use crate::ocgcore::constants::{CardLocation, Player};
@@ -114,20 +115,26 @@ fn LayerCard(
                     div {
                         class: "w-full h-full",
                         class: if target.interactive { "pointer-events-auto" } else { "pointer-events-none" },
-                        Card {
-                            card: target.data,
-                            class: "w-full",
-                            is_selected: false,
-                            show_highlight_on_select: false,
-                            show_dotted_highlight: false,
-                            show_blue_aura: false,
-                            show_orange_aura: false,
-                            facedown,
-                            use_extra_deck_back: false,
-                            onclick: move |event: MouseEvent| {
-                                event.stop_propagation();
-                                on_card_click.call(card.id);
-                            },
+                        if let CardPlacement::Zone(address) = card.placement {
+                            if address.location == CardLocation::Hand {
+                                Card {
+                                    card: target.data,
+                                    class: "w-full",
+                                    is_selected: false,
+                                    show_highlight_on_select: false,
+                                    show_dotted_highlight: false,
+                                    show_blue_aura: false,
+                                    show_orange_aura: false,
+                                    facedown,
+                                    use_extra_deck_back: false,
+                                    onclick: move |event: MouseEvent| {
+                                        event.stop_propagation();
+                                        on_card_click.call(card.id);
+                                    },
+                                }
+                            } else {
+                                InteractiveCard { card: target.data, address, layered: true, force_facedown: facedown }
+                            }
                         }
                     }
                 }

@@ -1,4 +1,5 @@
 use super::*;
+use crate::state::UIState;
 use crate::ui::card_layer::{CardAddress, CardLayer};
 use dioxus::core::{AttributeValue, ElementId, Mutation};
 use std::cell::RefCell;
@@ -83,6 +84,7 @@ thread_local! {
 }
 
 fn app() -> Element {
+    use_context_provider(UIState::default);
     let (card, target) = fixture(CardLocation::Hand, None);
     let state = use_signal(|| (vec![card], vec![target]));
     TEST_STATE.with(|slot| *slot.borrow_mut() = Some(state));
@@ -177,9 +179,34 @@ fn movement_and_property_updates_keep_the_same_root_node() {
         "{:?}",
         moved.edits
     );
+    let image_id = moved
+        .edits
+        .iter()
+        .find_map(|edit| match edit {
+            Mutation::SetAttribute {
+                name: "src",
+                value: AttributeValue::Text(value),
+                id,
+                ..
+            } if value.contains("cover") => Some(*id),
+            _ => None,
+        })
+        .unwrap();
+    card.placement = CardPlacement::Zone(CardAddress {
+        sequence: 1,
+        ..address(CardLocation::MonsterZone)
+    });
+    target.data.sequence = 1;
+    target.anchor.center_x += 100.0;
+    TEST_STATE.with(|slot| slot.borrow().unwrap().set((vec![card], vec![target])));
+    let moved_again = dom.render_immediate_to_vec();
+    assert!(!moved_again.edits.iter().any(|edit| matches!(edit,
+        Mutation::Remove { id } | Mutation::ReplaceWith { id, .. } if *id == root || *id == image_id
+    )), "{:?}", moved_again.edits);
 
     card.placement = CardPlacement::Zone(address(CardLocation::Deck));
     target.data.location = CardLocation::Deck;
+    target.data.sequence = 0;
     TEST_STATE.with(|slot| slot.borrow().unwrap().set((vec![card], vec![target])));
     let hidden = dom.render_immediate_to_vec();
     assert!(

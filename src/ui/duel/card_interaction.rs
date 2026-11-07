@@ -124,7 +124,12 @@ fn current_menu_actions(state: &UIState, address: CardAddress) -> Option<CardAct
 }
 
 #[component]
-pub(super) fn InteractiveCard(card: CardData, address: CardAddress) -> Element {
+pub(super) fn InteractiveCard(
+    card: CardData,
+    address: CardAddress,
+    #[props(default)] layered: bool,
+    #[props(default)] force_facedown: bool,
+) -> Element {
     let mut state = use_context::<UIState>();
     let actions = prompt_actions(&state, address);
     let hand = address.location == CardLocation::Hand;
@@ -153,18 +158,19 @@ pub(super) fn InteractiveCard(card: CardData, address: CardAddress) -> Element {
     } else {
         ""
     };
-    let facedown = !hand
-        && matches!(
-            card.position,
-            Some(
-                BattlePosition::FaceDown
-                    | BattlePosition::FaceDownAttack
-                    | BattlePosition::FaceDownDefense
-            )
-        );
+    let facedown = force_facedown
+        || !hand
+            && matches!(
+                card.position,
+                Some(
+                    BattlePosition::FaceDown
+                        | BattlePosition::FaceDownAttack
+                        | BattlePosition::FaceDownDefense
+                )
+            );
     rsx! {
         div {
-            class: if hand { "" } else { "relative h-full aspect-[59/86] mx-auto p-[clamp(1px,0.3vw,5px)]" },
+            class: if hand { "" } else if layered { "relative w-full h-full" } else { "relative h-full aspect-[59/86] mx-auto p-[clamp(1px,0.3vw,5px)]" },
             CardActionMenu {
                 class: menu_class,
                 trigger: selected && !suppress && (can_activate || (hand && (actions.summon.is_some() || can_set))),
