@@ -106,10 +106,11 @@ identified, and the core does not actually detach directly removed materials.
 
 Cover hand, deck, and extra-deck shuffles. Explicitly invalidate
 correspondence where the protocol hides it; do not guess identities from
-duplicate codes.
+duplicate codes. Preserve the known unshuffled face-up extra-deck suffix.
+Reject shuffles that would lose a host's material correspondence.
 
 - Depends on: 3.
-- Test: identical copies, hidden cards, selection invalidation, and card-count
+- Test: identical copies, hidden cards, stale selection IDs, and card-count
   preservation.
 - Commit: `feat(tracker): handle hidden shuffle boundaries`
 
@@ -185,7 +186,8 @@ and hand cards, building on the existing card component. Derive temporary
 actions and selections from the current prompt rather than duplicating them
 in persistent card instances. Keep the existing components using those
 extracted pieces. Preserve core response indices and resolve actions against
-current logical addresses; retain queries for dynamic card properties.
+current logical addresses; invalidate selections whose card IDs no longer
+exist, and retain queries for dynamic card properties.
 
 - Test: summon, set, activation, chains, tributes, selection, action
   suppression, and unchanged appearance.

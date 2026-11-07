@@ -1,5 +1,6 @@
 use super::*;
 use crate::ocgcore::messages::{CoreMessage, parse_messages};
+use ocgcore_ffi::constants::MSG_SHUFFLE_EXTRA;
 
 const SAMPLE: [u8; 30] = [
     26, 0, 0, 0, 33, 0, 5, 0, 0, 0, 178, 50, 204, 5, 178, 50, 204, 5, 122, 125, 228, 3, 75, 242,
@@ -10,11 +11,29 @@ const SAMPLE: [u8; 30] = [
 fn parses_sample_shuffled_hand_in_order() {
     assert_eq!(
         CoreMessage::try_from(SAMPLE.as_slice()).unwrap(),
-        CoreMessage::ShuffleHand(ShuffleHandMessageData {
+        CoreMessage::ShuffleHand(ShuffleCardsMessageData {
             player: Player::Player,
             card_codes: vec![97_268_402, 97_268_402, 65_305_978, 40_366_667, 44_455_560],
         })
     );
+}
+
+#[test]
+fn parses_extra_deck_with_the_same_wire_format() {
+    let mut bytes = SAMPLE;
+    bytes[4] = MSG_SHUFFLE_EXTRA as u8;
+    assert_eq!(
+        CoreMessage::try_from(bytes.as_slice()).unwrap(),
+        CoreMessage::ShuffleExtra(ShuffleCardsMessageData {
+            player: Player::Player,
+            card_codes: vec![97_268_402, 97_268_402, 65_305_978, 40_366_667, 44_455_560],
+        })
+    );
+    for length in 0..bytes.len() {
+        assert!(CoreMessage::try_from(&bytes[..length]).is_err());
+    }
+    bytes[6..10].copy_from_slice(&u32::MAX.to_le_bytes());
+    assert!(CoreMessage::try_from(bytes.as_slice()).is_err());
 }
 
 #[test]
@@ -23,12 +42,12 @@ fn preserves_hidden_codes_and_empty_hands() {
     bytes[5] = 1;
     bytes[10..14].copy_from_slice(&0u32.to_le_bytes());
     bytes[14..18].copy_from_slice(&u32::MAX.to_le_bytes());
-    let message = ShuffleHandMessageData::try_from(bytes.as_slice()).unwrap();
+    let message = ShuffleCardsMessageData::try_from(bytes.as_slice()).unwrap();
     assert_eq!(message.player, Player::Opponent);
     assert_eq!(message.card_codes[..2], [0, u32::MAX]);
     assert_eq!(
         CoreMessage::try_from([6, 0, 0, 0, 33, 0, 0, 0, 0, 0].as_slice()).unwrap(),
-        CoreMessage::ShuffleHand(ShuffleHandMessageData {
+        CoreMessage::ShuffleHand(ShuffleCardsMessageData {
             player: Player::Player,
             card_codes: vec![],
         })
@@ -68,7 +87,7 @@ fn parses_shuffled_hand_among_framed_messages() {
         parse_messages(&bytes).unwrap().as_slice(),
         [
             CoreMessage::NewPhase(_),
-            CoreMessage::ShuffleHand(ShuffleHandMessageData { player: Player::Player, card_codes }),
+            CoreMessage::ShuffleHand(ShuffleCardsMessageData { player: Player::Player, card_codes }),
             CoreMessage::SpecialSummoned
         ] if card_codes.len() == 5
     ));

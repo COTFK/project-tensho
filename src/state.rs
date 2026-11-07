@@ -295,6 +295,9 @@ pub fn handle_core_message() -> bool {
             CoreMessage::ShuffleHand(message) => {
                 tracing::trace!("Received shuffle hand: {message:?}")
             }
+            CoreMessage::ShuffleExtra(message) => {
+                tracing::trace!("Received shuffle extra: {message:?}")
+            }
             CoreMessage::Move(message) => tracing::trace!("Received move: {message:?}"),
             CoreMessage::Swap(message) => tracing::trace!("Received swap: {message:?}"),
             CoreMessage::RemoveCards(message) => {

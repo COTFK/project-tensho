@@ -4,12 +4,12 @@ use crate::ocgcore::constants::Player;
 use crate::ocgcore::utility::{read_u8, read_u32};
 
 #[derive(Hash, Debug, Clone, PartialEq, Eq)]
-pub struct ShuffleHandMessageData {
+pub struct ShuffleCardsMessageData {
     pub player: Player,
     pub card_codes: Vec<u32>,
 }
 
-impl TryFrom<&[u8]> for ShuffleHandMessageData {
+impl TryFrom<&[u8]> for ShuffleCardsMessageData {
     type Error = anyhow::Error;
 
     fn try_from(bytes: &[u8]) -> anyhow::Result<Self> {
@@ -24,12 +24,12 @@ impl TryFrom<&[u8]> for ShuffleHandMessageData {
             .context("Shuffled card count exceeds message size")?;
         anyhow::ensure!(
             length == expected_length,
-            "Invalid shuffle hand message length: {length}, expected {expected_length}"
+            "Invalid shuffle cards message length: {length}, expected {expected_length}"
         );
         let end = usize::try_from(length)?
             .checked_add(4)
-            .context("Shuffle hand message length overflow")?;
-        anyhow::ensure!(bytes.len() >= end, "Truncated shuffle hand message");
+            .context("Shuffle cards message length overflow")?;
+        anyhow::ensure!(bytes.len() >= end, "Truncated shuffle cards message");
 
         let mut card_codes = Vec::with_capacity(count as usize);
         for _ in 0..count {
@@ -40,5 +40,5 @@ impl TryFrom<&[u8]> for ShuffleHandMessageData {
 }
 
 #[cfg(test)]
-#[path = "../../../tests/unit/ocgcore/messages/shuffle_hand.rs"]
+#[path = "../../../tests/unit/ocgcore/messages/shuffle_cards.rs"]
 mod tests;

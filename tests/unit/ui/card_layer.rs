@@ -3,8 +3,8 @@ use crate::ocgcore::location_info::CardPositionFlags;
 use crate::ocgcore::messages::draw::DrawCard;
 use crate::ocgcore::messages::move_card::MoveReason;
 use crate::ocgcore::messages::{
-    PositionChangeMessageData, RemoveCardsMessageData, SetCardMessageData, SummoningMessageData,
-    SwapMessageData,
+    PositionChangeMessageData, RemoveCardsMessageData, SetCardMessageData, ShuffleCardsMessageData,
+    ShuffleDeckMessageData, SummoningMessageData, SwapMessageData,
 };
 
 fn address(controller: Player, location: CardLocation, sequence: u32) -> CardAddress {
@@ -95,6 +95,236 @@ fn position_change(
         previous_position,
         current_position,
     })
+}
+
+fn shuffle_cards(player: Player, location: CardLocation, codes: &[u32]) -> CoreMessage {
+    let data = ShuffleCardsMessageData {
+        player,
+        card_codes: codes.to_vec(),
+    };
+    match location {
+        CardLocation::Hand => CoreMessage::ShuffleHand(data),
+        CardLocation::ExtraDeck => CoreMessage::ShuffleExtra(data),
+        _ => panic!("Unsupported shuffle location"),
+    }
+}
+
+#[test]
+fn deck_shuffle_invalidates_unknown_correspondence_and_following_draw_works() {
+    let mut layer = CardLayer::from_decks(&[7, 7, 9], &[]).unwrap();
+    let old_ids: Vec<_> = layer.cards().iter().map(|card| card.id).collect();
+    let selected = old_ids[0];
+    let other = address(Player::Opponent, CardLocation::Deck, 0);
+    let other_id = layer.insert(other, 50).unwrap();
+    layer
+        .apply(&CoreMessage::ShuffleDeck(ShuffleDeckMessageData {
+            player: Player::Player,
+        }))
+        .unwrap();
+    for sequence in 0..3 {
+        let card = layer
+            .card_at(address(Player::Player, CardLocation::Deck, sequence))
+            .unwrap();
+        assert!(!old_ids.contains(&card.id));
+        assert_eq!(card.code, 0);
+        assert_eq!(card.position, None);
+    }
+    assert!(!layer.cards().iter().any(|card| card.id == selected));
+    assert_eq!(layer.card_at(other).unwrap().id, other_id);
+    assert_eq!(layer.cards().len(), 4);
+    let new_top = layer
+        .card_at(address(Player::Player, CardLocation::Deck, 2))
+        .unwrap()
+        .id;
+    layer.apply(&draw(Player::Player, &[7])).unwrap();
+    let drawn = layer
+        .card_at(address(Player::Player, CardLocation::Hand, 0))
+        .unwrap();
+    assert_eq!((drawn.id, drawn.code), (new_top, 7));
+}
+
+#[test]
+fn hand_shuffle_uses_message_codes_without_matching_old_identities() {
+    let hand = |sequence| address(Player::Player, CardLocation::Hand, sequence);
+    let mut layer = CardLayer::default();
+    let old: Vec<_> = [7, 7, 9]
+        .into_iter()
+        .enumerate()
+        .map(|(sequence, code)| layer.insert(hand(sequence as u32), code).unwrap())
+        .collect();
+    layer
+        .apply(&shuffle_cards(
+            Player::Player,
+            CardLocation::Hand,
+            &[9, 0, 7],
+        ))
+        .unwrap();
+    for (sequence, code) in [9, 0, 7].into_iter().enumerate() {
+        let card = layer.card_at(hand(sequence as u32)).unwrap();
+        assert!(!old.contains(&card.id));
+        assert_eq!(card.code, code);
+        assert_eq!(card.position, None);
+    }
+    assert_eq!(layer.cards().len(), 3);
+}
+
+#[test]
+fn extra_shuffle_preserves_known_face_up_suffix() {
+    let extra = |sequence| address(Player::Player, CardLocation::ExtraDeck, sequence);
+    let field = address(Player::Player, CardLocation::MonsterZone, 0);
+    let mut layer = CardLayer::from_decks(&[], &[1, 2, 3]).unwrap();
+    let old: Vec<_> = layer.cards().iter().map(|card| card.id).collect();
+    let face_up = layer.insert(field, 4).unwrap();
+    let mut current = location(Some(extra(3)));
+    current.position = CardLocationPosition::Position(CardPositionFlags::FACE_UP_DEFENSE);
+    layer
+        .apply(&overlay_move(location(Some(field)), current, 4))
+        .unwrap();
+    layer
+        .apply(&shuffle_cards(
+            Player::Player,
+            CardLocation::ExtraDeck,
+            &[3, 0, 1, 0],
+        ))
+        .unwrap();
+    for (sequence, code) in [3, 0, 1].into_iter().enumerate() {
+        let card = layer.card_at(extra(sequence as u32)).unwrap();
+        assert!(!old.contains(&card.id));
+        assert_eq!(card.code, code);
+    }
+    let unchanged = layer.card_at(extra(3)).unwrap();
+    assert_eq!((unchanged.id, unchanged.code), (face_up, 4));
+    assert_eq!(unchanged.position, Some(CardPositionFlags::FACE_UP_DEFENSE));
+    assert_eq!(layer.cards().len(), 4);
+}
+
+#[test]
+fn extra_shuffle_preserves_unclassified_cards_after_known_face_up_card() {
+    let extra = |sequence| address(Player::Player, CardLocation::ExtraDeck, sequence);
+    let field = address(Player::Player, CardLocation::MonsterZone, 0);
+    let mut layer = CardLayer::from_decks(&[], &[1, 2]).unwrap();
+    let face_up = layer.insert(field, 3).unwrap();
+    let mut current = location(Some(extra(2)));
+    current.position = CardLocationPosition::Position(CardPositionFlags::FACE_UP_DEFENSE);
+    layer
+        .apply(&overlay_move(location(Some(field)), current, 3))
+        .unwrap();
+    let unclassified = layer.insert(extra(3), 4).unwrap();
+    layer
+        .apply(&shuffle_cards(
+            Player::Player,
+            CardLocation::ExtraDeck,
+            &[2, 1, 3, 4],
+        ))
+        .unwrap();
+    assert_eq!(layer.card_at(extra(2)).unwrap().id, face_up);
+    assert_eq!(layer.card_at(extra(3)).unwrap().id, unclassified);
+}
+
+#[test]
+fn rejects_inconsistent_face_up_extra_deck_suffix_atomically() {
+    let extra = |sequence| address(Player::Player, CardLocation::ExtraDeck, sequence);
+    let mut layer = CardLayer::from_decks(&[], &[1, 2, 3]).unwrap();
+    layer.cards[1].position = Some(CardPositionFlags::FACE_UP_DEFENSE);
+    layer.cards[2].position = Some(CardPositionFlags::FACE_DOWN_DEFENSE);
+    let before = layer.clone();
+    let error = layer
+        .apply(&shuffle_cards(
+            Player::Player,
+            CardLocation::ExtraDeck,
+            &[1, 2, 3],
+        ))
+        .unwrap_err();
+    assert!(error.to_string().contains("follows a face-up card"));
+    assert_eq!(layer, before);
+    assert_eq!(layer.card_at(extra(2)).unwrap().code, 3);
+}
+
+#[test]
+fn rejects_changes_to_unshuffled_card_codes_atomically() {
+    let extra = |sequence| address(Player::Player, CardLocation::ExtraDeck, sequence);
+    let mut layer = CardLayer::from_decks(&[], &[1, 2, 3]).unwrap();
+    layer.cards[2].position = Some(CardPositionFlags::FACE_UP_DEFENSE);
+    let before = layer.clone();
+    assert!(
+        layer
+            .apply(&shuffle_cards(
+                Player::Player,
+                CardLocation::ExtraDeck,
+                &[2, 1, 9],
+            ))
+            .is_err()
+    );
+    assert_eq!(layer, before);
+    assert_eq!(layer.card_at(extra(2)).unwrap().code, 3);
+}
+
+#[test]
+fn singleton_and_empty_shuffles_preserve_identity() {
+    let mut layer = CardLayer::from_decks(&[42], &[84]).unwrap();
+    let before = layer.clone();
+    layer
+        .apply(&CoreMessage::ShuffleDeck(ShuffleDeckMessageData {
+            player: Player::Player,
+        }))
+        .unwrap();
+    layer
+        .apply(&shuffle_cards(Player::Player, CardLocation::Hand, &[]))
+        .unwrap();
+    layer
+        .apply(&shuffle_cards(
+            Player::Player,
+            CardLocation::ExtraDeck,
+            &[0],
+        ))
+        .unwrap();
+    assert_eq!(layer, before);
+}
+
+#[test]
+fn invalid_shuffles_fail_atomically() {
+    let mut layer = CardLayer::from_decks(&[1, 2], &[]).unwrap();
+    let initial = layer.clone();
+    assert!(
+        layer
+            .apply(&shuffle_cards(Player::Player, CardLocation::Hand, &[1]))
+            .is_err()
+    );
+    assert_eq!(layer, initial);
+    layer.next_id = u64::MAX - 1;
+    let before_exhaustion = layer.clone();
+    assert!(
+        layer
+            .apply(&CoreMessage::ShuffleDeck(ShuffleDeckMessageData {
+                player: Player::Player,
+            }))
+            .is_err()
+    );
+    assert_eq!(layer, before_exhaustion);
+}
+
+#[test]
+fn rejects_shuffle_when_unknown_host_correspondence_would_lose_materials() {
+    let first = address(Player::Player, CardLocation::Hand, 0);
+    let second = address(Player::Player, CardLocation::Hand, 1);
+    let field = address(Player::Player, CardLocation::MonsterZone, 0);
+    let mut layer = CardLayer::default();
+    layer.insert(first, 1).unwrap();
+    layer.insert(second, 2).unwrap();
+    layer.insert(field, 3).unwrap();
+    layer
+        .apply(&overlay_move(
+            location(Some(field)),
+            overlay(Some(first), 0),
+            3,
+        ))
+        .unwrap();
+    let before = layer.clone();
+    let error = layer
+        .apply(&shuffle_cards(Player::Player, CardLocation::Hand, &[2, 1]))
+        .unwrap_err();
+    assert!(error.to_string().contains("overlay materials"));
+    assert_eq!(layer, before);
 }
 
 #[test]
