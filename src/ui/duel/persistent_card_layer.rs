@@ -1,10 +1,12 @@
 use dioxus::prelude::*;
 
 use super::card_interaction::InteractiveCard;
+use super::card_stats::CardStats;
 use super::layout_anchors::CardAnchor;
 use crate::ocgcore::CardData;
 use crate::ocgcore::constants::{BattlePosition, CardLocation, Player};
 use crate::ocgcore::location_info::CardPositionFlags;
+use crate::state::UIState;
 use crate::ui::card_animation::CardAnimationState;
 use crate::ui::card_layer::{Card as TrackedCard, CardAddress, CardId, CardPlacement};
 use crate::ui::components::CardImage;
@@ -120,9 +122,11 @@ pub(super) fn PersistentCardLayer(cards: Vec<TrackedCard>, targets: Vec<CardTarg
 
 #[component]
 fn LayerCard(card: TrackedCard, target: Option<CardTarget>) -> Element {
+    let state = use_context::<UIState>();
     let playback = try_consume_context::<Signal<CardAnimationState>>();
     let animating = playback.is_some_and(|playback| playback().is_active());
     let moving = playback.is_some_and(|playback| playback().moving.contains(&card.id));
+    let selected = (state.selected_card)() == Some(card.id);
     let visible = visible_card(card, target);
     let hand = matches!(card.placement, CardPlacement::Zone(address) if address.location == CardLocation::Hand);
     let style = visible.map(|(target, _)| {
@@ -146,7 +150,8 @@ fn LayerCard(card: TrackedCard, target: Option<CardTarget>) -> Element {
             "--card-x: calc({}px {}); --card-y: calc({}px {}); --card-width: {}px; --card-height: {}px; --card-z: {};",
             target.anchor.center_x - target.anchor.width / 2.0, x_offset,
             target.anchor.center_y - target.anchor.height / 2.0, y_offset,
-            target.anchor.width, target.anchor.height, if moving { 2000 + stack } else { stack },
+            target.anchor.width, target.anchor.height,
+            if moving { 2000 + stack } else if selected && !hand && target.appearance == CardAppearance::Interactive { 4000 + stack } else { stack },
         )
     }).unwrap_or_default();
     rsx! {
@@ -158,7 +163,7 @@ fn LayerCard(card: TrackedCard, target: Option<CardTarget>) -> Element {
             style,
             if let Some((target, facedown)) = visible {
                 div {
-                    class: "w-full h-full [transform:rotate(var(--card-rotation))]",
+                    class: "relative w-full h-full [transform:rotate(var(--card-rotation))]",
                     class: if animating { "[transition:transform_300ms_ease-in-out]" } else if hand { "[transition:transform_150ms_ease-in-out]" },
                     style: "--card-rotation: {target.rotation}deg;",
                     div {
@@ -171,6 +176,12 @@ fn LayerCard(card: TrackedCard, target: Option<CardTarget>) -> Element {
                             passive: target.appearance != CardAppearance::Interactive,
                             animated: animating,
                             image: card_image(card, Some(target)),
+                        }
+                    }
+                    if !animating && target.appearance == CardAppearance::Interactive && matches!(target.address.location, CardLocation::MonsterZone | CardLocation::SpellTrapZone) {
+                        div {
+                            class: "absolute top-0 left-1/2 -translate-x-1/2 h-full w-[var(--card-height)] pointer-events-none",
+                            CardStats { card: target.data }
                         }
                     }
                 }

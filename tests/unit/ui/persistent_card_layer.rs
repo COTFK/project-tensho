@@ -102,6 +102,61 @@ fn startup_artwork_matches_visible_card_images() {
 
 thread_local! {
     static TEST_STATE: RefCell<Option<Signal<(Vec<TrackedCard>, Vec<CardTarget>)>>> = const { RefCell::new(None) };
+    static TEST_SELECTION: RefCell<Option<Signal<Option<CardId>>>> = const { RefCell::new(None) };
+    static TEST_PLAYBACK: RefCell<Option<Signal<CardAnimationState>>> = const { RefCell::new(None) };
+}
+
+fn field_app() -> Element {
+    let mut state = use_context_provider(UIState::default);
+    let playback = use_context_provider(|| Signal::new(CardAnimationState::default()));
+    let (card, target) = fixture(
+        CardLocation::MonsterZone,
+        Some(CardPositionFlags::FACE_UP_ATTACK),
+    );
+    let mut layer = CardLayer::default();
+    layer.insert(target.address, card.code).unwrap();
+    state.cards.set(Some(layer));
+    TEST_SELECTION.with(|slot| *slot.borrow_mut() = Some(state.selected_card));
+    TEST_PLAYBACK.with(|slot| *slot.borrow_mut() = Some(playback));
+    rsx! { PersistentCardLayer { cards: vec![card], targets: vec![target] } }
+}
+
+#[test]
+fn selected_field_card_is_above_other_cards_and_respects_movement_layering() {
+    let (card, _) = fixture(
+        CardLocation::MonsterZone,
+        Some(CardPositionFlags::FACE_UP_ATTACK),
+    );
+    let mut dom = VirtualDom::new(field_app);
+    let initial = dom.rebuild_to_vec();
+    let root = card_root(&initial.edits, card.id);
+
+    TEST_SELECTION.with(|slot| slot.borrow().unwrap().set(Some(card.id)));
+    let selected = dom.render_immediate_to_vec();
+    assert!(
+        selected.edits.iter().any(|edit| matches!(edit,
+            Mutation::SetAttribute { name: "style", id, value: AttributeValue::Text(value), .. }
+                if *id == root && value.contains("--card-z: 4500;")
+        )),
+        "{:?}",
+        selected.edits
+    );
+
+    TEST_PLAYBACK.with(|slot| {
+        slot.borrow()
+            .unwrap()
+            .write()
+            .begin(vec![card.id], CardLayer::default());
+    });
+    let moving = dom.render_immediate_to_vec();
+    assert!(
+        moving.edits.iter().any(|edit| matches!(edit,
+            Mutation::SetAttribute { name: "style", id, value: AttributeValue::Text(value), .. }
+                if *id == root && value.contains("--card-z: 2500;")
+        )),
+        "{:?}",
+        moving.edits
+    );
 }
 
 fn app() -> Element {
