@@ -2,6 +2,59 @@ use super::*;
 use crate::ui::card_layer::CardLayer;
 
 #[test]
+fn interaction_gate_removes_inert_when_playback_finishes() {
+    use dioxus::core::{AttributeValue, Mutation};
+    use std::cell::RefCell;
+    thread_local! {
+        static ACTIVE: RefCell<Option<Signal<bool>>> = const { RefCell::new(None) };
+    }
+    fn app() -> Element {
+        let active = use_signal(|| false);
+        ACTIVE.with(|slot| *slot.borrow_mut() = Some(active));
+        rsx! { InteractionGate { active: active(), button { "Action" } } }
+    }
+    let mut dom = VirtualDom::new(app);
+    let initial = dom.rebuild_to_vec();
+    assert!(!initial.edits.iter().any(|edit| matches!(
+        edit,
+        Mutation::SetAttribute {
+            name: "inert",
+            value: AttributeValue::Text(_),
+            ..
+        }
+    )));
+    ACTIVE.with(|slot| slot.borrow().unwrap().set(true));
+    let blocked = dom.render_immediate_to_vec();
+    assert!(
+        blocked.edits.iter().any(|edit| matches!(
+            edit,
+            Mutation::SetAttribute {
+                name: "inert",
+                value: AttributeValue::Text(_),
+                ..
+            }
+        )),
+        "{:?}",
+        blocked.edits
+    );
+    ACTIVE.with(|slot| slot.borrow().unwrap().set(false));
+    let unblocked = dom.render_immediate_to_vec();
+    assert!(
+        unblocked.edits.iter().any(|edit| matches!(
+            edit,
+            Mutation::SetAttribute {
+                name: "inert",
+                value: AttributeValue::None,
+                ..
+            }
+        )),
+        "{:?}",
+        unblocked.edits
+    );
+    ACTIVE.with(|slot| *slot.borrow_mut() = None);
+}
+
+#[test]
 #[cfg(not(target_arch = "wasm32"))]
 fn replaces_tracking_and_ui_state_when_a_duel_restarts() {
     fn app() -> Element {

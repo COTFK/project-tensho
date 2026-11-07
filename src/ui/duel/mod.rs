@@ -23,6 +23,7 @@ use crate::state::handle_right_click;
 use crate::state::load_duel;
 use crate::state::run_game_loop;
 use crate::ui::LoadingScreen;
+use crate::ui::card_playback::{CardPlayback, wait_for_animation};
 use crate::ui::card_tracking::CardTracking;
 use crate::ui::components::UIButton;
 use crate::ui::components::svg::FullscreenIcon;
@@ -99,6 +100,19 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>) -> Element {
     use_context_provider(layout_anchors::LayoutAnchors::default);
     let revision = use_context_provider(|| layout_anchors::LayoutRevision(Signal::new(0)));
     let mut layered_preview = use_signal(|| false);
+    let mut playback = use_context_provider(|| Signal::new(CardPlayback::default()));
+
+    use_effect(move || {
+        let current = playback();
+        if current.active {
+            spawn(async move {
+                wait_for_animation().await;
+                if playback.peek().active && playback.peek().generation == current.generation {
+                    playback.write().finish(current.generation);
+                }
+            });
+        }
+    });
 
     // Start game loop
     use_effect(run_game_loop);
@@ -109,7 +123,7 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>) -> Element {
             oncontextmenu: handle_right_click,
             onresize: move |_| revision.invalidate(),
             onclick: move |_| {
-                if (state.selected_card)().is_some() {
+                if !playback.peek().active && (state.selected_card)().is_some() {
                     state.selected_card.set(None);
                 }
 
@@ -130,6 +144,7 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>) -> Element {
                 onclick: move |event| {
                     event.stop_propagation();
                     layered_preview.toggle();
+                    playback.write().set_enabled(layered_preview());
                 },
                 if layered_preview() { "Layered field: on" } else { "Layered field: off" }
             }
@@ -147,8 +162,14 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>) -> Element {
                 },
                 FullscreenIcon {}
             }
-            ModalContainer {}
-            FieldPreview { enabled: layered_preview }
+            div {
+                class: if playback().active { "hidden" },
+                ModalContainer {}
+            }
+            InteractionGate {
+                active: playback().active,
+                FieldPreview { enabled: layered_preview }
+            }
             if let Some(CardTracking::Failed(error)) = &*tracking.read() {
                 div {
                     class: "fixed top-3 left-1/2 z-50 max-w-lg -translate-x-1/2 rounded bg-red-950 p-3 text-sm text-white shadow-lg",
@@ -165,6 +186,17 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>) -> Element {
             }
         }
     )
+}
+
+#[component]
+fn InteractionGate(active: bool, children: Element) -> Element {
+    rsx! {
+        div {
+            inert: if active { Some("") } else { None },
+            class: if active { "pointer-events-none" },
+            {children}
+        }
+    }
 }
 
 #[cfg(test)]

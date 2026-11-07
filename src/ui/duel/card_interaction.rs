@@ -130,6 +130,7 @@ pub(super) fn InteractiveCard(
     #[props(default)] layered: bool,
     #[props(default)] force_facedown: bool,
     #[props(default)] passive: bool,
+    #[props(default)] animated: bool,
     #[props(default)] image: Option<CardImage>,
 ) -> Element {
     let mut state = use_context::<UIState>();
@@ -254,6 +255,7 @@ pub(super) fn InteractiveCard(
             }
             Card {
                 image: image.unwrap_or(if facedown { CardImage::CardBack } else { CardImage::Face(card) }),
+                animated,
                 class: card_class,
                 is_selected: selected || (!hand && (actions.selected || actions.tribute_selected)),
                 show_highlight_on_select: !hand && !passive,

@@ -23,6 +23,7 @@ use crate::ocgcore::messages::SelectUnselectMessageData;
 use crate::ocgcore::messages::SortCardMessageData;
 use crate::settings::CustomHand;
 use crate::ui::card_layer::{CardAddress, CardId, CardLayer, CardPlacement};
+use crate::ui::card_playback::{CardPlayback, movements};
 use crate::ui::card_tracking::CardTracking;
 use crate::utility::ARCHETYPE_SCRIPT;
 use crate::utility::EXTRA_DECK_IDS;
@@ -52,6 +53,11 @@ impl SelectedCard {
 
 pub(crate) fn select_card(address: CardAddress) {
     let mut state = consume_context::<UIState>();
+    if try_consume_context::<Signal<CardPlayback>>().is_some_and(|playback| playback.peek().active)
+    {
+        tracing::warn!("Ignoring card selection during animation");
+        return;
+    }
     let tracking = consume_context::<Signal<Option<CardTracking>>>();
     let card_id = match &*tracking.peek() {
         Some(CardTracking::Active(layer)) => match layer.card_at(address) {
@@ -147,10 +153,54 @@ pub fn run_game_loop() {
     let state = consume_context::<UIState>();
     let duel = consume_context::<Signal<Option<Duel>>>();
     let duel = duel().expect("Duel context missing active duel");
-
-    if !(state.waiting_on_input)() {
-        process_until_input(|| duel.process(), handle_core_message);
+    let playback = try_consume_context::<Signal<CardPlayback>>();
+    if playback.is_some_and(|playback| {
+        let playback = playback();
+        playback.active || playback.finished
+    }) || (state.waiting_on_input)()
+    {
+        return;
     }
+    let tracking = consume_context::<Signal<Option<CardTracking>>>();
+    process_until_input(
+        || {
+            let status = duel.process();
+            if status == OCG_DuelStatus::OCG_DUEL_STATUS_END {
+                if let Some(mut playback) = playback {
+                    playback.write().finished = true;
+                }
+            }
+            status
+        },
+        || {
+            let before = if playback.is_some_and(|playback| playback.peek().enabled) {
+                match &*tracking.peek() {
+                    Some(CardTracking::Active(layer)) => Some(layer.clone()),
+                    _ => None,
+                }
+            } else {
+                None
+            };
+            let piles = before.as_ref().map(|_| {
+                [
+                    state.extra_deck.peek().clone(),
+                    state.graveyard.peek().clone(),
+                    state.banishment.peek().clone(),
+                ]
+            });
+            let waiting = handle_core_message();
+            if let (Some(before), Some(piles), Some(mut playback)) = (before, piles, playback) {
+                if let Some(CardTracking::Active(after)) = &*tracking.peek() {
+                    let moving = movements(&before, after);
+                    if !moving.is_empty() {
+                        playback.write().begin(moving, before, piles);
+                        return true;
+                    }
+                }
+            }
+            waiting
+        },
+    );
 }
 
 fn process_until_input(
@@ -169,6 +219,10 @@ fn process_until_input(
 pub fn handle_right_click(evt: MouseEvent) {
     evt.prevent_default();
     let mut state = consume_context::<UIState>();
+    if try_consume_context::<Signal<CardPlayback>>().is_some_and(|playback| playback.peek().active)
+    {
+        return;
+    }
 
     // Allow to decline chains & activations
     if !(state.card_prompting_to_activate)().is_empty() {
@@ -319,6 +373,15 @@ pub(crate) async fn load_duel(
 
 pub fn send_response(response: Response) {
     let mut state = consume_context::<UIState>();
+    if try_consume_context::<Signal<CardPlayback>>().is_some_and(|playback| playback.peek().active)
+    {
+        tracing::warn!("Ignoring response during card animation");
+        return;
+    }
+    if !*state.waiting_on_input.peek() {
+        tracing::warn!("Ignoring response without a pending prompt");
+        return;
+    }
     let duel = consume_context::<Signal<Option<Duel>>>();
     let duel = duel().expect("Duel context missing active duel");
 

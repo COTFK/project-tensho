@@ -13,6 +13,7 @@ use crate::ocgcore::Response;
 use crate::ocgcore::constants::{CardLocation, Player};
 use crate::state::{UIState, send_response};
 use crate::ui::card_layer::CardAddress;
+use crate::ui::card_playback::CardPlayback;
 
 #[component]
 pub fn Field(layered: bool) -> Element {
@@ -48,6 +49,8 @@ pub fn Field(layered: bool) -> Element {
 #[component]
 fn Zone(index: u8, location: CardLocation, card: Option<CardData>, layered: bool) -> Element {
     let state = use_context::<UIState>();
+    let animating =
+        try_consume_context::<Signal<CardPlayback>>().is_some_and(|playback| playback().active);
     let placeable_on = (state.available_zones)()
         .iter()
         .any(|zone| zone.location == location && zone.sequence == index);
@@ -78,7 +81,9 @@ fn Zone(index: u8, location: CardLocation, card: Option<CardData>, layered: bool
                     }
                 }
 
-                CardStats { card }
+                if !animating {
+                    CardStats { card }
+                }
             }
 
         }
