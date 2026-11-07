@@ -6,7 +6,7 @@ use crate::ocgcore::location_info::{
 };
 use crate::ocgcore::messages::{
     ConfirmCardsMessageData, CoreMessage, DeckTopMessageData, DrawMessageData, MoveMessageData,
-    RemoveCardsMessageData, ShuffleSetCardMessageData, SwapMessageData,
+    RemoveCardsMessageData, ShuffleSetCardMessageData, SwapGraveDeckMessageData, SwapMessageData,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -101,6 +101,7 @@ impl CardLayer {
         match message {
             CoreMessage::Move(message) => next.apply_move(message)?,
             CoreMessage::Swap(message) => next.apply_swap(message)?,
+            CoreMessage::SwapGraveDeck(message) => next.swap_grave_deck(message)?,
             CoreMessage::RemoveCards(message) => next.apply_remove_cards(message)?,
             CoreMessage::Draw(message) => next.apply_draw(message)?,
             CoreMessage::ReverseDeck => next.reverse_decks()?,
@@ -171,6 +172,99 @@ impl CardLayer {
         ensure!(first != second, "Swap locations are identical");
         self.cards[first].placement = second_placement;
         self.cards[second].placement = first_placement;
+        Ok(())
+    }
+
+    fn swap_grave_deck(&mut self, message: &SwapGraveDeckMessageData) -> anyhow::Result<()> {
+        let player = message.player;
+        let grave_len = self.pile_len(player, CardLocation::Graveyard)?;
+        self.pile_len(player, CardLocation::Deck)?;
+        let extra_len = self.pile_len(player, CardLocation::ExtraDeck)?;
+        ensure!(
+            message.extra_insert_index <= extra_len,
+            "Extra-deck insertion index is outside the pile"
+        );
+        let bitmap_len = (grave_len as usize).div_ceil(8);
+        ensure!(
+            message.extra_cards.len() == bitmap_len,
+            "Exchange bitmap does not match the graveyard size"
+        );
+        if grave_len % 8 != 0 {
+            let valid_bits = (1u16 << (grave_len % 8)) - 1;
+            ensure!(
+                u16::from(message.extra_cards[bitmap_len - 1]) & !valid_bits == 0,
+                "Exchange bitmap contains out-of-range cards"
+            );
+        }
+        let redirected = message
+            .extra_cards
+            .iter()
+            .map(|byte| byte.count_ones())
+            .sum::<u32>();
+        if grave_len - redirected == 1 {
+            let surviving_sequence = (0..grave_len)
+                .find(|sequence| {
+                    message.extra_cards[*sequence as usize / 8] & (1 << (*sequence % 8)) == 0
+                })
+                .context("Missing surviving deck card")?;
+            ensure!(
+                surviving_sequence == 0,
+                "Cannot track exchange: the core retains a stale sequence on the only deck card"
+            );
+        }
+        extra_len
+            .checked_add(redirected)
+            .context("Extra deck sequence overflow")?;
+        let grave_indices: Vec<usize> = (0..grave_len)
+            .map(|sequence| {
+                self.cards
+                    .iter()
+                    .position(|card| {
+                        card.placement
+                            == CardPlacement::Zone(CardAddress {
+                                controller: player,
+                                location: CardLocation::Graveyard,
+                                sequence,
+                            })
+                    })
+                    .context("Missing card in exchanged graveyard")
+            })
+            .collect::<anyhow::Result<_>>()?;
+        for card in &mut self.cards {
+            if let CardPlacement::Zone(address) = &mut card.placement {
+                if address.controller == player && address.location == CardLocation::Deck {
+                    address.location = CardLocation::Graveyard;
+                    card.position = Some(
+                        CardPositionFlags::FACE_UP_ATTACK | CardPositionFlags::FACE_UP_DEFENSE,
+                    );
+                } else if address.controller == player
+                    && address.location == CardLocation::ExtraDeck
+                    && address.sequence >= message.extra_insert_index
+                {
+                    address.sequence += redirected;
+                }
+            }
+        }
+        let mut deck_sequence = 0;
+        let mut extra_sequence = message.extra_insert_index;
+        for (sequence, index) in grave_indices.into_iter().enumerate() {
+            let is_extra = message.extra_cards[sequence as usize / 8] & (1 << (sequence % 8)) != 0;
+            let (location, destination) = if is_extra {
+                let destination = extra_sequence;
+                extra_sequence += 1;
+                (CardLocation::ExtraDeck, destination)
+            } else {
+                let destination = deck_sequence;
+                deck_sequence += 1;
+                (CardLocation::Deck, destination)
+            };
+            self.cards[index].placement = CardPlacement::Zone(CardAddress {
+                controller: player,
+                location,
+                sequence: destination,
+            });
+            self.cards[index].position = Some(CardPositionFlags::FACE_DOWN_DEFENSE);
+        }
         Ok(())
     }
 

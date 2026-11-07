@@ -6,7 +6,7 @@ use crate::ocgcore::messages::move_card::MoveReason;
 use crate::ocgcore::messages::{
     ConfirmCardsMessageData, DeckTopMessageData, PositionChangeMessageData, RemoveCardsMessageData,
     SetCardMessageData, ShuffleCardsMessageData, ShuffleDeckMessageData, ShuffleSetCardMessageData,
-    SummoningMessageData, SwapMessageData,
+    SummoningMessageData, SwapGraveDeckMessageData, SwapMessageData,
 };
 
 fn address(controller: Player, location: CardLocation, sequence: u32) -> CardAddress {
@@ -115,6 +115,202 @@ fn confirmed(address: CardAddress, code: u32) -> ConfirmedCard {
         location: CardLocationKind::Known(address.location),
         sequence: address.sequence,
     }
+}
+
+#[test]
+fn exchanges_grave_and_deck_then_applies_the_shuffle_boundary() {
+    let mut layer = CardLayer::from_decks(&[7, 7], &[30, 31]).unwrap();
+    let at = |location, sequence| address(Player::Player, location, sequence);
+    layer
+        .apply(&position_change(
+            at(CardLocation::ExtraDeck, 1),
+            31,
+            CardPositionFlags::FACE_DOWN_DEFENSE,
+            CardPositionFlags::FACE_UP_DEFENSE,
+        ))
+        .unwrap();
+    let old_deck: Vec<_> = (0..2)
+        .map(|i| layer.card_at(at(CardLocation::Deck, i)).unwrap().id)
+        .collect();
+    let extra_ids: Vec<_> = (0..2)
+        .map(|i| layer.card_at(at(CardLocation::ExtraDeck, i)).unwrap().id)
+        .collect();
+    let grave_ids: Vec<_> = [10, 20, 10, 21, 12, 13, 14, 15, 22]
+        .iter()
+        .enumerate()
+        .map(|(i, code)| {
+            layer
+                .insert(at(CardLocation::Graveyard, i as u32), *code)
+                .unwrap()
+        })
+        .collect();
+    let other = layer
+        .insert(address(Player::Opponent, CardLocation::Deck, 0), 42)
+        .unwrap();
+    layer
+        .apply(&CoreMessage::SwapGraveDeck(SwapGraveDeckMessageData {
+            player: Player::Player,
+            extra_insert_index: 1,
+            extra_cards: vec![0b0000_1010, 0b0000_0001],
+        }))
+        .unwrap();
+    assert_eq!(
+        codes(&layer, Player::Player, CardLocation::Graveyard),
+        [7, 7]
+    );
+    assert_eq!(
+        codes(&layer, Player::Player, CardLocation::Deck),
+        [10, 10, 12, 13, 14, 15]
+    );
+    assert_eq!(
+        codes(&layer, Player::Player, CardLocation::ExtraDeck),
+        [30, 20, 21, 22, 31]
+    );
+    for (sequence, id) in old_deck.iter().enumerate() {
+        let card = layer
+            .card_at(at(CardLocation::Graveyard, sequence as u32))
+            .unwrap();
+        assert_eq!(card.id, *id);
+        assert_eq!(
+            card.position,
+            Some(CardPositionFlags::FACE_UP_ATTACK | CardPositionFlags::FACE_UP_DEFENSE)
+        );
+    }
+    for (sequence, id) in [
+        extra_ids[0],
+        grave_ids[1],
+        grave_ids[3],
+        grave_ids[8],
+        extra_ids[1],
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        assert_eq!(
+            layer
+                .card_at(at(CardLocation::ExtraDeck, sequence as u32))
+                .unwrap()
+                .id,
+            id
+        );
+    }
+    assert_eq!(
+        layer
+            .card_at(at(CardLocation::ExtraDeck, 4))
+            .unwrap()
+            .position,
+        Some(CardPositionFlags::FACE_UP_DEFENSE)
+    );
+    for (sequence, index) in [0, 2, 4, 5, 6, 7].into_iter().enumerate() {
+        let card = layer
+            .card_at(at(CardLocation::Deck, sequence as u32))
+            .unwrap();
+        assert_eq!(card.id, grave_ids[index]);
+        assert_eq!(card.position, Some(CardPositionFlags::FACE_DOWN_DEFENSE));
+    }
+    assert_eq!(
+        layer
+            .card_at(address(Player::Opponent, CardLocation::Deck, 0))
+            .unwrap()
+            .id,
+        other
+    );
+    layer
+        .apply(&CoreMessage::ShuffleDeck(ShuffleDeckMessageData {
+            player: Player::Player,
+        }))
+        .unwrap();
+    for sequence in 0..6 {
+        let card = layer.card_at(at(CardLocation::Deck, sequence)).unwrap();
+        assert!(!grave_ids.contains(&card.id));
+        assert_eq!(card.code, 0);
+    }
+    assert_eq!(
+        layer.card_at(at(CardLocation::ExtraDeck, 1)).unwrap().id,
+        grave_ids[1]
+    );
+}
+
+#[test]
+fn rejects_invalid_exchange_atomically_and_handles_empty_piles() {
+    let mut layer = CardLayer::from_decks(&[1], &[2]).unwrap();
+    layer
+        .insert(address(Player::Player, CardLocation::Graveyard, 0), 3)
+        .unwrap();
+    let original = layer.clone();
+    for (index, bitmap) in [(2, vec![0]), (0, vec![]), (0, vec![2]), (0, vec![0, 0])] {
+        assert!(
+            layer
+                .apply(&CoreMessage::SwapGraveDeck(SwapGraveDeckMessageData {
+                    player: Player::Player,
+                    extra_insert_index: index,
+                    extra_cards: bitmap,
+                }))
+                .is_err()
+        );
+        assert_eq!(layer, original);
+    }
+    let mut empty = CardLayer::default();
+    empty
+        .apply(&CoreMessage::SwapGraveDeck(SwapGraveDeckMessageData {
+            player: Player::Opponent,
+            extra_insert_index: 0,
+            extra_cards: vec![],
+        }))
+        .unwrap();
+    assert!(empty.cards().is_empty());
+}
+
+#[test]
+fn rejects_exchange_with_one_deck_card_retaining_a_stale_core_sequence() {
+    let mut layer = CardLayer::default();
+    for (sequence, code) in [300, 10].into_iter().enumerate() {
+        layer
+            .insert(
+                address(Player::Player, CardLocation::Graveyard, sequence as u32),
+                code,
+            )
+            .unwrap();
+    }
+    let before = layer.clone();
+    let message = CoreMessage::SwapGraveDeck(SwapGraveDeckMessageData {
+        player: Player::Player,
+        extra_insert_index: 0,
+        extra_cards: vec![1],
+    });
+    assert!(
+        layer
+            .apply(&message)
+            .unwrap_err()
+            .to_string()
+            .contains("stale sequence")
+    );
+    assert_eq!(layer, before);
+}
+
+#[test]
+fn accepts_exchange_with_one_survivor_already_at_sequence_zero() {
+    let mut layer = CardLayer::default();
+    for (sequence, code) in [10, 300].into_iter().enumerate() {
+        layer
+            .insert(
+                address(Player::Player, CardLocation::Graveyard, sequence as u32),
+                code,
+            )
+            .unwrap();
+    }
+    layer
+        .apply(&CoreMessage::SwapGraveDeck(SwapGraveDeckMessageData {
+            player: Player::Player,
+            extra_insert_index: 0,
+            extra_cards: vec![2],
+        }))
+        .unwrap();
+    assert_eq!(codes(&layer, Player::Player, CardLocation::Deck), [10]);
+    assert_eq!(
+        codes(&layer, Player::Player, CardLocation::ExtraDeck),
+        [300]
+    );
 }
 
 #[test]

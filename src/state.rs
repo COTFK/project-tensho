@@ -297,6 +297,9 @@ pub fn handle_core_message() -> bool {
             }
             CoreMessage::ReverseDeck => tracing::trace!("Received reverse deck"),
             CoreMessage::DeckTop(message) => tracing::trace!("Received deck top: {message:?}"),
+            CoreMessage::SwapGraveDeck(message) => {
+                tracing::trace!("Received graveyard-deck exchange: {message:?}")
+            }
             CoreMessage::ShuffleDeck(message) => {
                 tracing::trace!("Received shuffle deck: {message:?}")
             }
