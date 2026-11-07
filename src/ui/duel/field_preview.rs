@@ -520,6 +520,50 @@ pub(super) fn FieldPreview(enabled: Signal<bool>) -> Element {
         (_, Some(Err(error))) => Some(Err(error.clone())),
         _ => None,
     };
+    let target_failure = if matches!(geometry, Some(Ok(_))) {
+        resolved
+            .as_ref()
+            .and_then(|result| result.as_ref().err())
+            .cloned()
+    } else {
+        None
+    };
+    use_effect(move || {
+        let current_revision = (revision.0)();
+        let measured = resource.read();
+        let _ = enabled();
+        let _ = tracking();
+        let _ = (state.monsters)();
+        let _ = (state.spell_traps)();
+        let _ = (state.hand_contents)();
+        let _ = (state.main_deck_length)();
+        let _ = (state.extra_deck)();
+        let _ = (state.graveyard)();
+        let _ = (state.banishment)();
+        let Some(mut playback) = playback else { return };
+        let current = playback();
+        if !current.enabled || current.failure.is_some() || current.restarting {
+            return;
+        }
+        if let Some(error) = &target_failure {
+            tracing::error!("Card layer synchronization failed: {error}");
+            playback.write().fail(error.clone());
+            return;
+        }
+        if !current.layout_pending {
+            return;
+        }
+        if let Some((measured_revision, result)) = measured.as_ref().and_then(Option::as_ref) {
+            if *measured_revision == current_revision {
+                match result {
+                    Ok(_) => playback.write().layout_pending = false,
+                    Err(error) => playback
+                        .write()
+                        .fail(format!("Cannot remeasure the field: {error}")),
+                }
+            }
+        }
+    });
     let layered = matches!(&resolved, Some(Ok(_)));
     let visible_targets = resolved
         .as_ref()

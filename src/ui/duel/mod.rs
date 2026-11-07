@@ -103,6 +103,14 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>) -> Element {
     let mut playback = use_context_provider(|| Signal::new(CardPlayback::default()));
 
     use_effect(move || {
+        if playback().enabled && playback.peek().failure.is_none() {
+            if let Some(CardTracking::Failed(error)) = &*tracking.read() {
+                playback.write().fail(error.clone());
+            }
+        }
+    });
+
+    use_effect(move || {
         let current = playback();
         if current.active {
             spawn(async move {
@@ -121,9 +129,14 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>) -> Element {
         main {
             class: "portrait:hidden relative h-dvh w-dvw bg-gray-800 select-none",
             oncontextmenu: handle_right_click,
-            onresize: move |_| revision.invalidate(),
+            onresize: move |_| {
+                revision.invalidate();
+                if playback.peek().active {
+                    playback.write().resize();
+                }
+            },
             onclick: move |_| {
-                if !playback.peek().active && (state.selected_card)().is_some() {
+                if !playback.peek().blocked() && (state.selected_card)().is_some() {
                     state.selected_card.set(None);
                 }
 
@@ -132,6 +145,7 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>) -> Element {
                 class: "fixed top-3 left-3 z-50 w-max h-max p-2",
                 label: "Restart game",
                 onclick: move |_| {
+                    playback.write().restart();
                     state.reset();
                     duel_resource.clear();
                     duel_resource.restart();
@@ -141,6 +155,7 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>) -> Element {
             button {
                 class: "fixed top-3 left-16 z-50 rounded-md border border-white/20 bg-black/70 px-3 py-2 text-xs font-semibold text-white cursor-pointer hover:bg-black/85",
                 "aria-pressed": "{layered_preview}",
+                disabled: playback().failure.is_some() || playback().restarting,
                 onclick: move |event| {
                     event.stop_propagation();
                     layered_preview.toggle();
@@ -163,14 +178,21 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>) -> Element {
                 FullscreenIcon {}
             }
             div {
-                class: if playback().active { "hidden" },
+                class: if playback().blocked() { "hidden" },
                 ModalContainer {}
             }
             InteractionGate {
-                active: playback().active,
+                active: playback().blocked(),
                 FieldPreview { enabled: layered_preview }
             }
-            if let Some(CardTracking::Failed(error)) = &*tracking.read() {
+            MotionPreference {}
+            if let Some(error) = &playback().failure {
+                div {
+                    class: "fixed top-3 left-1/2 z-50 max-w-lg -translate-x-1/2 rounded bg-red-950 p-3 text-sm text-white shadow-lg",
+                    role: "alert",
+                    "Card playback stopped: {error}. Restart the duel to continue."
+                }
+            } else if let Some(CardTracking::Failed(error)) = &*tracking.read() {
                 div {
                     class: "fixed top-3 left-1/2 z-50 max-w-lg -translate-x-1/2 rounded bg-red-950 p-3 text-sm text-white shadow-lg",
                     role: "alert",
@@ -186,6 +208,55 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>) -> Element {
             }
         }
     )
+}
+
+#[component]
+fn MotionPreference() -> Element {
+    let mut playback = use_context::<Signal<CardPlayback>>();
+    let mut revision = use_signal(|| 0u64);
+    rsx! {
+        div {
+            class: "absolute left-0 top-0 w-px h-px motion-reduce:w-[2px] opacity-0 pointer-events-none",
+            "aria-hidden": "true",
+            onmounted: move |event| {
+                let element = event.data();
+                let measured_revision = *revision.peek();
+                spawn(async move {
+                    match element.get_client_rect().await {
+                        Ok(rect) if *revision.peek() == measured_revision => {
+                            set_motion_width(&mut playback, rect.size.width);
+                        }
+                        Ok(_) => {}
+                        Err(error) => tracing::warn!("Cannot measure reduced-motion preference: {error}"),
+                    }
+                });
+            },
+            onresize: move |event| {
+                revision += 1;
+                match event.data().get_border_box_size() {
+                    Ok(size) => set_motion_width(&mut playback, size.width),
+                    Err(error) => {
+                        tracing::warn!("Cannot observe reduced-motion preference: {error}");
+                        if !playback.peek().reduced_motion {
+                            playback.write().set_reduced_motion(true);
+                        }
+                    }
+                }
+            },
+        }
+    }
+}
+
+fn set_motion_width(playback: &mut Signal<CardPlayback>, width: f64) {
+    let reduced = if width.is_finite() && width > 0.0 {
+        width > 1.5
+    } else {
+        tracing::warn!("Invalid reduced-motion probe width: {width}");
+        true
+    };
+    if playback.peek().reduced_motion != reduced {
+        playback.write().set_reduced_motion(reduced);
+    }
 }
 
 #[component]

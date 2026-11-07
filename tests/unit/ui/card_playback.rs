@@ -78,3 +78,59 @@ fn position_changes_start_playback_without_changing_card_identity() {
     assert_eq!(movements(&before, &after), vec![id]);
     assert_eq!(after.card_at(field).unwrap().id, id);
 }
+
+#[test]
+fn resize_cancels_playback_and_blocks_until_layout_is_ready() {
+    let mut playback = CardPlayback {
+        enabled: true,
+        reduced_motion: false,
+        ..Default::default()
+    };
+    playback.begin(vec![], CardLayer::default(), Default::default());
+    let old = playback.generation;
+    playback.resize();
+    assert!(playback.layout_pending);
+    assert!(playback.blocked());
+    assert!(!playback.active);
+    playback.finish(old);
+    assert!(playback.blocked());
+    playback.layout_pending = false;
+    assert!(!playback.blocked());
+}
+
+#[test]
+fn reduced_motion_and_restart_cancel_stale_playback() {
+    let mut playback = CardPlayback {
+        enabled: true,
+        reduced_motion: false,
+        ..Default::default()
+    };
+    playback.begin(vec![], CardLayer::default(), Default::default());
+    let old = playback.generation;
+    playback.set_reduced_motion(true);
+    assert!(!playback.blocked());
+    assert!(playback.reduced_motion);
+    playback.set_reduced_motion(false);
+    playback.begin(vec![], CardLayer::default(), Default::default());
+    playback.restart();
+    playback.finish(old);
+    assert!(playback.restarting);
+    assert!(playback.blocked());
+}
+
+#[test]
+fn tracking_failure_stays_blocked_even_if_preview_is_disabled() {
+    let mut playback = CardPlayback {
+        enabled: true,
+        reduced_motion: false,
+        ..Default::default()
+    };
+    playback.begin(vec![], CardLayer::default(), Default::default());
+    let generation = playback.generation;
+    playback.fail("diverged".into());
+    playback.set_enabled(false);
+    playback.finish(generation);
+    assert_eq!(playback.failure.as_deref(), Some("diverged"));
+    assert!(playback.blocked());
+    assert!(playback.source.is_none());
+}
