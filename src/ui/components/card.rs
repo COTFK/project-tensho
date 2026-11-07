@@ -4,18 +4,36 @@ use crate::ocgcore::CardData;
 use crate::utility::CARD_BACK;
 use crate::utility::EXTRA_BACK;
 use crate::utility::card_image_url;
+use crate::utility::card_thumbnail_url;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CardImage {
+    Face(CardData),
+    Thumbnail(CardData),
+    CardBack,
+    ExtraDeckBack,
+}
+
+impl CardImage {
+    fn url(self) -> String {
+        match self {
+            Self::Face(card) => card_image_url(card.card_code),
+            Self::Thumbnail(card) => card_thumbnail_url(card.card_code),
+            Self::CardBack => CARD_BACK.to_string(),
+            Self::ExtraDeckBack => EXTRA_BACK.to_string(),
+        }
+    }
+}
 
 #[component]
 pub fn Card(
-    card: CardData,
+    image: CardImage,
     class: String,
     is_selected: bool,
     show_highlight_on_select: bool,
     show_dotted_highlight: bool,
     show_blue_aura: bool,
     show_orange_aura: bool,
-    facedown: bool,
-    use_extra_deck_back: bool,
     onclick: EventHandler<MouseEvent>,
 ) -> Element {
     rsx! {
@@ -38,15 +56,7 @@ pub fn Card(
                 decoding: "sync",
                 image_rendering: "auto",
                 aspect_ratio: "59/86",
-                src: if !facedown {
-                    card_image_url(card.card_code)
-                } else {
-                    if use_extra_deck_back {
-                        EXTRA_BACK.to_string()
-                    } else {
-                        CARD_BACK.to_string()
-                    }
-                },
+                src: image.url(),
             }
             div {
                 class: "absolute inset-0 md:inset-[4px] border-4 blur-[2px] mix-blend-screen pointer-events-none animate-pulse",
@@ -83,7 +93,12 @@ pub fn CardStack(length: usize, image_url: String) -> Element {
                     aspect_ratio: "59/86",
                     src: "{image_url}",
                 }
+
             }
         }
     )
 }
+
+#[cfg(test)]
+#[path = "../../../tests/unit/ui/card_component.rs"]
+mod tests;

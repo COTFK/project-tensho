@@ -8,6 +8,7 @@ use crate::state::send_response;
 use crate::ui::components::ActionButton;
 use crate::ui::components::Card;
 use crate::ui::components::CardActionMenu;
+use crate::ui::components::CardImage;
 use crate::ui::components::CardStack;
 use crate::ui::components::OptionButton;
 use crate::ui::components::PickerModal;
@@ -15,7 +16,7 @@ use crate::ui::components::svg::SummonIcon;
 use crate::utility::EXTRA_BACK;
 
 #[component]
-pub fn ExtraDeck() -> Element {
+pub fn ExtraDeck(#[props(default)] layered: bool) -> Element {
     let mut state = use_context::<UIState>();
     let available_special_summons = (state.special_summons)();
 
@@ -43,9 +44,11 @@ pub fn ExtraDeck() -> Element {
                         class: "absolute inset-[1px] my-0.5 ml-0.5 mb-1 md:inset-[2px] md:my-1 md:mb-2 md:ml-1 rounded-[2px] blur-[1px] mix-blend-screen pointer-events-none",
                         class: if has_summons && !suppress_actions { "bg-yellow-400" },
                     }
-                    CardStack {
-                        length: state.extra_deck.len(),
-                        image_url: EXTRA_BACK,
+                    if !layered {
+                        CardStack {
+                            length: state.extra_deck.len(),
+                            image_url: EXTRA_BACK,
+                        }
                     }
                 }
             }
@@ -88,15 +91,13 @@ pub fn ExtraDeckModal() -> Element {
                             div {
                                 class: "relative py-2",
                                 Card {
-                                    card,
+                                    image: CardImage::Face(card),
                                     class: "w-[12vw]",
                                     is_selected: selected_card() == Some(index),
                                     show_highlight_on_select: true,
                                     show_dotted_highlight: false,
                                     show_blue_aura: false,
                                     show_orange_aura: is_special_summonable && !suppress_actions,
-                                    facedown: false,
-                                    use_extra_deck_back: false,
                                     onclick: move |_| selected_card.set(Some(index))
                                 }
                                 CardActionMenu {

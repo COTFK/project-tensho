@@ -7,6 +7,7 @@ use crate::ocgcore::Response;
 use crate::state::UIState;
 use crate::state::send_response;
 use crate::ui::components::Card;
+use crate::ui::components::CardImage;
 use crate::ui::components::MessageModal;
 use crate::ui::components::OptionButton;
 use crate::ui::components::PickerModal;
@@ -192,15 +193,13 @@ pub fn CardSelector() -> Element {
                         div {
                             class: "relative",
                             Card {
-                                card: *card,
+                                image: CardImage::Face(*card),
                                 class: "w-[12vw] min-w-[12vw]",
                                 is_selected: selected_cards().contains(&(index as u8)),
                                 show_highlight_on_select: true,
                                 show_dotted_highlight: false,
                                 show_blue_aura: false,
                                 show_orange_aura: false,
-                                facedown: false,
-                                use_extra_deck_back: false,
                                 onclick: move |_| {
                                     selected_cards.with_mut(|indices| {
                                         if message.max_select == 1 {
@@ -263,15 +262,13 @@ pub fn SortCardSelector() -> Element {
                         div {
                             class: "relative w-[12vw] min-w-[12vw]",
                             Card {
-                                card: *card,
+                                image: CardImage::Face(*card),
                                 class: "w-full",
                                 is_selected: selected_cards().iter().position(|selected| *selected == index as u8).is_some(),
                                 show_highlight_on_select: true,
                                 show_dotted_highlight: false,
                                 show_blue_aura: false,
                                 show_orange_aura: false,
-                                facedown: false,
-                                use_extra_deck_back: false,
                                 onclick: move |_| {
                                     selected_cards.with_mut(|indices| {
                                         if let Some(position) = indices.iter().position(|selected| *selected == index as u8) {

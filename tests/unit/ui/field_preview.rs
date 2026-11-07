@@ -26,6 +26,10 @@ fn fixture() -> (PreviewSnapshot, LayoutAnchors) {
         spell_traps: vec![None; 8],
         hand: vec![],
         selected: None,
+        deck_count: 0,
+        extra: vec![],
+        graveyard: vec![],
+        banishment: vec![],
     };
     let anchors = LayoutAnchors::default();
     anchors.insert(
@@ -36,6 +40,21 @@ fn fixture() -> (PreviewSnapshot, LayoutAnchors) {
             PixelsSize::new(100.0, 146.0),
         )))),
     );
+    for location in [
+        CardLocation::Deck,
+        CardLocation::ExtraDeck,
+        CardLocation::Graveyard,
+        CardLocation::Banishment,
+    ] {
+        anchors.insert(
+            (Anchor::Pile(location), AnchorPart::Card),
+            Rc::new(()),
+            Rc::new(MountedData::new(TestElement(PixelsRect::new(
+                point2(600.0, 400.0),
+                PixelsSize::new(59.0, 86.0),
+            )))),
+        );
+    }
     for (location, count) in [
         (CardLocation::MonsterZone, 7),
         (CardLocation::SpellTrapZone, 6),
@@ -187,6 +206,10 @@ fn duplicate_hand_cards_keep_identity_when_one_moves_and_the_rest_reindex() {
         spell_traps: vec![None; 8],
         hand: vec![],
         selected: None,
+        deck_count: 0,
+        extra: vec![],
+        graveyard: vec![],
+        banishment: vec![],
     };
     for sequence in 0..3 {
         let address = CardAddress {
@@ -200,6 +223,231 @@ fn duplicate_hand_cards_keep_identity_when_one_moves_and_the_rest_reindex() {
             code: 42,
         });
     }
+
+    fn pile_targets_preserve_ids_counts_and_concealment() {
+        let (_, anchors) = fixture();
+        let geometry = futures::executor::block_on(measure_field(&anchors)).unwrap();
+        let mut snapshot = PreviewSnapshot {
+            cards: CardLayer::default(),
+            monsters: vec![None; 7],
+            spell_traps: vec![None; 8],
+            hand: vec![],
+            selected: None,
+            deck_count: 2,
+            extra: vec![],
+            graveyard: vec![],
+            banishment: vec![],
+        };
+        for sequence in 0..2 {
+            snapshot
+                .cards
+                .insert(
+                    CardAddress {
+                        controller: Player::Player,
+                        location: CardLocation::Deck,
+                        sequence,
+                    },
+                    100 + sequence,
+                )
+                .unwrap();
+        }
+        let before = targets(&snapshot, &geometry).unwrap();
+        assert_eq!(before.len(), 2);
+        assert!(before.iter().all(|target| target.appearance
+            == CardAppearance::Pile(CardImage::CardBack)
+            && !target.interactive));
+
+        use crate::ocgcore::location_info::{
+            CardLocationInfo, CardLocationKind, CardLocationPosition, CardPositionFlags,
+        };
+        use crate::ocgcore::messages::draw::DrawCard;
+        use crate::ocgcore::messages::move_card::MoveReason;
+        use crate::ocgcore::messages::{CoreMessage, DrawMessageData, MoveMessageData};
+        snapshot
+            .cards
+            .apply(&CoreMessage::Draw(DrawMessageData {
+                player: Player::Player,
+                cards: vec![DrawCard {
+                    code: 101,
+                    position: CardPositionFlags::FACE_DOWN_ATTACK,
+                }],
+            }))
+            .unwrap();
+        snapshot.deck_count = 1;
+        snapshot.hand.push(HandCard {
+            index: 0,
+            code: 101,
+        });
+        let drawn = targets(&snapshot, &geometry).unwrap();
+        assert_eq!(
+            drawn
+                .iter()
+                .find(|target| target.data.location == CardLocation::Hand)
+                .unwrap()
+                .id,
+            before[1].id
+        );
+        let loc = |location| CardLocationInfo {
+            controller: Some(Player::Player),
+            location: CardLocationKind::Known(location),
+            sequence: 0,
+            position: CardLocationPosition::Position(CardPositionFlags::FACE_UP_ATTACK),
+        };
+        snapshot
+            .cards
+            .apply(&CoreMessage::Move(MoveMessageData {
+                card_code: 101,
+                previous: loc(CardLocation::Hand),
+                current: loc(CardLocation::Graveyard),
+                reason: MoveReason::EFFECT,
+            }))
+            .unwrap();
+        snapshot.hand.clear();
+        snapshot.graveyard.push(Some(CardData {
+            card_code: 101,
+            controller: Player::Player,
+            location: CardLocation::Graveyard,
+            ..Default::default()
+        }));
+        let discarded = targets(&snapshot, &geometry).unwrap();
+        let grave = discarded
+            .iter()
+            .find(|target| target.data.location == CardLocation::Graveyard)
+            .unwrap();
+        assert_eq!(grave.id, before[1].id);
+        assert_eq!(
+            grave.appearance,
+            CardAppearance::Pile(CardImage::Thumbnail(snapshot.graveyard[0].unwrap()))
+        );
+
+        snapshot
+            .cards
+            .apply(&CoreMessage::Move(MoveMessageData {
+                card_code: 101,
+                previous: loc(CardLocation::Graveyard),
+                current: CardLocationInfo {
+                    position: CardLocationPosition::Position(CardPositionFlags::FACE_DOWN_DEFENSE),
+                    ..loc(CardLocation::Banishment)
+                },
+                reason: MoveReason::EFFECT,
+            }))
+            .unwrap();
+        snapshot.graveyard.clear();
+        snapshot.banishment.push(Some(CardData {
+            card_code: 101,
+            controller: Player::Player,
+            location: CardLocation::Banishment,
+            position: Some(BattlePosition::FaceDownDefense),
+            ..Default::default()
+        }));
+        let banished = targets(&snapshot, &geometry).unwrap();
+        let banished = banished
+            .iter()
+            .find(|target| target.data.location == CardLocation::Banishment)
+            .unwrap();
+        assert_eq!(banished.id, before[1].id);
+        assert_eq!(
+            banished.appearance,
+            CardAppearance::Pile(CardImage::CardBack)
+        );
+    }
+
+    fn material_targets_follow_host_and_keep_identity_when_detached() {
+        use crate::ocgcore::location_info::{
+            CardLocationInfo, CardLocationKind, CardLocationPosition, CardPositionFlags,
+        };
+        use crate::ocgcore::messages::move_card::MoveReason;
+        use crate::ocgcore::messages::{CoreMessage, MoveMessageData};
+        let (_, anchors) = fixture();
+        let geometry = futures::executor::block_on(measure_field(&anchors)).unwrap();
+        let mut snapshot = PreviewSnapshot {
+            cards: CardLayer::default(),
+            monsters: vec![None; 7],
+            spell_traps: vec![None; 8],
+            hand: vec![],
+            selected: None,
+            deck_count: 0,
+            extra: vec![],
+            graveyard: vec![],
+            banishment: vec![],
+        };
+        let address = |location| CardAddress {
+            controller: Player::Player,
+            location,
+            sequence: 0,
+        };
+        snapshot
+            .cards
+            .insert(address(CardLocation::MonsterZone), 10)
+            .unwrap();
+        let material_id = snapshot
+            .cards
+            .insert(address(CardLocation::Hand), 20)
+            .unwrap();
+        snapshot.monsters[0] = Some(CardData {
+            card_code: 10,
+            controller: Player::Player,
+            location: CardLocation::MonsterZone,
+            ..Default::default()
+        });
+        let ordinary = |location| CardLocationInfo {
+            controller: Some(Player::Player),
+            location: CardLocationKind::Known(location),
+            sequence: 0,
+            position: CardLocationPosition::Position(CardPositionFlags::FACE_UP_ATTACK),
+        };
+        let overlay = CardLocationInfo {
+            controller: Some(Player::Player),
+            location: CardLocationKind::Overlay {
+                host: Some(CardLocation::MonsterZone),
+            },
+            sequence: 0,
+            position: CardLocationPosition::OverlaySequence(0),
+        };
+        snapshot
+            .cards
+            .apply(&CoreMessage::Move(MoveMessageData {
+                card_code: 20,
+                previous: ordinary(CardLocation::Hand),
+                current: overlay,
+                reason: MoveReason::XYZ | MoveReason::MATERIAL,
+            }))
+            .unwrap();
+        let attached = targets(&snapshot, &geometry).unwrap();
+        let material = attached
+            .iter()
+            .find(|target| target.id == material_id)
+            .unwrap();
+        assert_eq!(material.appearance, CardAppearance::Material);
+        assert_eq!(material.data.card_code, 20);
+        assert!(!material.interactive);
+        snapshot
+            .cards
+            .apply(&CoreMessage::Move(MoveMessageData {
+                card_code: 20,
+                previous: overlay,
+                current: ordinary(CardLocation::Graveyard),
+                reason: MoveReason::EFFECT,
+            }))
+            .unwrap();
+        snapshot.graveyard.push(Some(CardData {
+            card_code: 20,
+            controller: Player::Player,
+            location: CardLocation::Graveyard,
+            ..Default::default()
+        }));
+        let detached = targets(&snapshot, &geometry).unwrap();
+        assert_eq!(
+            detached
+                .iter()
+                .find(|target| target.data.location == CardLocation::Graveyard)
+                .unwrap()
+                .id,
+            material_id
+        );
+    }
+    pile_targets_preserve_ids_counts_and_concealment();
+    material_targets_follow_host_and_keep_identity_when_detached();
     let before = targets(&snapshot, &geometry).unwrap();
     assert_eq!(before.len(), 3);
     assert_ne!(before[0].id, before[1].id);

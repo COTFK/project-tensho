@@ -10,6 +10,7 @@ use crate::state::send_response;
 use crate::ui::components::ActionButton;
 use crate::ui::components::Card;
 use crate::ui::components::CardActionMenu;
+use crate::ui::components::CardImage;
 use crate::ui::components::CardStack;
 use crate::ui::components::OptionButton;
 use crate::ui::components::PickerModal;
@@ -19,7 +20,7 @@ use crate::utility::EXTRA_BACK;
 use crate::utility::card_thumbnail_url;
 
 #[component]
-pub fn Banishment() -> Element {
+pub fn Banishment(#[props(default)] layered: bool) -> Element {
     let mut state = use_context::<UIState>();
 
     let has_cards = state.banishment.len() > 0;
@@ -65,9 +66,11 @@ pub fn Banishment() -> Element {
                         class: "absolute inset-[2px] md:inset-[4px] my-0.5 md:my-1 rounded-[2px] blur-[1px] mix-blend-screen pointer-events-none",
                         class: if has_trigger_effects && !suppress_actions { "bg-yellow-400" },
                     }
-                    CardStack {
-                        length: state.banishment.len(),
-                        image_url,
+                    if !layered {
+                        CardStack {
+                            length: state.banishment.len(),
+                            image_url,
+                        }
                     }
                 }
             }
@@ -106,15 +109,13 @@ pub fn BanishmentModal() -> Element {
                             div {
                                 class: "relative py-2",
                                 Card {
-                                    card: card.unwrap(),
+                                    image: CardImage::Face(card.unwrap()),
                                     class: "w-[12vw]",
                                     is_selected: selected_card() == Some(index),
                                     show_highlight_on_select: true,
                                     show_dotted_highlight: false,
                                     show_blue_aura: false,
                                     show_orange_aura: prompted_card.is_some() && !suppress_actions,
-                                    use_extra_deck_back: false,
-                                    facedown: false,
                                     onclick: move |_| selected_card.set(Some(index))
                                 }
                                 CardActionMenu {

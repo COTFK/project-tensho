@@ -7,7 +7,7 @@ use crate::ocgcore::messages::{SelectTributeMessageData, SelectUnselectMessageDa
 use crate::state::{UIState, select_card, send_response};
 use crate::ui::card_layer::CardAddress;
 use crate::ui::components::svg::{BoltShieldIcon, LightningTrioIcon, SummonIcon};
-use crate::ui::components::{ActionButton, Card, CardActionMenu};
+use crate::ui::components::{ActionButton, Card, CardActionMenu, CardImage};
 
 struct PromptCards<'a> {
     normal_summons: &'a [CardData],
@@ -129,11 +129,18 @@ pub(super) fn InteractiveCard(
     address: CardAddress,
     #[props(default)] layered: bool,
     #[props(default)] force_facedown: bool,
+    #[props(default)] passive: bool,
+    #[props(default)] image: Option<CardImage>,
 ) -> Element {
     let mut state = use_context::<UIState>();
-    let actions = prompt_actions(&state, address);
+    let actions = if passive {
+        CardActions::default()
+    } else {
+        prompt_actions(&state, address)
+    };
     let hand = address.location == CardLocation::Hand;
-    let selected = (state.selected_card)().is_some_and(|selected| selected.matches(address));
+    let selected =
+        !passive && (state.selected_card)().is_some_and(|selected| selected.matches(address));
     let suppress = !state.effects_to_select_from.is_empty();
     let prompted = actions.prompted;
     let effects = &actions.effects;
@@ -148,7 +155,9 @@ pub(super) fn InteractiveCard(
     } else {
         "absolute left-1/2 bottom-1/2 -translate-x-[50%] translate-y-[50%] px-3 py-1 z-10"
     };
-    let card_class = if hand {
+    let card_class = if passive {
+        "w-full"
+    } else if hand {
         "w-[10vw]"
     } else if matches!(
         card.position,
@@ -170,7 +179,7 @@ pub(super) fn InteractiveCard(
             );
     rsx! {
         div {
-            class: if hand { "" } else if layered { "relative w-full h-full" } else { "relative h-full aspect-[59/86] mx-auto p-[clamp(1px,0.3vw,5px)]" },
+            class: if passive || (layered && !hand) { "relative w-full h-full" } else if hand { "" } else { "relative h-full aspect-[59/86] mx-auto p-[clamp(1px,0.3vw,5px)]" },
             CardActionMenu {
                 class: menu_class,
                 trigger: selected && !suppress && (can_activate || (hand && (actions.summon.is_some() || can_set))),
@@ -244,17 +253,16 @@ pub(super) fn InteractiveCard(
                 }
             }
             Card {
-                card,
+                image: image.unwrap_or(if facedown { CardImage::CardBack } else { CardImage::Face(card) }),
                 class: card_class,
                 is_selected: selected || (!hand && (actions.selected || actions.tribute_selected)),
-                show_highlight_on_select: !hand,
+                show_highlight_on_select: !hand && !passive,
                 show_blue_aura: hand && (actions.summon.is_some() || can_set) && !suppress,
                 show_dotted_highlight: !hand && (actions.selectable || actions.tribute_selectable),
                 show_orange_aura: can_activate && !suppress,
-                facedown,
-                use_extra_deck_back: false,
                 onclick: move |event: MouseEvent| {
                     event.stop_propagation();
+                    if passive { return; }
                     let actions = prompt_actions(&state, address);
                     if !hand {
                         if let Some(index) = actions.tribute {

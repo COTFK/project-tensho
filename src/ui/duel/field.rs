@@ -26,21 +26,21 @@ pub fn Field(layered: bool) -> Element {
             onresize: move |_| revision.invalidate(),
             div { class: "col-start-3 row-start-1", Zone { index: 5, card: monsters.get(5).copied().flatten(), location: CardLocation::MonsterZone, layered } }
             div { class: "col-start-5 row-start-1", Zone { index: 6, card: monsters.get(6).copied().flatten(), location: CardLocation::MonsterZone, layered } }
-            div { class: "col-start-7 row-start-1 relative", PileAnchor { location: CardLocation::Banishment } Banishment {} }
+            div { class: "col-start-7 row-start-1 relative", PileAnchor { location: CardLocation::Banishment } Banishment { layered } }
             div { class: "col-start-1 row-start-2", Zone { index: 5, card: spell_traps.get(5).copied().flatten(), location: CardLocation::SpellTrapZone, layered } }
             div { class: "col-start-2 row-start-2", Zone { index: 0, card: monsters.first().copied().flatten(), location: CardLocation::MonsterZone, layered } }
             div { class: "col-start-3 row-start-2", Zone { index: 1, card: monsters.get(1).copied().flatten(), location: CardLocation::MonsterZone, layered } }
             div { class: "col-start-4 row-start-2", Zone { index: 2, card: monsters.get(2).copied().flatten(), location: CardLocation::MonsterZone, layered } }
             div { class: "col-start-5 row-start-2", Zone { index: 3, card: monsters.get(3).copied().flatten(), location: CardLocation::MonsterZone, layered } }
             div { class: "col-start-6 row-start-2", Zone { index: 4, card: monsters.get(4).copied().flatten(), location: CardLocation::MonsterZone, layered } }
-            div { class: "col-start-7 row-start-2 relative", PileAnchor { location: CardLocation::Graveyard } Graveyard {} }
-            div { class: "col-start-1 row-start-3 relative", PileAnchor { location: CardLocation::ExtraDeck } ExtraDeck {} }
+            div { class: "col-start-7 row-start-2 relative", PileAnchor { location: CardLocation::Graveyard } Graveyard { layered } }
+            div { class: "col-start-1 row-start-3 relative", PileAnchor { location: CardLocation::ExtraDeck } ExtraDeck { layered } }
             div { class: "col-start-2 row-start-3", Zone { index: 0, card: spell_traps.first().copied().flatten(), location: CardLocation::SpellTrapZone, layered } }
             div { class: "col-start-3 row-start-3", Zone { index: 1, card: spell_traps.get(1).copied().flatten(), location: CardLocation::SpellTrapZone, layered } }
             div { class: "col-start-4 row-start-3", Zone { index: 2, card: spell_traps.get(2).copied().flatten(), location: CardLocation::SpellTrapZone, layered } }
             div { class: "col-start-5 row-start-3", Zone { index: 3, card: spell_traps.get(3).copied().flatten(), location: CardLocation::SpellTrapZone, layered } }
             div { class: "col-start-6 row-start-3", Zone { index: 4, card: spell_traps.get(4).copied().flatten(), location: CardLocation::SpellTrapZone, layered } }
-            div { class: "col-start-7 row-start-3 relative", PileAnchor { location: CardLocation::Deck } MainDeck {} }
+            div { class: "col-start-7 row-start-3 relative", PileAnchor { location: CardLocation::Deck } MainDeck { layered } }
         }
     )
 }
@@ -88,10 +88,31 @@ fn Zone(index: u8, location: CardLocation, card: Option<CardData>, layered: bool
 #[component]
 fn PileAnchor(location: CardLocation) -> Element {
     rsx! {
-        LayoutAnchor {
-            anchor: Anchor::Pile(location),
-            part: AnchorPart::Card,
-            class: "absolute left-1/2 top-1/2 h-full aspect-[59/86] -translate-x-1/2 -translate-y-1/2 p-[clamp(1px,0.3vw,5px)] pointer-events-none",
+        if location == CardLocation::Deck {
+            div {
+                class: "absolute inset-[clamp(2px,0.6vw,8px)] flex items-center justify-center pointer-events-none",
+                LayoutAnchor {
+                    anchor: Anchor::Pile(location),
+                    part: AnchorPart::Card,
+                    class: "h-full aspect-[59/86]",
+                }
+            }
+        } else {
+        div {
+            class: if location == CardLocation::Banishment {
+                "absolute left-1/2 top-1/2 w-[10vw] aspect-[59/86] -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+            } else {
+                "absolute left-1/2 top-1/2 h-full aspect-[59/86] -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+            },
+            div {
+                class: "absolute inset-[clamp(2px,0.6vw,8px)] flex items-center justify-center",
+                LayoutAnchor {
+                    anchor: Anchor::Pile(location),
+                    part: AnchorPart::Card,
+                    class: "w-full aspect-[59/86]",
+                }
+                }
+            }
         }
     }
 }
