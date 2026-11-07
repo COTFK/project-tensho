@@ -9,7 +9,7 @@ use crate::ocgcore::messages::{
     RemoveCardsMessageData, ShuffleSetCardMessageData, SwapGraveDeckMessageData, SwapMessageData,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct CardId(u64);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -84,6 +84,10 @@ impl CardLayer {
         self.cards
             .iter()
             .find(|card| card.placement == CardPlacement::Zone(address))
+    }
+
+    pub fn card_by_id(&self, id: CardId) -> Option<&Card> {
+        self.cards.iter().find(|card| card.id == id)
     }
 
     pub fn material_at(&self, host: CardId, sequence: u32) -> Option<&Card> {

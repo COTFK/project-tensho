@@ -20,7 +20,8 @@ pub struct SelectUnselectMessageData {
 impl SelectUnselectMessageData {
     pub fn response_index_for(&self, card: &CardData) -> Option<u32> {
         if let Some(index) = self.unselect_cards.iter().position(|selectable_card| {
-            selectable_card.location == card.location
+            selectable_card.controller == card.controller
+                && selectable_card.location == card.location
                 && selectable_card.sequence == card.sequence
                 && selectable_card.card_code == card.card_code
         }) {
@@ -30,18 +31,28 @@ impl SelectUnselectMessageData {
         self.select_cards
             .iter()
             .position(|selectable_card| {
-                selectable_card.location == card.location
+                selectable_card.controller == card.controller
+                    && selectable_card.location == card.location
                     && selectable_card.sequence == card.sequence
                     && selectable_card.card_code == card.card_code
             })
             .map(|index| index as u32)
     }
 
-    pub fn select_card_for(&self, location: CardLocation, index: u8) -> Option<CardData> {
+    pub fn select_card_for(
+        &self,
+        controller: Player,
+        location: CardLocation,
+        sequence: u32,
+    ) -> Option<CardData> {
         self.select_cards
             .iter()
             .chain(self.unselect_cards.iter())
-            .find(|card| card.location == location && card.sequence == index)
+            .find(|card| {
+                card.controller == controller
+                    && card.location == location
+                    && u32::from(card.sequence) == sequence
+            })
             .copied()
     }
 }

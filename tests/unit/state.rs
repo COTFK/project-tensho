@@ -2,6 +2,116 @@ use super::*;
 use std::cell::Cell;
 
 #[test]
+fn selection_tracks_moves_and_invalidates_on_shuffle_or_failure() {
+    use crate::ocgcore::location_info::{
+        CardLocationInfo, CardLocationKind, CardLocationPosition, CardPositionFlags,
+    };
+    use crate::ocgcore::messages::move_card::MoveReason;
+    use crate::ocgcore::messages::{MoveMessageData, ShuffleCardsMessageData};
+    use crate::ui::card_layer::CardAddress;
+
+    fn app() -> Element {
+        let mut state = use_context_provider(UIState::default);
+        let mut layer = CardLayer::default();
+        let hand = CardAddress {
+            controller: Player::Player,
+            location: CardLocation::Hand,
+            sequence: 0,
+        };
+        let field = CardAddress {
+            controller: Player::Player,
+            location: CardLocation::MonsterZone,
+            sequence: 0,
+        };
+        layer.insert(hand, 42).unwrap();
+        let mut tracking = use_context_provider(|| Signal::new(Some(CardTracking::Active(layer))));
+        select_card(hand);
+        let selected = state.selected_card.peek().unwrap();
+        let loc = |address: CardAddress| CardLocationInfo {
+            controller: Some(address.controller),
+            location: CardLocationKind::Known(address.location),
+            sequence: address.sequence,
+            position: CardLocationPosition::Position(CardPositionFlags::FACE_UP_ATTACK),
+        };
+        let movement = |from, to| {
+            CoreMessage::Move(MoveMessageData {
+                card_code: 42,
+                previous: loc(from),
+                current: loc(to),
+                reason: MoveReason::EFFECT,
+            })
+        };
+        tracking
+            .write()
+            .as_mut()
+            .unwrap()
+            .apply(&movement(hand, field));
+        reconcile_selected_card(&mut state, tracking.peek().as_ref().unwrap());
+        assert!(state.selected_card.peek().unwrap().matches(field));
+        assert_eq!(
+            state.selected_card.peek().unwrap().card_id,
+            selected.card_id
+        );
+        tracking
+            .write()
+            .as_mut()
+            .unwrap()
+            .apply(&movement(field, hand));
+        tracking
+            .write()
+            .as_mut()
+            .unwrap()
+            .apply(&CoreMessage::ShuffleHand(ShuffleCardsMessageData {
+                player: Player::Player,
+                card_codes: vec![42],
+            }));
+        reconcile_selected_card(&mut state, tracking.peek().as_ref().unwrap());
+        assert!(state.selected_card.peek().is_none());
+        select_card(hand);
+        assert_ne!(
+            state.selected_card.peek().unwrap().card_id,
+            selected.card_id
+        );
+        tracking.set(Some(CardTracking::Failed("test".into())));
+        reconcile_selected_card(&mut state, tracking.peek().as_ref().unwrap());
+        assert!(state.selected_card.peek().is_none());
+        select_card(hand);
+        assert!(state.selected_card.peek().unwrap().matches(hand));
+        assert!(state.selected_card.peek().unwrap().card_id.is_none());
+        rsx! {}
+    }
+    let mut dom = VirtualDom::new(app);
+    dom.rebuild_in_place();
+}
+
+#[test]
+fn selected_card_is_cleared_when_it_disappears() {
+    use crate::ui::card_layer::CardAddress;
+
+    fn app() -> Element {
+        let mut state = use_context_provider(UIState::default);
+        let address = CardAddress {
+            controller: Player::Player,
+            location: CardLocation::MonsterZone,
+            sequence: 0,
+        };
+        let mut layer = CardLayer::default();
+        let id = layer.insert(address, 42).unwrap();
+        state.selected_card.set(Some(SelectedCard {
+            location: address.location,
+            index: 0,
+            card_id: Some(id),
+        }));
+        let empty = CardTracking::Active(CardLayer::default());
+        reconcile_selected_card(&mut state, &empty);
+        assert!(state.selected_card.peek().is_none());
+        rsx! {}
+    }
+    let mut dom = VirtualDom::new(app);
+    dom.rebuild_in_place();
+}
+
+#[test]
 #[cfg(not(target_arch = "wasm32"))]
 fn card_layer_initializer_matches_native_decks_and_custom_hand() {
     use crate::ui::card_layer::{CardLayer, CardPlacement};

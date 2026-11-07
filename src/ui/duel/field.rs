@@ -1,60 +1,42 @@
 use dioxus::prelude::*;
 
 use super::banishment::Banishment;
+use super::card_interaction::InteractiveCard;
+use super::card_stats::CardStats;
 use super::constants::ZONE_SIZE;
 use super::extra_deck::ExtraDeck;
 use super::graveyard::Graveyard;
 use super::main_deck::MainDeck;
 use crate::ocgcore::CardData;
-use crate::ocgcore::CardType;
 use crate::ocgcore::Response;
-use crate::ocgcore::constants::BattlePosition;
-use crate::ocgcore::constants::CardLocation;
-use crate::ocgcore::constants::Player;
-use crate::state::SelectedCard;
-use crate::state::UIState;
-use crate::state::send_response;
-use crate::ui::components::ActionButton;
-use crate::ui::components::Card;
-use crate::ui::components::CardActionMenu;
-use crate::ui::components::svg::LightningTrioIcon;
-use crate::utility::get_card_data;
+use crate::ocgcore::constants::{CardLocation, Player};
+use crate::state::{UIState, send_response};
+use crate::ui::card_layer::CardAddress;
 
 #[component]
 pub fn Field() -> Element {
     let state = use_context::<UIState>();
     let monsters = (state.monsters)();
     let spell_traps = (state.spell_traps)();
-
     rsx!(
         div {
             class: "pt-[15vh] max-w-[90vw] w-fit mx-auto grid grid-cols-7 gap-0.5 justify-items-center",
-
-            // Extra monster zones (row 1)
             div { class: "col-start-3 row-start-1", Zone { index: 5, card: monsters.get(5).copied().flatten(), location: CardLocation::MonsterZone } }
             div { class: "col-start-5 row-start-1", Zone { index: 6, card: monsters.get(6).copied().flatten(), location: CardLocation::MonsterZone } }
             div { class: "col-start-7 row-start-1", Banishment {} }
-
-            // Main row (row 2)
             div { class: "col-start-1 row-start-2", Zone { index: 5, card: spell_traps.get(5).copied().flatten(), location: CardLocation::SpellTrapZone } }
-
-            div { class: "col-start-2 row-start-2" , Zone { index: 0, card: monsters.first().copied().flatten(), location: CardLocation::MonsterZone} }
-            div { class: "col-start-3 row-start-2" , Zone { index: 1, card: monsters.get(1).copied().flatten(), location: CardLocation::MonsterZone} }
-            div { class: "col-start-4 row-start-2" , Zone { index: 2, card: monsters.get(2).copied().flatten(), location: CardLocation::MonsterZone} }
-            div { class: "col-start-5 row-start-2" , Zone { index: 3, card: monsters.get(3).copied().flatten(), location: CardLocation::MonsterZone} }
-            div { class: "col-start-6 row-start-2" , Zone { index: 4, card: monsters.get(4).copied().flatten(), location: CardLocation::MonsterZone} }
-
+            div { class: "col-start-2 row-start-2", Zone { index: 0, card: monsters.first().copied().flatten(), location: CardLocation::MonsterZone } }
+            div { class: "col-start-3 row-start-2", Zone { index: 1, card: monsters.get(1).copied().flatten(), location: CardLocation::MonsterZone } }
+            div { class: "col-start-4 row-start-2", Zone { index: 2, card: monsters.get(2).copied().flatten(), location: CardLocation::MonsterZone } }
+            div { class: "col-start-5 row-start-2", Zone { index: 3, card: monsters.get(3).copied().flatten(), location: CardLocation::MonsterZone } }
+            div { class: "col-start-6 row-start-2", Zone { index: 4, card: monsters.get(4).copied().flatten(), location: CardLocation::MonsterZone } }
             div { class: "col-start-7 row-start-2", Graveyard {} }
-
-            // Spell/Trap row (row 3)
             div { class: "col-start-1 row-start-3", ExtraDeck {} }
-
-            div { class: "col-start-2 row-start-3", Zone { index: 0, card: spell_traps.first().copied().flatten(), location: CardLocation::SpellTrapZone} }
-            div { class: "col-start-3 row-start-3", Zone { index: 1, card: spell_traps.get(1).copied().flatten(), location: CardLocation::SpellTrapZone} }
-            div { class: "col-start-4 row-start-3", Zone { index: 2, card: spell_traps.get(2).copied().flatten(), location: CardLocation::SpellTrapZone} }
-            div { class: "col-start-5 row-start-3", Zone { index: 3, card: spell_traps.get(3).copied().flatten(), location: CardLocation::SpellTrapZone} }
-            div { class: "col-start-6 row-start-3", Zone { index: 4, card: spell_traps.get(4).copied().flatten(), location: CardLocation::SpellTrapZone} }
-
+            div { class: "col-start-2 row-start-3", Zone { index: 0, card: spell_traps.first().copied().flatten(), location: CardLocation::SpellTrapZone } }
+            div { class: "col-start-3 row-start-3", Zone { index: 1, card: spell_traps.get(1).copied().flatten(), location: CardLocation::SpellTrapZone } }
+            div { class: "col-start-4 row-start-3", Zone { index: 2, card: spell_traps.get(2).copied().flatten(), location: CardLocation::SpellTrapZone } }
+            div { class: "col-start-5 row-start-3", Zone { index: 3, card: spell_traps.get(3).copied().flatten(), location: CardLocation::SpellTrapZone } }
+            div { class: "col-start-6 row-start-3", Zone { index: 4, card: spell_traps.get(4).copied().flatten(), location: CardLocation::SpellTrapZone } }
             div { class: "col-start-7 row-start-3", MainDeck {} }
         }
     )
@@ -63,7 +45,6 @@ pub fn Field() -> Element {
 #[component]
 fn Zone(index: u8, location: CardLocation, card: Option<CardData>) -> Element {
     let state = use_context::<UIState>();
-
     let placeable_on = (state.available_zones)()
         .iter()
         .any(|zone| zone.location == location && zone.sequence == index);
@@ -73,211 +54,20 @@ fn Zone(index: u8, location: CardLocation, card: Option<CardData>) -> Element {
             class: "relative bg-slate-50/2 {ZONE_SIZE} aspect-square flex items-center justify-center",
             class: if placeable_on {"border-2 border-yellow-300"} else {"border-0.5"},
             onclick: move |_| {
-                if !placeable_on {
-                    return;
+                if placeable_on {
+                    send_response(Response::Place {
+                        controller: Player::Player as u8,
+                        location: location as u8,
+                        index,
+                    });
                 }
-
-                send_response(Response::Place {
-                    controller: Player::Player as u8,
-                    location: location as u8,
-                    index,
-                });
             },
             if let Some(card) = card {
-                FieldCard {
-                    index: index,
-                    location: location,
-                    card
+                InteractiveCard {
+                    address: CardAddress { controller: Player::Player, location, sequence: u32::from(index) },
+                    card,
                 }
-                {
-                    let original_card = get_card_data(card.card_code);
-                    rsx!(
-                        div {
-                            class: "absolute top-0 left-0 text-white text-[8px] md:text-xs lg:text-base font-semibold z-5 bg-gray-900/75 pl-0.5 pr-1 pb-0.5 rounded-br-lg",
-                            class: if !card.card_type.contains(CardType::MONSTER) {"hidden"},
-                            if card.level.unwrap_or(0) > 0 || card.rank.unwrap_or(0) > 0 {
-                                p {
-                                    span {
-                                        "✪ "
-                                    }
-                                    if card.level.unwrap_or(0) > 0 {
-                                        span {
-                                            class: if card.level.unwrap_or(0) > original_card.level {"text-green-400"},
-                                            class: if card.level.unwrap_or(0) < original_card.level {"text-red-400"},
-                                            {card.level.unwrap_or(0).to_string()}
-                                        }
-                                    }
-                                    if card.rank.unwrap_or(0) > 0 {
-                                        span {
-                                            class: if card.rank.unwrap_or(0) > original_card.level {"text-green-400"},
-                                            class: if card.rank.unwrap_or(0) < original_card.level {"text-red-400"},
-                                            {card.rank.unwrap_or(0).to_string()}
-                                        }
-                                    }
-                                }
-                            }
-                            if card.link_rating.unwrap() > 0 {
-                                p {
-                                    span {
-                                        "L-"
-                                    }
-                                    span {
-                                        class: if card.link_rating.unwrap_or(0) > original_card.level {"text-green-400"},
-                                        class: if card.link_rating.unwrap_or(0) < original_card.level {"text-red-400"},
-                                        {card.link_rating.unwrap_or(0).to_string()}
-                                    }
-                                }
-                            }
-                        }
-                        div {
-                            class: "absolute bottom-0 right-0 text-white text-[8px] md:text-xs lg:text-base font-semibold z-5 bg-gray-900/75 pr-0.5 pl-1 pt-0.5 rounded-tl-lg",
-                            class: if !card.card_type.contains(CardType::MONSTER) {"hidden"},
-                            p {
-                                span {
-                                    class: if card.attack.unwrap_or(0) as i32 > original_card.attack {"text-green-400"},
-                                    class: if (card.attack.unwrap_or(0) as i32) < original_card.attack {"text-red-400"},
-                                    {card.attack.unwrap_or(0).to_string()}
-                                }
-                                span {
-                                    class: if card.card_type.contains(CardType::LINK) {"hidden"},
-                                    " / "
-                                }
-                                span {
-                                    class: if card.card_type.contains(CardType::LINK) {"hidden"},
-                                    class: if card.defense.unwrap_or(0) as i32 > original_card.defense {"text-green-400"},
-                                    class: if (card.defense.unwrap_or(0) as i32) < original_card.defense {"text-red-400"},
-                                    {card.defense.unwrap_or(0).to_string()}
-                                }
-                            }
-                        }
-                    )
-                }
-            }
-        }
-    )
-}
-
-#[component]
-pub fn FieldCard(index: u8, location: CardLocation, card: CardData) -> Element {
-    let mut state = use_context::<UIState>();
-
-    let mut selected_card = state.selected_card;
-    let activatable_map = (state.activatable_effects)();
-    let prompt_list = (state.card_prompting_to_activate)();
-    let selected_snapshot = selected_card();
-    let effects_of_this_card: Vec<CardData> = activatable_map
-        .iter()
-        .filter(|card| card.location == location && card.sequence == index)
-        .copied()
-        .collect();
-
-    let activatable_eff_index = effects_of_this_card
-        .first()
-        .and_then(|card| card.action_index);
-
-    let prompted_card = prompt_list
-        .iter()
-        .find(|card| card.location == location && card.sequence == index);
-
-    let prompted = prompted_card.is_some();
-    let activatable = !effects_of_this_card.is_empty();
-    let chain_index = prompted_card.and_then(|card| card.action_index);
-
-    let is_selected = selected_snapshot
-        .is_some_and(|card| card.location == location && card.index as u8 == index);
-
-    let cards_to_select_from = (state.cards_to_select_from)();
-    let card_in_select_list = cards_to_select_from
-        .as_ref()
-        .and_then(|message| message.select_card_for(location, index));
-    let select_unselect_index = cards_to_select_from.as_ref().and_then(|message| {
-        card_in_select_list.and_then(|selectable_card| message.response_index_for(&selectable_card))
-    });
-
-    let selectable_for_extra_deck_summon = card_in_select_list.is_some();
-    let is_selected_for_extra_deck_summon = card_in_select_list.is_some_and(|c| c.is_selected);
-
-    let tributes = (state.tributes)();
-    let card_in_tribute_list = tributes.as_ref().and_then(|message| {
-        message
-            .candidates
-            .iter()
-            .find(|card| card.location == location && card.sequence == index)
-            .copied()
-    });
-    let tribute_action_index = card_in_tribute_list.and_then(|card| card.action_index);
-    let selected_tributes = (state.selected_tributes)();
-    let selected_for_tribute =
-        tribute_action_index.is_some_and(|action_index| selected_tributes.contains(&action_index));
-    let tribute_max_select = tributes
-        .as_ref()
-        .map_or(0, |message| message.max_select as usize);
-
-    // Disable if effect selection modal is active
-    let suppress_actions = !state.effects_to_select_from.is_empty();
-
-    rsx!(
-        div {
-            class: "relative h-full aspect-[59/86] mx-auto p-[clamp(1px,0.3vw,5px)]",
-            CardActionMenu {
-                class: "absolute left-1/2 bottom-1/2 -translate-x-[50%] translate-y-[50%] px-3 py-1 z-10",
-                trigger: is_selected && (prompted || activatable) && !suppress_actions,
-                ActionButton {
-                    label: "Activate",
-                    class: "border-yellow-500 text-yellow-300",
-                    onclick: move |evt: MouseEvent| {
-                        evt.stop_propagation();
-
-                        if prompted {
-                            if let Some(index) = chain_index {
-                                send_response(Response::Chain { index });
-                            } else {
-                                send_response(Response::Yes);
-                            }
-                        }
-
-                        if activatable {
-                            if effects_of_this_card.len() > 1 {
-                                state.effects_to_select_from.set(effects_of_this_card.to_owned());
-                                state.selected_card.set(None);
-                            } else if let Some(idx) = activatable_eff_index {
-                                send_response(Response::Activate { index: idx });
-                            }
-                        }
-                    },
-                    LightningTrioIcon {}
-                }
-            }
-            Card {
-                card,
-                class: if card.position == Some(BattlePosition::FaceDownDefense) || card.position == Some(BattlePosition::FaceUpDefense) { "-rotate-90" } else {""},
-                is_selected: is_selected || is_selected_for_extra_deck_summon || selected_for_tribute,
-                show_highlight_on_select: true,
-                show_blue_aura: false,
-                show_dotted_highlight: selectable_for_extra_deck_summon || card_in_tribute_list.is_some(),
-                show_orange_aura: (activatable || prompted) && !suppress_actions,
-                facedown: card.position == Some(BattlePosition::FaceDown) || card.position == Some(BattlePosition::FaceDownAttack) || card.position == Some(BattlePosition::FaceDownDefense),
-                use_extra_deck_back: false,
-                onclick: move |evt: MouseEvent| {
-                    evt.stop_propagation();
-
-                    if let Some(action_index) = tribute_action_index {
-                        state.selected_tributes.with_mut(|selected_tributes| {
-                            if let Some(position) = selected_tributes.iter().position(|code| *code == action_index) {
-                                selected_tributes.remove(position);
-                            } else if selected_tributes.len() < tribute_max_select {
-                                selected_tributes.push(action_index);
-                            }
-                        });
-                    } else if let Some(index) = select_unselect_index {
-                        send_response(Response::SelectUnselectCard { index });
-                    } else {
-                        selected_card.set(Some(SelectedCard {
-                            location,
-                            index: index as usize
-                        }));
-                    }
-                },
+                CardStats { card }
             }
         }
     )

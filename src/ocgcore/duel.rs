@@ -118,12 +118,6 @@ impl Duel {
             hand.push(HandCard {
                 index,
                 code: card.unwrap().card_code,
-                is_activatable_or_chainable: false,
-                activate_index: None,
-                chain_index: None,
-                normal_summon_index: None,
-                monster_set_index: None,
-                spell_trap_set_index: None,
             });
         }
 

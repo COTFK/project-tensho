@@ -22,7 +22,7 @@ use crate::ocgcore::messages::SelectTributeMessageData;
 use crate::ocgcore::messages::SelectUnselectMessageData;
 use crate::ocgcore::messages::SortCardMessageData;
 use crate::settings::CustomHand;
-use crate::ui::card_layer::CardLayer;
+use crate::ui::card_layer::{CardAddress, CardId, CardLayer, CardPlacement};
 use crate::ui::card_tracking::CardTracking;
 use crate::utility::ARCHETYPE_SCRIPT;
 use crate::utility::EXTRA_DECK_IDS;
@@ -39,6 +39,75 @@ use ocgcore_ffi::enums::OCG_DuelStatus;
 pub struct SelectedCard {
     pub location: CardLocation,
     pub index: usize,
+    card_id: Option<CardId>,
+}
+
+impl SelectedCard {
+    pub fn matches(self, address: CardAddress) -> bool {
+        address.controller == Player::Player
+            && self.location == address.location
+            && u32::try_from(self.index) == Ok(address.sequence)
+    }
+}
+
+pub(crate) fn select_card(address: CardAddress) {
+    let mut state = consume_context::<UIState>();
+    let tracking = consume_context::<Signal<Option<CardTracking>>>();
+    let card_id = match &*tracking.peek() {
+        Some(CardTracking::Active(layer)) => match layer.card_at(address) {
+            Some(card) => Some(card.id),
+            None => {
+                tracing::error!("Cannot select untracked card at {address:?}");
+                return;
+            }
+        },
+        Some(CardTracking::Failed(_)) => None,
+        None => {
+            tracing::error!("Cannot select a card without an active tracker");
+            return;
+        }
+    };
+    let Ok(index) = usize::try_from(address.sequence) else {
+        tracing::error!("Card sequence is too large to select: {}", address.sequence);
+        return;
+    };
+    state.selected_card.set(Some(SelectedCard {
+        location: address.location,
+        index,
+        card_id,
+    }));
+}
+
+fn reconcile_selected_card(state: &mut UIState, tracking: &CardTracking) {
+    let Some(selected) = *state.selected_card.peek() else {
+        return;
+    };
+    let Some(id) = selected.card_id else {
+        return;
+    };
+    let CardTracking::Active(layer) = tracking else {
+        state.selected_card.set(None);
+        return;
+    };
+    let address = layer.card_by_id(id).and_then(|card| match card.placement {
+        CardPlacement::Zone(address) if address.controller == Player::Player => Some(address),
+        _ => None,
+    });
+    match address {
+        Some(address) if !selected.matches(address) => match usize::try_from(address.sequence) {
+            Ok(index) => state.selected_card.set(Some(SelectedCard {
+                location: address.location,
+                index,
+                card_id: Some(id),
+            })),
+            Err(error) => {
+                tracing::error!("Selected card sequence is invalid: {error}");
+                state.selected_card.set(None);
+            }
+        },
+        Some(_) => {}
+        None => state.selected_card.set(None),
+    }
 }
 
 define_ui_state!(UIState {
@@ -47,7 +116,10 @@ define_ui_state!(UIState {
     extra_deck: Vec<Option<CardData>>,
     hand_contents: Vec<HandCard>,
     selected_card: Option<SelectedCard>,
+    normal_summons: Vec<CardData>,
     special_summons: Vec<CardData>,
+    monster_sets: Vec<CardData>,
+    spell_trap_sets: Vec<CardData>,
     activatable_effects: Vec<CardData>,
     waiting_on_input: bool,
     monsters: Vec<Option<CardData>>,
@@ -257,7 +329,10 @@ pub fn send_response(response: Response) {
 impl UIState {
     pub fn clear_pending_input(&mut self) {
         self.selected_card.set(None);
+        self.normal_summons.set(Vec::new());
         self.special_summons.set(Vec::new());
+        self.monster_sets.set(Vec::new());
+        self.spell_trap_sets.set(Vec::new());
         self.activatable_effects.set(Vec::new());
         self.waiting_on_input.set(false);
         self.card_prompting_to_activate.set(Vec::new());
@@ -287,10 +362,11 @@ pub fn handle_core_message() -> bool {
     state.hand_contents.set(duel.get_raw_hand());
     for message in duel.parse_messages() {
         tracking.with_mut(|tracking| {
-            tracking
+            let tracking = tracking
                 .as_mut()
-                .expect("Card tracking missing for active duel")
-                .apply(&message);
+                .expect("Card tracking missing for active duel");
+            tracking.apply(&message);
+            reconcile_selected_card(&mut state, tracking);
         });
         match message {
             CoreMessage::Unsupported(_) | CoreMessage::NewTurn | CoreMessage::Win(_) => {}
@@ -366,69 +442,11 @@ pub fn handle_core_message() -> bool {
                 state.current_phase.set(Some(message.phase));
             }
             CoreMessage::Idle(actions) => {
-                let normal_summons = actions.normal_summons;
-                let special_summons = actions.special_summons;
-                let activatable_effects = actions.activatable_effects;
-                let monster_sets = actions.monster_sets;
-                let spell_trap_sets = actions.spell_trap_sets;
-
-                if !normal_summons.is_empty()
-                    || !activatable_effects.is_empty()
-                    || !monster_sets.is_empty()
-                    || !spell_trap_sets.is_empty()
-                {
-                    state.hand_contents.with_mut(|hand| {
-                        for summon in &normal_summons {
-                            if summon.location != CardLocation::Hand {
-                                continue;
-                            }
-                            if let Some(hc) =
-                                hand.iter_mut().find(|hc| hc.index as u8 == summon.sequence)
-                            {
-                                hc.normal_summon_index = summon.action_index;
-                            }
-                        }
-
-                        for set in &monster_sets {
-                            if set.location != CardLocation::Hand {
-                                continue;
-                            }
-                            if let Some(hc) =
-                                hand.iter_mut().find(|hc| hc.index as u8 == set.sequence)
-                            {
-                                hc.monster_set_index = set.action_index;
-                            }
-                        }
-
-                        for set in &spell_trap_sets {
-                            if set.location != CardLocation::Hand {
-                                continue;
-                            }
-                            if let Some(hc) =
-                                hand.iter_mut().find(|hc| hc.index as u8 == set.sequence)
-                            {
-                                hc.spell_trap_set_index = set.action_index;
-                            }
-                        }
-
-                        for effect in &activatable_effects {
-                            if effect.location != CardLocation::Hand {
-                                continue;
-                            }
-                            if let Some(hc) =
-                                hand.iter_mut().find(|hc| hc.index as u8 == effect.sequence)
-                            {
-                                hc.activate_index = effect.action_index;
-                                hc.is_activatable_or_chainable = true;
-                            }
-                        }
-                    });
-                }
-
-                state.special_summons.set(special_summons.to_owned());
-                state
-                    .activatable_effects
-                    .set(activatable_effects.to_owned());
+                state.normal_summons.set(actions.normal_summons);
+                state.special_summons.set(actions.special_summons);
+                state.monster_sets.set(actions.monster_sets);
+                state.spell_trap_sets.set(actions.spell_trap_sets);
+                state.activatable_effects.set(actions.activatable_effects);
                 state.waiting_on_input.set(true);
             }
             CoreMessage::SelectPlace(message) => {
@@ -441,20 +459,6 @@ pub fn handle_core_message() -> bool {
                     state.clear_pending_input();
                     continue;
                 }
-
-                state.hand_contents.with_mut(|hand| {
-                    for effect in &message.effects {
-                        if effect.location != CardLocation::Hand {
-                            continue;
-                        }
-                        if let Some(hand_card) =
-                            hand.iter_mut().find(|hc| hc.index as u8 == effect.sequence)
-                        {
-                            hand_card.chain_index = effect.action_index;
-                            hand_card.is_activatable_or_chainable = true;
-                        }
-                    }
-                });
 
                 state.card_prompting_to_activate.set(message.effects);
                 state.waiting_on_input.set(true);
@@ -515,10 +519,11 @@ pub fn handle_core_message() -> bool {
     }
 
     tracking.with_mut(|tracking| {
-        tracking
+        let tracking = tracking
             .as_mut()
-            .expect("Card tracking missing for active duel")
-            .reconcile(&duel);
+            .expect("Card tracking missing for active duel");
+        tracking.reconcile(&duel);
+        reconcile_selected_card(&mut state, tracking);
     });
 
     state

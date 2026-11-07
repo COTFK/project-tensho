@@ -8,12 +8,6 @@ use super::constants::Player;
 pub struct HandCard {
     pub index: usize,
     pub code: u32,
-    pub is_activatable_or_chainable: bool,
-    pub activate_index: Option<u8>,
-    pub chain_index: Option<u8>,
-    pub normal_summon_index: Option<u8>,
-    pub monster_set_index: Option<u8>,
-    pub spell_trap_set_index: Option<u8>,
 }
 
 #[derive(Hash, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
