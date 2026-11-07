@@ -1,4 +1,6 @@
 mod banishment;
+mod card_interaction;
+mod card_stats;
 mod constants;
 mod extra_deck;
 mod field;

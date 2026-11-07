@@ -164,23 +164,6 @@ the existing UI and its responses unchanged.
   responses.
 - Commit: `feat(state): run card tracking alongside the UI`
 
-### 13. Add card playback
-
-Add a playback queue to the existing application path: immediate mode applies
-changes once, while queued mode delays that same application rather than
-reapplying changes already made. Use each original message and the presentation
-state before applying it to derive playback details, including draw addresses.
-Preserve intermediate moves and appearance changes even when the core processes
-several events together. Keep prompts and
-actions gated until presentation catches up; do not introduce a second card
-identity model.
-
-- Depends on: 12.
-- Test: consecutive movements of one card, simultaneous groups, immediate
-  playback, no double application, prompts after queued moves, cancellation,
-  and completion.
-- Commit: `feat(animation): add ordered card playback`
-
 ### 14. Decouple card behavior from zone ownership
 
 Extract reusable actions, highlights, menus, and stat decorations from field
@@ -215,7 +198,7 @@ Render one flat list keyed by frontend instance ID. Separate movement transforms
 from rotation and hover transforms. Keep pile-resident instances available
 without exposing concealed faces.
 
-- Depends on: 13, 15.
+- Depends on: 15.
 - Test: stable DOM identity, property updates without remounting, pointer
   pass-through, and stacking.
 - Commit: `feat(ui): add persistent card rendering`
@@ -256,13 +239,14 @@ rules.
 
 ## D. Animate, harden, and switch defaults
 
-### 20. Connect playback to card transforms
+### 20. Animate tracked card changes
 
-Enable movement and position animation in the opt-in mode. Gate prompts and
-actions until the displayed state catches up, while retaining the current
-core-processing behavior.
+Enable movement and position animation in the opt-in mode. Preserve card
+identity, avoid applying updates twice, and gate prompts and actions until the
+displayed state catches up, while retaining the current core-processing
+behavior.
 
-- Depends on: 12, 13, 19.
+- Depends on: 12, 19.
 - Test: exact source and destination alignment, intermediate movements,
   simultaneous movements, no remounts, and no premature or duplicate
   responses.
@@ -340,3 +324,9 @@ Message tracking and invariants also cannot detect every silent divergence.
 Snapshots are outside this transition; consider snapshot-based verification
 and recovery in a future update only if synchronization issues cannot
 otherwise be resolved.
+
+## Playback observation
+
+When integrating animations, check the actual message sequences that need
+animation and choose the simplest approach. Add a playback queue only if those
+sequences require one; test interaction gating, cancellation, and completion.
