@@ -4,7 +4,7 @@ use crate::ocgcore::messages::draw::DrawCard;
 use crate::ocgcore::messages::move_card::MoveReason;
 use crate::ocgcore::messages::{
     PositionChangeMessageData, RemoveCardsMessageData, SetCardMessageData, ShuffleCardsMessageData,
-    ShuffleDeckMessageData, SummoningMessageData, SwapMessageData,
+    ShuffleDeckMessageData, ShuffleSetCardMessageData, SummoningMessageData, SwapMessageData,
 };
 
 fn address(controller: Player, location: CardLocation, sequence: u32) -> CardAddress {
@@ -106,6 +106,242 @@ fn shuffle_cards(player: Player, location: CardLocation, codes: &[u32]) -> CoreM
         CardLocation::Hand => CoreMessage::ShuffleHand(data),
         CardLocation::ExtraDeck => CoreMessage::ShuffleExtra(data),
         _ => panic!("Unsupported shuffle location"),
+    }
+}
+
+fn set_location(address: CardAddress) -> CardLocationInfo {
+    let mut info = location(Some(address));
+    info.position = CardLocationPosition::Position(CardPositionFlags::FACE_DOWN_DEFENSE);
+    info
+}
+
+fn set_shuffle(
+    location: CardLocation,
+    previous: &[CardAddress],
+    current: &[Option<CardAddress>],
+) -> CoreMessage {
+    CoreMessage::ShuffleSetCard(ShuffleSetCardMessageData {
+        location,
+        previous: previous.iter().copied().map(set_location).collect(),
+        current: current
+            .iter()
+            .copied()
+            .map(|address| address.map(set_location))
+            .collect(),
+    })
+}
+
+#[test]
+fn set_shuffle_preserves_revealed_hosts_and_invalidates_hidden_cards() {
+    let zone = |sequence| address(Player::Player, CardLocation::MonsterZone, sequence);
+    let hand = address(Player::Player, CardLocation::Hand, 0);
+    let mut layer = CardLayer::default();
+    let ids: Vec<_> = (0..5)
+        .map(|sequence| layer.insert(zone(sequence), 100 + sequence).unwrap())
+        .collect();
+    let first_material = layer.insert(hand, 201).unwrap();
+    layer
+        .apply(&overlay_move(
+            location(Some(hand)),
+            overlay(Some(zone(0)), 0),
+            201,
+        ))
+        .unwrap();
+    let second_material = layer.insert(hand, 202).unwrap();
+    layer
+        .apply(&overlay_move(
+            location(Some(hand)),
+            overlay(Some(zone(2)), 0),
+            202,
+        ))
+        .unwrap();
+    layer
+        .apply(&set_shuffle(
+            CardLocation::MonsterZone,
+            &[zone(0), zone(1), zone(2), zone(3)],
+            &[Some(zone(3)), None, Some(zone(1)), None],
+        ))
+        .unwrap();
+    assert_eq!(layer.card_at(zone(3)).unwrap().id, ids[0]);
+    assert_eq!(layer.card_at(zone(1)).unwrap().id, ids[2]);
+    assert_eq!(layer.material_at(ids[0], 0).unwrap().id, first_material);
+    assert_eq!(layer.material_at(ids[2], 0).unwrap().id, second_material);
+    for sequence in [0, 2] {
+        let card = layer.card_at(zone(sequence)).unwrap();
+        assert!(!ids.contains(&card.id));
+        assert_eq!(card.code, 0);
+        assert_eq!(card.position, Some(CardPositionFlags::FACE_DOWN_DEFENSE));
+    }
+    assert_eq!(layer.card_at(zone(4)).unwrap().id, ids[4]);
+    assert_eq!(layer.cards().len(), 7);
+}
+
+#[test]
+fn set_shuffle_preserves_the_only_destination_for_a_hidden_card() {
+    let zone = |sequence| address(Player::Player, CardLocation::SpellTrapZone, sequence);
+    let mut layer = CardLayer::default();
+    let first = layer.insert(zone(0), 10).unwrap();
+    let second = layer.insert(zone(2), 20).unwrap();
+    layer
+        .apply(&set_shuffle(
+            CardLocation::SpellTrapZone,
+            &[zone(0), zone(2)],
+            &[Some(zone(2)), None],
+        ))
+        .unwrap();
+    assert_eq!(
+        (
+            layer.card_at(zone(2)).unwrap().id,
+            layer.card_at(zone(2)).unwrap().code
+        ),
+        (first, 10)
+    );
+    assert_eq!(
+        (
+            layer.card_at(zone(0)).unwrap().id,
+            layer.card_at(zone(0)).unwrap().code
+        ),
+        (second, 20)
+    );
+}
+
+#[test]
+fn set_shuffle_clears_ambiguous_mixed_positions() {
+    let zone = |sequence| address(Player::Player, CardLocation::MonsterZone, sequence);
+    let mut layer = CardLayer::default();
+    layer.insert(zone(0), 10).unwrap();
+    layer.insert(zone(1), 20).unwrap();
+    let mut second = set_location(zone(1));
+    second.position = CardLocationPosition::Position(CardPositionFlags::FACE_DOWN_ATTACK);
+    layer
+        .apply(&CoreMessage::ShuffleSetCard(ShuffleSetCardMessageData {
+            location: CardLocation::MonsterZone,
+            previous: vec![set_location(zone(0)), second],
+            current: vec![None, None],
+        }))
+        .unwrap();
+    assert_eq!(layer.card_at(zone(0)).unwrap().position, None);
+    assert_eq!(layer.card_at(zone(1)).unwrap().position, None);
+}
+
+#[test]
+fn set_shuffle_invalidates_identical_copies_without_changing_other_players() {
+    let zone = |player, sequence| address(player, CardLocation::MonsterZone, sequence);
+    let first = zone(Player::Opponent, 1);
+    let second = zone(Player::Opponent, 3);
+    let unaffected = zone(Player::Player, 1);
+    let mut layer = CardLayer::default();
+    let ids = [
+        layer.insert(first, 42).unwrap(),
+        layer.insert(second, 42).unwrap(),
+    ];
+    let unaffected_id = layer.insert(unaffected, 42).unwrap();
+    layer
+        .apply(&set_shuffle(
+            CardLocation::MonsterZone,
+            &[first, second],
+            &[None, None],
+        ))
+        .unwrap();
+    for zone in [first, second] {
+        let card = layer.card_at(zone).unwrap();
+        assert!(!ids.contains(&card.id));
+        assert_eq!(card.code, 0);
+    }
+    assert_eq!(layer.card_at(unaffected).unwrap().id, unaffected_id);
+}
+
+#[test]
+fn singleton_set_shuffle_and_empty_message_preserve_identity() {
+    let zone = address(Player::Player, CardLocation::MonsterZone, 0);
+    let mut layer = CardLayer::default();
+    let id = layer.insert(zone, 10).unwrap();
+    layer
+        .apply(&set_shuffle(CardLocation::MonsterZone, &[], &[]))
+        .unwrap();
+    layer
+        .apply(&set_shuffle(CardLocation::MonsterZone, &[zone], &[None]))
+        .unwrap();
+    let card = layer.card_at(zone).unwrap();
+    assert_eq!((card.id, card.code), (id, 10));
+    assert_eq!(card.position, Some(CardPositionFlags::FACE_DOWN_DEFENSE));
+}
+
+#[test]
+fn set_shuffle_id_exhaustion_is_atomic() {
+    let first = address(Player::Player, CardLocation::MonsterZone, 0);
+    let second = address(Player::Player, CardLocation::MonsterZone, 1);
+    let mut layer = CardLayer::default();
+    layer.insert(first, 10).unwrap();
+    layer.insert(second, 20).unwrap();
+    layer.next_id = u64::MAX - 1;
+    let before = layer.clone();
+    assert!(
+        layer
+            .apply(&set_shuffle(
+                CardLocation::MonsterZone,
+                &[first, second],
+                &[None, None],
+            ))
+            .is_err()
+    );
+    assert_eq!(layer, before);
+}
+
+#[test]
+fn rejects_invalid_set_shuffles_atomically() {
+    let zone = |sequence| address(Player::Player, CardLocation::MonsterZone, sequence);
+    let hand = address(Player::Player, CardLocation::Hand, 0);
+    let opponent = address(Player::Opponent, CardLocation::MonsterZone, 0);
+    let mut layer = CardLayer::default();
+    layer.insert(zone(0), 10).unwrap();
+    layer.insert(zone(1), 20).unwrap();
+    layer.insert(opponent, 30).unwrap();
+    layer.insert(hand, 40).unwrap();
+    layer
+        .apply(&overlay_move(
+            location(Some(hand)),
+            overlay(Some(zone(0)), 0),
+            40,
+        ))
+        .unwrap();
+    let before = layer.clone();
+    for message in [
+        set_shuffle(
+            CardLocation::MonsterZone,
+            &[zone(0), zone(1)],
+            &[None, None],
+        ),
+        set_shuffle(
+            CardLocation::MonsterZone,
+            &[zone(0), zone(0)],
+            &[None, None],
+        ),
+        set_shuffle(
+            CardLocation::MonsterZone,
+            &[zone(0), zone(1)],
+            &[Some(zone(1)), Some(zone(1))],
+        ),
+        set_shuffle(
+            CardLocation::MonsterZone,
+            &[zone(0), zone(1)],
+            &[Some(zone(2)), None],
+        ),
+        set_shuffle(
+            CardLocation::MonsterZone,
+            &[zone(0), opponent],
+            &[None, None],
+        ),
+        set_shuffle(CardLocation::MonsterZone, &[zone(0), zone(1)], &[None]),
+        set_shuffle(CardLocation::Hand, &[zone(0)], &[None]),
+        CoreMessage::ShuffleSetCard(ShuffleSetCardMessageData {
+            location: CardLocation::MonsterZone,
+            previous: vec![location(Some(zone(0)))],
+            current: vec![None],
+        }),
+    ] {
+        assert!(layer.apply(&message).is_err(), "{message:?}");
+        assert_eq!(layer, before);
     }
 }
 

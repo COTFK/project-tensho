@@ -515,6 +515,268 @@ fn tracks_native_overlay_moves_and_host_removal() {
 }
 
 #[test]
+fn tracks_native_set_card_shuffle_with_materials() {
+    let core = test_core();
+    let duel = core.create_duel(0).unwrap();
+    let field = |sequence| CardAddress {
+        controller: Player::Player,
+        location: CardLocation::MonsterZone,
+        sequence,
+    };
+    let unaffected = CardAddress {
+        controller: Player::Player,
+        location: CardLocation::SpellTrapZone,
+        sequence: 0,
+    };
+    let mut layer = CardLayer::default();
+    let mut ids = Vec::new();
+    for (code, sequence) in [(100, 0), (101, 1), (102, 2), (103, 3), (104, 4), (105, 5)] {
+        duel.add_card(
+            Player::Player,
+            code,
+            Player::Player,
+            CardLocation::MonsterZone,
+            sequence,
+            if sequence < 4 {
+                ocgcore_ffi::constants::POS_FACEDOWN_DEFENSE
+            } else {
+                POS_FACEUP_ATTACK
+            },
+        );
+        ids.push(layer.insert(field(sequence), code).unwrap());
+    }
+    duel.add_card(
+        Player::Player,
+        106,
+        Player::Player,
+        CardLocation::SpellTrapZone,
+        0,
+        POS_FACEUP_ATTACK,
+    );
+    let unaffected_id = layer.insert(unaffected, 106).unwrap();
+    core.load_script(
+        &duel,
+        br#"
+        local effect = Effect.GlobalEffect()
+        effect:SetType(0x0802)
+        effect:SetCode(1113)
+        effect:SetOperation(function()
+            local first = Duel.GetFieldCard(0, 4, 0)
+            local second = Duel.GetFieldCard(0, 4, 2)
+            local material1 = Duel.GetFieldCard(0, 4, 4)
+            local material2 = Duel.GetFieldCard(0, 4, 5)
+            Duel.Overlay(first, material1)
+            Duel.Overlay(second, material2)
+            local group = Group.CreateGroup()
+            for i=0,3 do group:AddCard(Duel.GetFieldCard(0, 4, i)) end
+            Duel.ShuffleSetCard(group)
+            Duel.SendtoGrave(material1, 0x40)
+        end)
+        Duel.RegisterEffect(effect, 0)
+    "#,
+        "set-shuffle-test.lua",
+    )
+    .unwrap();
+
+    duel.start();
+    let mut shuffled = false;
+    let mut detached = false;
+    for _ in 0..1000 {
+        let status = duel.process();
+        for message in duel.parse_messages() {
+            if matches!(
+                message,
+                CoreMessage::Move(_) | CoreMessage::ShuffleSetCard(_)
+            ) {
+                layer.apply(&message).unwrap();
+            }
+            match &message {
+                CoreMessage::ShuffleSetCard(data) => {
+                    assert_eq!(data.previous.len(), 4);
+                    assert_eq!(data.current.iter().flatten().count(), 2);
+                    let queried = duel.get_cards(CardLocation::MonsterZone);
+                    for (previous, current) in data.previous.iter().zip(&data.current) {
+                        let source_id = ids[previous.sequence as usize];
+                        if let Some(current) = current {
+                            let tracked = layer.card_at(field(current.sequence)).unwrap();
+                            assert_eq!(tracked.id, source_id);
+                            assert_eq!(
+                                tracked.code,
+                                queried[current.sequence as usize].unwrap().card_code
+                            );
+                        }
+                    }
+                    for sequence in 0..4 {
+                        let card = layer.card_at(field(sequence)).unwrap();
+                        if card.id != ids[0] && card.id != ids[2] {
+                            assert!(!ids[..4].contains(&card.id));
+                            assert_eq!(card.code, 0);
+                        }
+                    }
+                    assert_eq!(layer.material_at(ids[0], 0).unwrap().id, ids[4]);
+                    assert_eq!(layer.material_at(ids[2], 0).unwrap().id, ids[5]);
+                    assert_eq!(layer.card_at(unaffected).unwrap().id, unaffected_id);
+                    shuffled = true;
+                }
+                CoreMessage::Move(data) if data.card_code == 104 && shuffled => {
+                    let grave = CardAddress {
+                        controller: Player::Player,
+                        location: CardLocation::Graveyard,
+                        sequence: data.current.sequence,
+                    };
+                    assert_eq!(layer.card_at(grave).unwrap().id, ids[4]);
+                    assert!(layer.material_at(ids[0], 0).is_none());
+                    assert_eq!(layer.material_at(ids[2], 0).unwrap().id, ids[5]);
+                    detached = true;
+                }
+                _ => {}
+            }
+        }
+        if matches!(status, OCG_DuelStatus::OCG_DUEL_STATUS_AWAITING) {
+            assert!(shuffled);
+            assert!(detached);
+            return;
+        }
+        assert_ne!(status, OCG_DuelStatus::OCG_DUEL_STATUS_END);
+    }
+    panic!("Set-card shuffle test did not reach an input prompt");
+}
+
+#[test]
+fn tracks_native_group_spell_sets_with_hidden_destinations() {
+    fn card_data(code: u32) -> OCG_CardData {
+        let mut data = test_card_data(code);
+        if (201..=203).contains(&code) {
+            data.r#type = ocgcore_ffi::constants::TYPE_SPELL;
+        }
+        data
+    }
+
+    let core = futures::executor::block_on(OCGCore::load(
+        card_data,
+        Box::new(|_| None),
+        super::super::callbacks::log_core_message,
+    ))
+    .unwrap();
+    let duel = core.create_duel(0).unwrap();
+    let address = |location, sequence| CardAddress {
+        controller: Player::Player,
+        location,
+        sequence,
+    };
+    let mut layer = CardLayer::default();
+    for (sequence, code) in [201, 202, 203].into_iter().enumerate() {
+        duel.add_card(
+            Player::Player,
+            code,
+            Player::Player,
+            CardLocation::Hand,
+            sequence as u32,
+            ocgcore_ffi::constants::POS_FACEDOWN,
+        );
+        layer
+            .insert(address(CardLocation::Hand, sequence as u32), code)
+            .unwrap();
+    }
+    duel.add_card(
+        Player::Player,
+        100,
+        Player::Player,
+        CardLocation::MonsterZone,
+        0,
+        POS_FACEUP_ATTACK,
+    );
+    let unaffected = layer
+        .insert(address(CardLocation::MonsterZone, 0), 100)
+        .unwrap();
+    core.load_script(
+        &duel,
+        br#"
+        local effect = Effect.GlobalEffect()
+        effect:SetType(0x0802)
+        effect:SetCode(1113)
+        effect:SetOperation(function()
+            local group = Duel.GetFieldGroup(0, 2, 0)
+            Duel.SSet(0, group, 0, false)
+        end)
+        Duel.RegisterEffect(effect, 0)
+    "#,
+        "group-set-shuffle-test.lua",
+    )
+    .unwrap();
+
+    duel.start();
+    let mut selections = 0;
+    let mut shuffled = false;
+    for _ in 0..1000 {
+        let status = duel.process();
+        for message in duel.parse_messages() {
+            match &message {
+                CoreMessage::SelectPlace(data) => {
+                    let zone = data
+                        .zones
+                        .iter()
+                        .rev()
+                        .find(|zone| {
+                            zone.location == CardLocation::SpellTrapZone && zone.sequence < 5
+                        })
+                        .expect("No available spell/trap zone");
+                    duel.set_response(Response::Place {
+                        controller: data.player,
+                        location: zone.location as u8,
+                        index: zone.sequence,
+                    });
+                    selections += 1;
+                }
+                CoreMessage::Move(_) | CoreMessage::ShuffleHand(_) | CoreMessage::SetCard(_) => {
+                    layer.apply(&message).unwrap();
+                }
+                CoreMessage::ShuffleSetCard(data) => {
+                    assert_eq!(data.location, CardLocation::SpellTrapZone);
+                    assert_eq!(data.previous.len(), 3);
+                    assert!(data.current.iter().all(Option::is_none));
+                    let old_ids: Vec<_> = data
+                        .previous
+                        .iter()
+                        .map(|info| {
+                            layer
+                                .card_at(address(CardLocation::SpellTrapZone, info.sequence))
+                                .unwrap()
+                                .id
+                        })
+                        .collect();
+                    layer.apply(&message).unwrap();
+                    let queried = duel.get_cards(CardLocation::SpellTrapZone);
+                    for info in &data.previous {
+                        let card = layer
+                            .card_at(address(CardLocation::SpellTrapZone, info.sequence))
+                            .unwrap();
+                        assert!(!old_ids.contains(&card.id));
+                        assert_eq!(card.code, 0);
+                        assert!(queried[info.sequence as usize].is_some());
+                    }
+                    assert_eq!(
+                        layer
+                            .card_at(address(CardLocation::MonsterZone, 0))
+                            .unwrap()
+                            .id,
+                        unaffected
+                    );
+                    shuffled = true;
+                }
+                _ => {}
+            }
+        }
+        if matches!(status, OCG_DuelStatus::OCG_DUEL_STATUS_AWAITING) && shuffled {
+            assert_eq!(selections, 3);
+            return;
+        }
+        assert_ne!(status, OCG_DuelStatus::OCG_DUEL_STATUS_END);
+    }
+    panic!("Group spell set test did not reach an input prompt");
+}
+
+#[test]
 fn tracks_native_hidden_shuffles_and_subsequent_draw() {
     fn card_data(code: u32) -> OCG_CardData {
         let mut data = test_card_data(code);
