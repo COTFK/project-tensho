@@ -131,9 +131,17 @@ impl Duel {
     }
 
     pub fn get_cards(&self, location: CardLocation) -> Vec<Option<CardData>> {
-        let data = self.query_location(u32::MAX, Player::Player, location);
-        decode_location(&data, Player::Player, location)
+        self.query_cards(Player::Player, location)
             .unwrap_or_else(|error| panic!("Invalid {location} query: {error:#}"))
+    }
+
+    pub(crate) fn query_cards(
+        &self,
+        player: Player,
+        location: CardLocation,
+    ) -> anyhow::Result<Vec<Option<CardData>>> {
+        let data = self.query_location(u32::MAX, player, location);
+        decode_location(&data, player, location)
     }
 
     pub fn add_card(

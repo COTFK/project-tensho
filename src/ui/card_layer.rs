@@ -96,6 +96,54 @@ impl CardLayer {
         self.deck_reversed
     }
 
+    pub fn validate(&self) -> anyhow::Result<()> {
+        for (index, card) in self.cards.iter().enumerate() {
+            ensure!(
+                !self.cards[..index].iter().any(|other| other.id == card.id),
+                "Duplicate tracked card ID"
+            );
+            ensure!(
+                !self.cards[..index]
+                    .iter()
+                    .any(|other| other.placement == card.placement),
+                "Duplicate tracked card placement"
+            );
+            if let CardPlacement::Overlay { host, .. } = card.placement {
+                ensure!(host != card.id, "Card cannot be its own overlay host");
+                self.material_len(host)?;
+            }
+        }
+        for player in [Player::Player, Player::Opponent] {
+            for location in [
+                CardLocation::Deck,
+                CardLocation::Hand,
+                CardLocation::Graveyard,
+                CardLocation::Banishment,
+                CardLocation::ExtraDeck,
+            ] {
+                self.pile_len(player, location)?;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn reconcile_graveyard_code(
+        &mut self,
+        address: CardAddress,
+        code: u32,
+    ) -> anyhow::Result<()> {
+        ensure!(
+            address.location == CardLocation::Graveyard,
+            "Expected graveyard"
+        );
+        let card = self
+            .cards
+            .iter_mut()
+            .find(|card| card.placement == CardPlacement::Zone(address))
+            .context("Missing tracked graveyard card")?;
+        Self::update_code(card, code)
+    }
+
     pub fn apply(&mut self, message: &CoreMessage) -> anyhow::Result<()> {
         let mut next = self.clone();
         match message {

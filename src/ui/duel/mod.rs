@@ -14,11 +14,13 @@ use web_sys::window;
 
 use crate::ocgcore::Duel;
 use crate::ocgcore::OCGCore;
+use crate::state::DuelSetup;
 use crate::state::UIState;
 use crate::state::handle_right_click;
 use crate::state::load_duel;
 use crate::state::run_game_loop;
 use crate::ui::LoadingScreen;
+use crate::ui::card_tracking::CardTracking;
 use crate::ui::components::UIButton;
 use crate::ui::components::svg::FullscreenIcon;
 use crate::ui::components::svg::ResetIcon;
@@ -32,6 +34,7 @@ pub fn DuelWrapper(
 ) -> Element {
     let mut state = use_context_provider(UIState::default);
     let mut duel_context = use_context_provider(|| Signal::new(None::<Duel>));
+    let mut tracking = use_context_provider(|| Signal::new(None::<CardTracking>));
 
     let duel_resource = use_resource(move || {
         let custom_hand = custom_hand.clone();
@@ -40,37 +43,56 @@ pub fn DuelWrapper(
     });
 
     use_effect(move || {
-        let next_duel = match &*duel_resource.read() {
-            Some(Ok(duel)) => Some(duel.clone()),
+        let next_setup = match &*duel_resource.read() {
+            Some(Ok(setup)) => Some(setup.clone()),
             _ => None,
         };
-
-        let current_duel = duel_context();
-        let unchanged = match (&current_duel, &next_duel) {
-            (Some(current), Some(next)) => current.ptr_eq(next),
-            (None, None) => true,
-            _ => false,
-        };
-        if unchanged {
-            return;
-        }
-
-        state.reset();
-        duel_context.set(next_duel);
+        install_duel(&mut state, &mut duel_context, &mut tracking, next_setup);
     });
 
     match &*duel_resource.read() {
-        Some(Ok(_)) => rsx!(DuelScreen {
-            duel_resource: duel_resource,
-        }),
+        Some(Ok(setup))
+            if duel_context()
+                .as_ref()
+                .is_some_and(|duel| duel.ptr_eq(&setup.duel)) =>
+        {
+            rsx!(DuelScreen {
+                duel_resource: duel_resource,
+            })
+        }
+        Some(Ok(_)) => rsx!(LoadingScreen {}),
         Some(Err(e)) => rsx!("{e:#?}"),
         None => rsx!(LoadingScreen {}),
     }
 }
 
+fn install_duel(
+    state: &mut UIState,
+    duel_context: &mut Signal<Option<Duel>>,
+    tracking: &mut Signal<Option<CardTracking>>,
+    setup: Option<DuelSetup>,
+) {
+    let unchanged = match (&*duel_context.peek(), &setup) {
+        (Some(current), Some(next)) => current.ptr_eq(&next.duel),
+        (None, None) => true,
+        _ => false,
+    };
+    if unchanged {
+        return;
+    }
+    state.reset();
+    let (duel, cards) = match setup {
+        Some(setup) => (Some(setup.duel), Some(CardTracking::Active(setup.cards))),
+        None => (None, None),
+    };
+    tracking.set(cards);
+    duel_context.set(duel);
+}
+
 #[component]
-pub fn DuelScreen(duel_resource: Resource<anyhow::Result<Duel>>) -> Element {
+fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>) -> Element {
     let mut state = use_context::<UIState>();
+    let tracking = use_context::<Signal<Option<CardTracking>>>();
 
     // Start game loop
     use_effect(run_game_loop);
@@ -83,6 +105,7 @@ pub fn DuelScreen(duel_resource: Resource<anyhow::Result<Duel>>) -> Element {
                 if (state.selected_card)().is_some() {
                     state.selected_card.set(None);
                 }
+
             },
             UIButton {
                 class: "fixed top-3 left-3 z-50 w-max h-max p-2",
@@ -111,6 +134,13 @@ pub fn DuelScreen(duel_resource: Resource<anyhow::Result<Duel>>) -> Element {
             ModalContainer {}
             Field {}
             Hand {}
+            if let Some(CardTracking::Failed(error)) = &*tracking.read() {
+                div {
+                    class: "fixed top-3 left-1/2 z-50 max-w-lg -translate-x-1/2 rounded bg-red-950 p-3 text-sm text-white shadow-lg",
+                    role: "alert",
+                    "Card tracking stopped: {error}"
+                }
+            }
             if let Some(phase) = (state.current_phase)() {
                 div {
                     class: "fixed bottom-3 right-3 z-50 rounded-md bg-gray-950/70 px-2 py-1 font-mono text-gray-200 text-[8px] md:text-xs lg:text-base shadow-lg ring-1 ring-white/10 backdrop-blur-sm pointer-events-none",
@@ -121,3 +151,7 @@ pub fn DuelScreen(duel_resource: Resource<anyhow::Result<Duel>>) -> Element {
         }
     )
 }
+
+#[cfg(test)]
+#[path = "../../../tests/unit/ui/duel.rs"]
+mod tests;
