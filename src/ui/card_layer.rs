@@ -5,7 +5,8 @@ use crate::ocgcore::location_info::{
     CardLocationInfo, CardLocationKind, CardLocationPosition, CardPositionFlags,
 };
 use crate::ocgcore::messages::{
-    CoreMessage, DrawMessageData, MoveMessageData, RemoveCardsMessageData, SwapMessageData,
+    CoreMessage, DrawMessageData, MoveMessageData, RemoveCardsMessageData,
+    ShuffleSetCardMessageData, SwapMessageData,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -110,6 +111,7 @@ impl CardLayer {
                 CardLocation::ExtraDeck,
                 Some(&message.card_codes),
             )?,
+            CoreMessage::ShuffleSetCard(message) => next.apply_set_shuffle(message)?,
             CoreMessage::PositionChange(message) => next.update_appearance(
                 CardPlacement::Zone(CardAddress {
                     controller: message.controller,
@@ -321,6 +323,137 @@ impl CardLayer {
             }
         }
         Ok(())
+    }
+
+    fn apply_set_shuffle(&mut self, message: &ShuffleSetCardMessageData) -> anyhow::Result<()> {
+        ensure!(
+            matches!(
+                message.location,
+                CardLocation::MonsterZone | CardLocation::SpellTrapZone
+            ),
+            "Invalid set-card shuffle location"
+        );
+        ensure!(
+            message.previous.len() == message.current.len(),
+            "Set-card shuffle location counts do not match"
+        );
+        let mut sources: Vec<(Card, CardAddress, CardPositionFlags)> =
+            Vec::with_capacity(message.previous.len());
+        for &info in &message.previous {
+            let (address, position) = self.set_shuffle_location(info, message.location)?;
+            ensure!(
+                !sources.iter().any(|(_, source, _)| *source == address),
+                "Duplicate set-card shuffle source"
+            );
+            if let Some((_, first, _)) = sources.first() {
+                ensure!(
+                    address.controller == first.controller,
+                    "Set-card shuffle has multiple controllers"
+                );
+            }
+            let card = *self
+                .card_at(address)
+                .context("Set-card shuffle source is empty")?;
+            sources.push((card, address, position));
+        }
+
+        let mut destinations = vec![None; sources.len()];
+        let mut used = Vec::new();
+        for (index, info) in message.current.iter().enumerate() {
+            if let Some(info) = info {
+                let (address, position) = self.set_shuffle_location(*info, message.location)?;
+                ensure!(
+                    sources.iter().any(|(_, source, _)| *source == address),
+                    "Set-card shuffle destination is not a source zone"
+                );
+                ensure!(
+                    !used.contains(&address),
+                    "Duplicate set-card shuffle destination"
+                );
+                ensure!(
+                    position == sources[index].2,
+                    "Set-card shuffle changed a card's position"
+                );
+                destinations[index] = Some(address);
+                used.push(address);
+            }
+        }
+        let available: Vec<_> = sources
+            .iter()
+            .map(|(_, address, _)| *address)
+            .filter(|address| !used.contains(address))
+            .collect();
+        let hidden: Vec<_> = destinations
+            .iter()
+            .enumerate()
+            .filter_map(|(index, destination)| destination.is_none().then_some(index))
+            .collect();
+        if hidden.len() > 1 {
+            ensure!(
+                !self.cards.iter().any(|card| matches!(
+                    card.placement,
+                    CardPlacement::Overlay { host, .. }
+                        if hidden.iter().any(|&index| sources[index].0.id == host)
+                )),
+                "Concealed set-card shuffle destination has overlay materials"
+            );
+        }
+        let hidden_position = hidden
+            .first()
+            .map(|&index| sources[index].2)
+            .filter(|position| hidden.iter().all(|&index| sources[index].2 == *position));
+        for (&index, &address) in hidden.iter().zip(&available) {
+            destinations[index] = Some(address);
+        }
+        for (index, (old, _, position)) in sources.iter().enumerate() {
+            let replacement = if message.current[index].is_none() && hidden.len() > 1 {
+                Some(self.allocate_id()?)
+            } else {
+                None
+            };
+            let card = self
+                .cards
+                .iter_mut()
+                .find(|card| card.id == old.id)
+                .context("Set-card shuffle source disappeared")?;
+            card.placement = CardPlacement::Zone(
+                destinations[index].context("Set-card shuffle destination is missing")?,
+            );
+            if let Some(id) = replacement {
+                card.id = id;
+                card.code = 0;
+                card.position = hidden_position;
+            } else {
+                card.position = Some(*position);
+            }
+        }
+        Ok(())
+    }
+
+    fn set_shuffle_location(
+        &self,
+        info: CardLocationInfo,
+        location: CardLocation,
+    ) -> anyhow::Result<(CardAddress, CardPositionFlags)> {
+        let placement = self
+            .placement_from(info)?
+            .context("Set-card shuffle location is absent")?;
+        let CardPlacement::Zone(address) = placement else {
+            anyhow::bail!("Set-card shuffle targets an overlay material");
+        };
+        ensure!(
+            address.location == location,
+            "Set-card shuffle location does not match the message"
+        );
+        let CardLocationPosition::Position(position) = info.position else {
+            anyhow::bail!("Set-card shuffle has no position");
+        };
+        let face_up = CardPositionFlags::FACE_UP_ATTACK | CardPositionFlags::FACE_UP_DEFENSE;
+        ensure!(
+            !position.intersects(face_up),
+            "Set-card shuffle includes a face-up card"
+        );
+        Ok((address, position))
     }
 
     fn apply_card_event(&mut self, info: CardLocationInfo, code: u32) -> anyhow::Result<()> {
