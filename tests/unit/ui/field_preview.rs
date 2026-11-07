@@ -487,3 +487,107 @@ fn duplicate_hand_cards_keep_identity_when_one_moves_and_the_rest_reindex() {
     assert_eq!(after[1].rotation, -1.0);
     assert_eq!(after[2].rotation, 1.0);
 }
+
+#[test]
+fn incoming_graveyard_cards_do_not_replace_the_stationary_pile_image() {
+    use crate::ocgcore::location_info::{
+        CardLocationInfo, CardLocationKind, CardLocationPosition, CardPositionFlags,
+    };
+    use crate::ocgcore::messages::move_card::MoveReason;
+    use crate::ocgcore::messages::{CoreMessage, MoveMessageData};
+    let (_, anchors) = fixture();
+    let geometry = futures::executor::block_on(measure_field(&anchors)).unwrap();
+    let mut snapshot = PreviewSnapshot {
+        cards: CardLayer::default(),
+        monsters: vec![None; 7],
+        spell_traps: vec![None; 8],
+        hand: vec![HandCard { index: 0, code: 20 }],
+        selected: None,
+        deck_count: 0,
+        extra: vec![],
+        graveyard: vec![Some(CardData {
+            card_code: 10,
+            controller: Player::Player,
+            location: CardLocation::Graveyard,
+            ..Default::default()
+        })],
+        banishment: vec![],
+    };
+    let address = |location, sequence| CardAddress {
+        controller: Player::Player,
+        location,
+        sequence,
+    };
+    let stationary = snapshot
+        .cards
+        .insert(address(CardLocation::Graveyard, 0), 10)
+        .unwrap();
+    let moving = snapshot
+        .cards
+        .insert(address(CardLocation::Hand, 0), 20)
+        .unwrap();
+    let mut playback = CardPlayback::default();
+    playback.begin(
+        vec![moving],
+        snapshot.cards.clone(),
+        [vec![], snapshot.graveyard.clone(), vec![]],
+    );
+    let loc = |location, sequence| CardLocationInfo {
+        controller: Some(Player::Player),
+        location: CardLocationKind::Known(location),
+        sequence,
+        position: CardLocationPosition::Position(CardPositionFlags::FACE_UP_ATTACK),
+    };
+    snapshot
+        .cards
+        .apply(&CoreMessage::Move(MoveMessageData {
+            card_code: 20,
+            previous: loc(CardLocation::Hand, 0),
+            current: loc(CardLocation::Graveyard, 1),
+            reason: MoveReason::EFFECT,
+        }))
+        .unwrap();
+    snapshot.hand.clear();
+    snapshot.graveyard.push(Some(CardData {
+        card_code: 20,
+        controller: Player::Player,
+        location: CardLocation::Graveyard,
+        sequence: 1,
+        ..Default::default()
+    }));
+    let mut rendered = targets(&snapshot, &geometry).unwrap();
+    preserve_pile_images(&snapshot, &mut rendered, &playback).unwrap();
+    assert_eq!(
+        rendered
+            .iter()
+            .find(|target| target.id == stationary)
+            .unwrap()
+            .appearance,
+        CardAppearance::Pile(CardImage::Thumbnail(snapshot.graveyard[0].unwrap()))
+    );
+    assert_eq!(
+        rendered
+            .iter()
+            .find(|target| target.id == moving)
+            .unwrap()
+            .appearance,
+        CardAppearance::Pile(CardImage::Thumbnail(CardData {
+            card_code: 20,
+            controller: Player::Player,
+            location: CardLocation::Graveyard,
+            sequence: 1,
+            ..Default::default()
+        }))
+    );
+    playback.finish(playback.generation);
+    let mut completed = targets(&snapshot, &geometry).unwrap();
+    preserve_pile_images(&snapshot, &mut completed, &playback).unwrap();
+    assert_eq!(
+        completed
+            .iter()
+            .find(|target| target.id == stationary)
+            .unwrap()
+            .appearance,
+        CardAppearance::Pile(CardImage::Thumbnail(snapshot.graveyard[1].unwrap()))
+    );
+}

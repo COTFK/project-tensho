@@ -10,6 +10,7 @@ use crate::ocgcore::constants::{BattlePosition, CardLocation, Player};
 use crate::ocgcore::{CardData, HandCard};
 use crate::state::{SelectedCard, UIState};
 use crate::ui::card_layer::{CardAddress, CardLayer, CardPlacement};
+use crate::ui::card_playback::CardPlayback;
 use crate::ui::card_tracking::CardTracking;
 use crate::ui::components::CardImage;
 
@@ -130,6 +131,93 @@ async fn measure_field(anchors: &LayoutAnchors) -> anyhow::Result<PreviewGeometr
     })
 }
 
+fn preserve_pile_images(
+    snapshot: &PreviewSnapshot,
+    targets: &mut [CardTarget],
+    playback: &CardPlayback,
+) -> anyhow::Result<()> {
+    let Some(source) = playback.source.as_ref().filter(|_| playback.active) else {
+        return Ok(());
+    };
+    for (location, index) in [(CardLocation::Graveyard, 1), (CardLocation::Banishment, 2)] {
+        let surviving_top = source
+            .cards()
+            .iter()
+            .filter_map(|card| {
+                let CardPlacement::Zone(old) = card.placement else {
+                    return None;
+                };
+                let current = snapshot.cards.card_by_id(card.id)?;
+                let CardPlacement::Zone(new) = current.placement else {
+                    return None;
+                };
+                (old.controller == Player::Player
+                    && old.location == location
+                    && new.controller == old.controller
+                    && new.location == location)
+                    .then_some(old.sequence)
+            })
+            .max();
+        let old_image = if let Some(sequence) = surviving_top {
+            let data = playback.piles[index]
+                .get(usize::try_from(sequence)?)
+                .copied()
+                .flatten()
+                .context("Previous pile card is missing")?;
+            Some(pile_face(location, data))
+        } else {
+            None
+        };
+        for target in targets.iter_mut().filter(|target| {
+            target.address.location == location
+                && matches!(target.appearance, CardAppearance::Pile(_))
+        }) {
+            let was_in_pile = source.card_by_id(target.id).is_some_and(|card| {
+                matches!(
+                    card.placement, CardPlacement::Zone(address)
+                        if address.controller == Player::Player && address.location == location
+                )
+            });
+            if was_in_pile {
+                target.appearance =
+                    CardAppearance::Pile(old_image.context("Previous pile image is missing")?);
+            } else if matches!(
+                target.appearance,
+                CardAppearance::Pile(CardImage::Thumbnail(_))
+            ) {
+                target.appearance = CardAppearance::Pile(if target.data.card_code == 0 {
+                    CardImage::CardBack
+                } else {
+                    CardImage::Thumbnail(target.data)
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
+fn pile_face(location: CardLocation, top: CardData) -> CardImage {
+    if location == CardLocation::Banishment
+        && !matches!(
+            top.position,
+            Some(BattlePosition::FaceUpAttack | BattlePosition::FaceUpDefense)
+        )
+    {
+        if top
+            .card_type
+            .intersects(CardType::FUSION | CardType::SYNCHRO | CardType::XYZ | CardType::LINK)
+        {
+            CardImage::ExtraDeckBack
+        } else {
+            CardImage::CardBack
+        }
+    } else if top.card_code == 0 {
+        CardImage::CardBack
+    } else {
+        CardImage::Thumbnail(top)
+    }
+}
+
 fn targets(
     snapshot: &PreviewSnapshot,
     geometry: &PreviewGeometry,
@@ -152,6 +240,7 @@ fn targets(
                 );
                 continue;
             }
+
             match (snapshot.cards.card_at(address), data) {
                 (Some(card), Some(data)) => {
                     ensure!(
@@ -279,24 +368,7 @@ fn targets(
                     .last()
                     .and_then(|card| *card)
                     .context("Pile top missing")?;
-                if location == CardLocation::Banishment
-                    && !matches!(
-                        top.position,
-                        Some(BattlePosition::FaceUpAttack | BattlePosition::FaceUpDefense)
-                    )
-                {
-                    if top.card_type.intersects(
-                        CardType::FUSION | CardType::SYNCHRO | CardType::XYZ | CardType::LINK,
-                    ) {
-                        CardImage::ExtraDeckBack
-                    } else {
-                        CardImage::CardBack
-                    }
-                } else if top.card_code == 0 {
-                    CardImage::CardBack
-                } else {
-                    CardImage::Thumbnail(top)
-                }
+                pile_face(location, top)
             }
             _ => continue,
         };
@@ -392,6 +464,7 @@ pub(super) fn FieldPreview(enabled: Signal<bool>) -> Element {
     let tracking = use_context::<Signal<Option<CardTracking>>>();
     let anchors = use_context::<LayoutAnchors>();
     let revision = use_context::<LayoutRevision>();
+    let playback = try_consume_context::<Signal<CardPlayback>>();
     let resource = use_resource(move || {
         let enabled = enabled();
         let revision = (revision.0)();
@@ -434,9 +507,16 @@ pub(super) fn FieldPreview(enabled: Signal<bool>) -> Element {
                     .then_some(result)
             });
     let resolved = match (current.as_ref(), geometry) {
-        (Some(input), Some(Ok(geometry))) => {
-            Some(targets(input, geometry).map_err(|error| format!("{error:#}")))
-        }
+        (Some(input), Some(Ok(geometry))) => Some(
+            targets(input, geometry)
+                .and_then(|mut targets| {
+                    if let Some(playback) = playback {
+                        preserve_pile_images(input, &mut targets, &playback())?;
+                    }
+                    Ok(targets)
+                })
+                .map_err(|error| format!("{error:#}")),
+        ),
         (_, Some(Err(error))) => Some(Err(error.clone())),
         _ => None,
     };

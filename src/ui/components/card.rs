@@ -28,6 +28,7 @@ impl CardImage {
 #[component]
 pub fn Card(
     image: CardImage,
+    #[props(default)] animated: bool,
     class: String,
     is_selected: bool,
     show_highlight_on_select: bool,
@@ -39,6 +40,7 @@ pub fn Card(
     rsx! {
         div {
             class: "relative {class}",
+            class: if animated { "[transition:rotate_300ms_ease-in-out]" },
             class: if show_highlight_on_select {"border-2"},
             class: if show_dotted_highlight && !is_selected {"border-yellow-300 border-dashed"},
             class: if is_selected && !(show_orange_aura || show_blue_aura) {"border-yellow-300"},

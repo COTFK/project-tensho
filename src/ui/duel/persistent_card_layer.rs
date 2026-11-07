@@ -6,6 +6,7 @@ use crate::ocgcore::CardData;
 use crate::ocgcore::constants::{CardLocation, Player};
 use crate::ocgcore::location_info::CardPositionFlags;
 use crate::ui::card_layer::{Card as TrackedCard, CardAddress, CardId, CardPlacement};
+use crate::ui::card_playback::CardPlayback;
 use crate::ui::components::CardImage;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -95,19 +96,10 @@ fn visible_card(card: TrackedCard, target: Option<CardTarget>) -> Option<(CardTa
 #[component]
 pub(super) fn PersistentCardLayer(cards: Vec<TrackedCard>, targets: Vec<CardTarget>) -> Element {
     let mut cards = cards;
-    cards.sort_by_key(|card| {
-        let target = targets.iter().find(|target| target.id == card.id);
-        let order = target.map_or(0, |target| target.stack_order);
-        let sequence = match (card.placement, target.map(|target| target.appearance)) {
-            (CardPlacement::Zone(address), Some(CardAppearance::Pile(_))) => address.sequence,
-            (CardPlacement::Overlay { sequence, .. }, Some(CardAppearance::Material)) => sequence,
-            _ => 0,
-        };
-        (order, sequence)
-    });
+    cards.sort_by_key(|card| card.id);
     rsx! {
         div {
-            class: "absolute inset-0 pointer-events-none",
+            class: "absolute inset-0 isolate pointer-events-none",
             for card in cards {
                 LayerCard {
                     key: "{card.id}",
@@ -121,6 +113,9 @@ pub(super) fn PersistentCardLayer(cards: Vec<TrackedCard>, targets: Vec<CardTarg
 
 #[component]
 fn LayerCard(card: TrackedCard, target: Option<CardTarget>) -> Element {
+    let playback = try_consume_context::<Signal<CardPlayback>>();
+    let animating = playback.is_some_and(|playback| playback().active);
+    let moving = playback.is_some_and(|playback| playback().moving.contains(&card.id));
     let visible = visible_card(card, target);
     let hand = matches!(card.placement, CardPlacement::Zone(address) if address.location == CardLocation::Hand);
     let style = visible.map(|(target, _)| {
@@ -133,24 +128,31 @@ fn LayerCard(card: TrackedCard, target: Option<CardTarget>) -> Element {
         } else {
             (format!("+ {offset}vw"), format!("- {offset}vh"))
         };
+        let stack = match (card.placement, target.appearance) {
+            (CardPlacement::Zone(address), CardAppearance::Pile(_)) => i64::from(address.sequence) + 1,
+            (CardPlacement::Overlay { sequence, .. }, CardAppearance::Material) => i64::from(sequence) + 1,
+            (_, CardAppearance::Interactive) if hand => 1000 + i64::from(target.stack_order),
+            (_, CardAppearance::Interactive) => 500,
+            _ => i64::from(target.stack_order),
+        };
         format!(
             "--card-x: calc({}px {}); --card-y: calc({}px {}); --card-width: {}px; --card-height: {}px; --card-z: {};",
             target.anchor.center_x - target.anchor.width / 2.0, x_offset,
             target.anchor.center_y - target.anchor.height / 2.0, y_offset,
-            target.anchor.width, target.anchor.height, target.stack_order,
+            target.anchor.width, target.anchor.height, if moving { 2000 + stack } else { stack },
         )
     }).unwrap_or_default();
     rsx! {
         div {
             "data-card-id": "{card.id}",
             class: "fixed left-0 top-0 pointer-events-none [transform:translate(var(--card-x),var(--card-y))] w-[var(--card-width)] h-[var(--card-height)] z-[var(--card-z)]",
-            class: if hand { "[transition:transform_150ms_ease-in-out]" },
+            class: if animating { "[transition:transform_300ms_ease-in-out,width_300ms_ease-in-out,height_300ms_ease-in-out]" } else if hand { "[transition:transform_150ms_ease-in-out]" },
             class: if visible.is_none() { "hidden" },
             style,
             if let Some((target, facedown)) = visible {
                 div {
                     class: "w-full h-full [transform:rotate(var(--card-rotation))]",
-                    class: if hand { "[transition:transform_150ms_ease-in-out]" },
+                    class: if animating { "[transition:transform_300ms_ease-in-out]" } else if hand { "[transition:transform_150ms_ease-in-out]" },
                     style: "--card-rotation: {target.rotation}deg;",
                     div {
                         class: "w-full h-full",
@@ -161,6 +163,7 @@ fn LayerCard(card: TrackedCard, target: Option<CardTarget>) -> Element {
                             layered: true,
                             force_facedown: facedown,
                             passive: target.appearance != CardAppearance::Interactive,
+                            animated: animating,
                             image: match target.appearance {
                                 CardAppearance::Pile(image) => Some(image),
                                 _ => None,

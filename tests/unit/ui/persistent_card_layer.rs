@@ -142,7 +142,7 @@ fn movement_and_property_updates_keep_the_same_root_node() {
     );
     assert!(changes.edits.iter().any(|edit| matches!(edit,
         Mutation::SetAttribute { name: "style", id, value: AttributeValue::Text(value), .. }
-            if *id == root && value.contains("--card-z: 8;") && value.contains("--card-x: calc(170.5px + 0vw);")
+            if *id == root && value.contains("--card-z: 1008;") && value.contains("--card-x: calc(170.5px + 0vw);")
     )), "{:?}", changes.edits);
 
     card.code = 54321;
@@ -325,5 +325,53 @@ fn all_cards_keep_keyed_roots_when_reordered_and_piles_are_hidden() {
     assert!(!reordered.edits.iter().any(|edit| matches!(edit,
         Mutation::Remove { id } | Mutation::ReplaceWith { id, .. } if *id == first_root || *id == deck_root
     )), "{:?}", reordered.edits);
+    TEST_STATE.with(|slot| *slot.borrow_mut() = None);
+}
+
+#[test]
+fn moving_between_hand_and_pile_does_not_reinsert_existing_roots() {
+    let (mut card, mut target) = fixture(CardLocation::Hand, None);
+    let mut layer = CardLayer::default();
+    layer.insert(address(CardLocation::Hand), 12345).unwrap();
+    layer.insert(address(CardLocation::Deck), 98765).unwrap();
+    let deck = *layer.card_at(address(CardLocation::Deck)).unwrap();
+    let (_, mut deck_target) = fixture(CardLocation::Deck, None);
+    deck_target.id = deck.id;
+    deck_target.data.card_code = deck.code;
+    deck_target.appearance = CardAppearance::Pile(CardImage::CardBack);
+    let mut dom = VirtualDom::new(app);
+    let initial = dom.rebuild_to_vec();
+    let root = card_root(&initial.edits, card.id);
+    TEST_STATE.with(|slot| {
+        slot.borrow()
+            .unwrap()
+            .set((vec![card, deck], vec![target, deck_target]))
+    });
+    dom.render_immediate_to_vec();
+    card.placement = CardPlacement::Zone(CardAddress {
+        sequence: 1,
+        ..address(CardLocation::Deck)
+    });
+    target.address = CardAddress {
+        sequence: 1,
+        ..address(CardLocation::Deck)
+    };
+    target.data.location = CardLocation::Deck;
+    target.data.sequence = 1;
+    target.stack_order = 1;
+    target.appearance = CardAppearance::Pile(CardImage::CardBack);
+    TEST_STATE.with(|slot| {
+        slot.borrow()
+            .unwrap()
+            .set((vec![card, deck], vec![target, deck_target]))
+    });
+    let moved = dom.render_immediate_to_vec();
+    assert!(
+        !moved.edits.iter().any(|edit| matches!(edit,
+            Mutation::PushRoot { id } if *id == root
+        )),
+        "{:?}",
+        moved.edits
+    );
     TEST_STATE.with(|slot| *slot.borrow_mut() = None);
 }
