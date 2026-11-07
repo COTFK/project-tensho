@@ -13,6 +13,7 @@ use crate::ui::card_layer::CardAddress;
 pub(super) enum Anchor {
     Zone(CardLocation, u32),
     Hand(u32),
+    HandBase,
     Pile(CardLocation),
 }
 
@@ -147,6 +148,29 @@ impl LayoutAnchors {
             "Card anchor changed while measuring"
         );
         CardAnchor::from_rects(center_rect, size_rect)
+    }
+
+    pub async fn measure_hand_base(&self) -> anyhow::Result<CardAnchor> {
+        let key = (Anchor::HandBase, AnchorPart::Card);
+        let element = self
+            .0
+            .borrow()
+            .get(&key)
+            .context("Hand anchor not mounted")?
+            .1
+            .clone();
+        let rect = element
+            .get_client_rect()
+            .await
+            .map_err(|error| anyhow::anyhow!("Measuring hand anchor: {error}"))?;
+        ensure!(
+            self.0
+                .borrow()
+                .get(&key)
+                .is_some_and(|entry| Rc::ptr_eq(&entry.1, &element)),
+            "Hand anchor changed while measuring"
+        );
+        CardAnchor::from_rects(rect, rect)
     }
 }
 

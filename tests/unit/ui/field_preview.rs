@@ -24,8 +24,18 @@ fn fixture() -> (PreviewSnapshot, LayoutAnchors) {
         cards: CardLayer::default(),
         monsters: vec![None; 7],
         spell_traps: vec![None; 8],
+        hand: vec![],
+        selected: None,
     };
     let anchors = LayoutAnchors::default();
+    anchors.insert(
+        (Anchor::HandBase, AnchorPart::Card),
+        Rc::new(()),
+        Rc::new(MountedData::new(TestElement(PixelsRect::new(
+            point2(500.0, 400.0),
+            PixelsSize::new(100.0, 146.0),
+        )))),
+    );
     for (location, count) in [
         (CardLocation::MonsterZone, 7),
         (CardLocation::SpellTrapZone, 6),
@@ -89,7 +99,9 @@ fn invalid_or_missing_tracking_never_enables_the_preview() {
             false,
             Some(CardTracking::Active(input.cards.clone())),
             input.monsters.clone(),
-            input.spell_traps.clone()
+            input.spell_traps.clone(),
+            input.hand.clone(),
+            input.selected
         )
         .is_none()
     );
@@ -98,7 +110,9 @@ fn invalid_or_missing_tracking_never_enables_the_preview() {
             true,
             Some(CardTracking::Failed("failure".into())),
             input.monsters.clone(),
-            input.spell_traps.clone()
+            input.spell_traps.clone(),
+            input.hand.clone(),
+            input.selected
         )
         .is_none()
     );
@@ -127,4 +141,101 @@ fn unsupported_occupied_field_slots_fail_instead_of_disappearing() {
         ..Default::default()
     });
     assert!(targets(&input, &geometry).is_err());
+}
+
+#[test]
+fn hand_fan_uses_slot_spacing_rotation_and_selected_lift() {
+    let base = CardAnchor {
+        center_x: 500.0,
+        center_y: 600.0,
+        width: 100.0,
+        height: 146.0,
+    };
+    let (left, rotation, stack) = hand_position(base, 0, 3, false);
+    assert_eq!(rotation, -2.0);
+    assert_eq!(stack, 0);
+    let shift = 146.0 / 100.0;
+    assert!((left.center_x - (422.0 - (-2.0_f64).to_radians().sin() * shift)).abs() < 0.00001);
+    assert!((left.center_y - (600.0 + (-2.0_f64).to_radians().cos() * shift)).abs() < 0.00001);
+    let (selected, rotation, stack) = hand_position(base, 1, 3, true);
+    assert_eq!(rotation, 0.0);
+    assert_eq!(stack, 3);
+    assert_eq!(selected.center_x, 500.0);
+    assert_eq!(selected.center_y, 563.5);
+    let resized = CardAnchor {
+        width: 200.0,
+        height: 292.0,
+        ..base
+    };
+    let (resized_left, _, _) = hand_position(resized, 0, 3, false);
+    assert!((resized_left.center_x - (500.0 + 2.0 * (left.center_x - 500.0))).abs() < 0.00001);
+}
+
+#[test]
+fn duplicate_hand_cards_keep_identity_when_one_moves_and_the_rest_reindex() {
+    use crate::ocgcore::location_info::{
+        CardLocationInfo, CardLocationKind, CardLocationPosition, CardPositionFlags,
+    };
+    use crate::ocgcore::messages::move_card::MoveReason;
+    use crate::ocgcore::messages::{CoreMessage, MoveMessageData};
+
+    let (_, anchors) = fixture();
+    let geometry = futures::executor::block_on(measure_field(&anchors)).unwrap();
+    let mut snapshot = PreviewSnapshot {
+        cards: CardLayer::default(),
+        monsters: vec![None; 7],
+        spell_traps: vec![None; 8],
+        hand: vec![],
+        selected: None,
+    };
+    for sequence in 0..3 {
+        let address = CardAddress {
+            controller: Player::Player,
+            location: CardLocation::Hand,
+            sequence,
+        };
+        snapshot.cards.insert(address, 42).unwrap();
+        snapshot.hand.push(HandCard {
+            index: sequence as usize,
+            code: 42,
+        });
+    }
+    let before = targets(&snapshot, &geometry).unwrap();
+    assert_eq!(before.len(), 3);
+    assert_ne!(before[0].id, before[1].id);
+    assert_ne!(before[1].id, before[2].id);
+    let loc = |location, sequence| CardLocationInfo {
+        controller: Some(Player::Player),
+        location: CardLocationKind::Known(location),
+        sequence,
+        position: CardLocationPosition::Position(CardPositionFlags::FACE_UP_ATTACK),
+    };
+    snapshot
+        .cards
+        .apply(&CoreMessage::Move(MoveMessageData {
+            card_code: 42,
+            previous: loc(CardLocation::Hand, 0),
+            current: loc(CardLocation::MonsterZone, 0),
+            reason: MoveReason::EFFECT,
+        }))
+        .unwrap();
+    snapshot.hand = vec![
+        HandCard { index: 0, code: 42 },
+        HandCard { index: 1, code: 42 },
+    ];
+    snapshot.monsters[0] = Some(CardData {
+        card_code: 42,
+        controller: Player::Player,
+        location: CardLocation::MonsterZone,
+        sequence: 0,
+        ..Default::default()
+    });
+    let after = targets(&snapshot, &geometry).unwrap();
+    assert_eq!(after[0].id, before[0].id);
+    assert_eq!(after[1].id, before[1].id);
+    assert_eq!(after[2].id, before[2].id);
+    assert_eq!(after[1].data.sequence, 0);
+    assert_eq!(after[2].data.sequence, 1);
+    assert_eq!(after[1].rotation, -1.0);
+    assert_eq!(after[2].rotation, 1.0);
 }

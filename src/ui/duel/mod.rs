@@ -12,8 +12,6 @@ mod main_deck;
 mod modal;
 mod persistent_card_layer;
 
-pub use hand::Hand;
-
 use dioxus::prelude::*;
 use web_sys::window;
 
@@ -151,7 +149,6 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>) -> Element {
             }
             ModalContainer {}
             FieldPreview { enabled: layered_preview }
-            Hand {}
             if let Some(CardTracking::Failed(error)) = &*tracking.read() {
                 div {
                     class: "fixed top-3 left-1/2 z-50 max-w-lg -translate-x-1/2 rounded bg-red-950 p-3 text-sm text-white shadow-lg",

@@ -7,7 +7,7 @@ use crate::ocgcore::constants::{CardLocation, Player};
 use crate::state::UIState;
 use crate::ui::card_layer::CardAddress;
 
-fn hand_transform(index: usize, hand_size: usize) -> (i32, i32) {
+pub(super) fn hand_transform(index: usize, hand_size: usize) -> (i32, i32) {
     let center = hand_size as i32 - 1;
     let distance = index as i32 * 2 - center;
     let translate_y = (distance.abs() * distance.abs() * 4) / 16;
@@ -15,7 +15,7 @@ fn hand_transform(index: usize, hand_size: usize) -> (i32, i32) {
 }
 
 #[component]
-pub fn Hand() -> Element {
+pub fn Hand(layered: bool) -> Element {
     let state = use_context::<UIState>();
     let selected_card = state.selected_card;
     let hand_cards = (state.hand_contents)();
@@ -24,6 +24,13 @@ pub fn Hand() -> Element {
     rsx!(
         div {
             class: "fixed flex flex-row justify-center self-end place-self-center inset-0 translate-y-[27.5%] z-50",
+            class: if layered { "pointer-events-none" },
+            class: if hand_size == 0 { "min-h-[14.576271vw]" },
+            LayoutAnchor {
+                anchor: Anchor::HandBase,
+                part: AnchorPart::Card,
+                class: "absolute left-1/2 top-0 w-[10vw] aspect-[59/86] -translate-x-1/2 pointer-events-none",
+            }
             for (index, card) in hand_cards.into_iter().enumerate() {
                 {
                     let address = CardAddress {
@@ -54,14 +61,16 @@ pub fn Hand() -> Element {
                                     part: AnchorPart::HandCenter,
                                     class: "absolute inset-0 pointer-events-none",
                                 }
-                                InteractiveCard {
-                                    address,
-                                    card: CardData {
-                                        card_code: card.code,
-                                        controller: Player::Player,
-                                        location: CardLocation::Hand,
-                                        ..CardData::default()
-                                    },
+                                if !layered {
+                                    InteractiveCard {
+                                        address,
+                                        card: CardData {
+                                            card_code: card.code,
+                                            controller: Player::Player,
+                                            location: CardLocation::Hand,
+                                            ..CardData::default()
+                                        },
+                                    }
                                 }
                             }
                         }

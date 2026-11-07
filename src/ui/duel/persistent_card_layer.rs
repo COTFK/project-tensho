@@ -6,7 +6,6 @@ use crate::ocgcore::CardData;
 use crate::ocgcore::constants::{CardLocation, Player};
 use crate::ocgcore::location_info::CardPositionFlags;
 use crate::ui::card_layer::{Card as TrackedCard, CardId, CardPlacement};
-use crate::ui::components::Card;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) struct CardTarget {
@@ -67,20 +66,15 @@ fn visible_card(card: TrackedCard, target: Option<CardTarget>) -> Option<(CardTa
 }
 
 #[component]
-pub(super) fn PersistentCardLayer(
-    cards: Vec<TrackedCard>,
-    targets: Vec<CardTarget>,
-    on_card_click: EventHandler<CardId>,
-) -> Element {
+pub(super) fn PersistentCardLayer(cards: Vec<TrackedCard>, targets: Vec<CardTarget>) -> Element {
     rsx! {
         div {
-            class: "fixed inset-0 pointer-events-none",
+            class: "absolute inset-0 pointer-events-none",
             for card in cards {
                 LayerCard {
                     key: "{card.id}",
                     card,
                     target: targets.iter().find(|target| target.id == card.id).copied(),
-                    on_card_click,
                 }
             }
         }
@@ -88,12 +82,9 @@ pub(super) fn PersistentCardLayer(
 }
 
 #[component]
-fn LayerCard(
-    card: TrackedCard,
-    target: Option<CardTarget>,
-    on_card_click: EventHandler<CardId>,
-) -> Element {
+fn LayerCard(card: TrackedCard, target: Option<CardTarget>) -> Element {
     let visible = visible_card(card, target);
+    let hand = matches!(card.placement, CardPlacement::Zone(address) if address.location == CardLocation::Hand);
     let style = visible.map(|(target, _)| format!(
         "--card-x: {}px; --card-y: {}px; --card-width: {}px; --card-height: {}px; --card-z: {};",
         target.anchor.center_x - target.anchor.width / 2.0,
@@ -105,36 +96,20 @@ fn LayerCard(
     rsx! {
         div {
             "data-card-id": "{card.id}",
-            class: "absolute left-0 top-0 pointer-events-none [transform:translate(var(--card-x),var(--card-y))] w-[var(--card-width)] h-[var(--card-height)] z-[var(--card-z)]",
+            class: "fixed left-0 top-0 pointer-events-none [transform:translate(var(--card-x),var(--card-y))] w-[var(--card-width)] h-[var(--card-height)] z-[var(--card-z)]",
+            class: if hand { "[transition:transform_150ms_ease-in-out]" },
             class: if visible.is_none() { "hidden" },
             style,
             if let Some((target, facedown)) = visible {
                 div {
                     class: "w-full h-full [transform:rotate(var(--card-rotation))]",
+                    class: if hand { "[transition:transform_150ms_ease-in-out]" },
                     style: "--card-rotation: {target.rotation}deg;",
                     div {
                         class: "w-full h-full",
                         class: if target.interactive { "pointer-events-auto" } else { "pointer-events-none" },
                         if let CardPlacement::Zone(address) = card.placement {
-                            if address.location == CardLocation::Hand {
-                                Card {
-                                    card: target.data,
-                                    class: "w-full",
-                                    is_selected: false,
-                                    show_highlight_on_select: false,
-                                    show_dotted_highlight: false,
-                                    show_blue_aura: false,
-                                    show_orange_aura: false,
-                                    facedown,
-                                    use_extra_deck_back: false,
-                                    onclick: move |event: MouseEvent| {
-                                        event.stop_propagation();
-                                        on_card_click.call(card.id);
-                                    },
-                                }
-                            } else {
-                                InteractiveCard { card: target.data, address, layered: true, force_facedown: facedown }
-                            }
+                            InteractiveCard { card: target.data, address, layered: true, force_facedown: facedown }
                         }
                     }
                 }
