@@ -149,7 +149,10 @@ pub(crate) fn movements(before: &CardLayer, after: &CardLayer) -> Vec<CardId> {
 }
 
 pub(crate) async fn wait_for_animation() {
-    let millis = ANIMATION_MILLIS + COMPLETION_MARGIN_MILLIS;
+    wait_millis(ANIMATION_MILLIS + COMPLETION_MARGIN_MILLIS).await;
+}
+
+pub(crate) async fn wait_millis(millis: u32) {
     #[cfg(target_arch = "wasm32")]
     gloo_timers::future::TimeoutFuture::new(millis).await;
     #[cfg(not(target_arch = "wasm32"))]
@@ -158,11 +161,11 @@ pub(crate) async fn wait_for_animation() {
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(u64::from(millis)));
             if sender.send(()).is_err() {
-                tracing::debug!("Animation timer was cancelled");
+                tracing::debug!("Timer was cancelled");
             }
         });
         if let Err(error) = receiver.await {
-            tracing::error!("Animation timer failed: {error}");
+            tracing::error!("Timer failed: {error}");
         }
     }
 }

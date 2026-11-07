@@ -3,7 +3,7 @@ use dioxus::prelude::*;
 use super::card_interaction::InteractiveCard;
 use super::layout_anchors::CardAnchor;
 use crate::ocgcore::CardData;
-use crate::ocgcore::constants::{CardLocation, Player};
+use crate::ocgcore::constants::{BattlePosition, CardLocation, Player};
 use crate::ocgcore::location_info::CardPositionFlags;
 use crate::ui::card_layer::{Card as TrackedCard, CardAddress, CardId, CardPlacement};
 use crate::ui::card_playback::CardPlayback;
@@ -93,6 +93,27 @@ fn visible_card(card: TrackedCard, target: Option<CardTarget>) -> Option<(CardTa
     Some((target, facedown))
 }
 
+pub(super) fn card_image(card: TrackedCard, target: Option<CardTarget>) -> Option<CardImage> {
+    let (target, facedown) = visible_card(card, target)?;
+    Some(match target.appearance {
+        CardAppearance::Pile(image) => image,
+        _ if facedown
+            || (target.address.location != CardLocation::Hand
+                && matches!(
+                    target.data.position,
+                    Some(
+                        BattlePosition::FaceDown
+                            | BattlePosition::FaceDownAttack
+                            | BattlePosition::FaceDownDefense
+                    )
+                )) =>
+        {
+            CardImage::CardBack
+        }
+        _ => CardImage::Face(target.data),
+    })
+}
+
 #[component]
 pub(super) fn PersistentCardLayer(cards: Vec<TrackedCard>, targets: Vec<CardTarget>) -> Element {
     let mut cards = cards;
@@ -167,10 +188,7 @@ fn LayerCard(card: TrackedCard, target: Option<CardTarget>) -> Element {
                             force_facedown: facedown,
                             passive: target.appearance != CardAppearance::Interactive,
                             animated: animating,
-                            image: match target.appearance {
-                                CardAppearance::Pile(image) => Some(image),
-                                _ => None,
-                            },
+                            image: card_image(card, Some(target)),
                         }
                     }
                 }

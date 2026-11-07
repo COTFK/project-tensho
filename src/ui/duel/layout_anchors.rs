@@ -57,8 +57,26 @@ pub(super) struct CardAnchor {
     pub height: f64,
 }
 
+#[derive(Debug)]
+pub(super) struct AnchorNotReady(&'static str);
+
+impl std::fmt::Display for AnchorNotReady {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.0)
+    }
+}
+
+impl std::error::Error for AnchorNotReady {}
+
 impl CardAnchor {
     fn from_rects(center: PixelsRect, size: PixelsRect) -> anyhow::Result<Self> {
+        if center.size.width == 0.0
+            || center.size.height == 0.0
+            || size.size.width == 0.0
+            || size.size.height == 0.0
+        {
+            return Err(AnchorNotReady("Card anchor has no size yet").into());
+        }
         ensure!(
             center.size.width.is_finite()
                 && center.size.height.is_finite()
@@ -116,12 +134,12 @@ impl LayoutAnchors {
             (
                 anchors
                     .get(&center_key)
-                    .context("Card center anchor not mounted")?
+                    .context(AnchorNotReady("Card center anchor not mounted"))?
                     .1
                     .clone(),
                 anchors
                     .get(&size_key)
-                    .context("Card size anchor not mounted")?
+                    .context(AnchorNotReady("Card size anchor not mounted"))?
                     .1
                     .clone(),
             )
@@ -156,7 +174,7 @@ impl LayoutAnchors {
             .0
             .borrow()
             .get(&key)
-            .context("Hand anchor not mounted")?
+            .context(AnchorNotReady("Hand anchor not mounted"))?
             .1
             .clone();
         let rect = element
