@@ -1,6 +1,6 @@
-use super::card_database::CardDatabase;
-use super::labels::build_card_label;
-use super::{COURTIER_API_URL, courtier_card_id_batches, courtier_card_id_query};
+use super::card_catalog::CardCatalog;
+use super::card_text::build_card_text;
+use super::{COURTIER_API_URL, courtier_card_code_batches, courtier_card_code_query};
 use crate::ocgcore::CardType;
 use ocgcore_ffi::constants::{
     ATTRIBUTE_DARK, ATTRIBUTE_DIVINE, ATTRIBUTE_EARTH, ATTRIBUTE_FIRE, ATTRIBUTE_LIGHT,
@@ -236,24 +236,27 @@ impl TryFrom<CourtierCardData> for OCG_CardData {
     }
 }
 
-pub async fn fetch_card_data(
-    card_ids: Vec<u32>,
+pub async fn fetch_card_definitions(
+    card_codes: Vec<u32>,
     archetype_script: &[u8],
-) -> anyhow::Result<CardDatabase> {
+) -> anyhow::Result<CardCatalog> {
     let url = format!("{COURTIER_API_URL}/v1/cards");
 
     let client = reqwest::Client::new();
     let mut seen = HashSet::new();
-    let requested: Vec<u32> = card_ids.into_iter().filter(|id| seen.insert(*id)).collect();
+    let requested: Vec<u32> = card_codes
+        .into_iter()
+        .filter(|code| seen.insert(*code))
+        .collect();
 
     let archetypes = parse_archetype_setcodes(std::str::from_utf8(archetype_script)?)?;
 
-    let mut db = CardDatabase::new();
+    let mut db = CardCatalog::new();
 
-    for batch in courtier_card_id_batches(&requested) {
+    for batch in courtier_card_code_batches(&requested) {
         let card_data = client
             .get(&url)
-            .query(&courtier_card_id_query(batch))
+            .query(&courtier_card_code_query(batch))
             .send()
             .await?
             .error_for_status()?
@@ -264,14 +267,14 @@ pub async fn fetch_card_data(
             let setcodes = card_setcodes(&card, &archetypes);
             let name = card.display_name();
             let data = OCG_CardData::try_from(card)?;
-            let labels = build_card_label(data.code, name);
-            db.insert(data.code, data, &setcodes, labels);
+            let text = build_card_text(data.code, name);
+            db.insert(data.code, data, &setcodes, text);
         }
     }
 
     let missing: Vec<u32> = requested
         .into_iter()
-        .filter(|id| db.get(*id).is_none())
+        .filter(|code| db.get(*code).is_none())
         .collect();
     if !missing.is_empty() {
         anyhow::bail!("Courtier returned no card data for: {missing:?}");

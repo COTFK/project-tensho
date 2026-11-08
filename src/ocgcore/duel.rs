@@ -11,12 +11,12 @@ use ocgcore_ffi::types::OCG_QueryInfo;
 
 use super::OCGCore;
 use super::constants::CardLocation;
-use crate::ocgcore::CardData;
+use crate::ocgcore::DuelCardData;
 use crate::ocgcore::Response;
 use crate::ocgcore::constants::Player;
 use crate::ocgcore::messages::CoreMessage;
 use crate::ocgcore::messages::parse_messages;
-use crate::ocgcore::query::decode_location;
+use crate::ocgcore::query::decode_card_queries;
 use ocgcore_ffi::enums::OCG_DuelStatus;
 
 struct DuelInner {
@@ -93,7 +93,7 @@ impl Duel {
         &self,
         player: Player,
         location: CardLocation,
-    ) -> anyhow::Result<Vec<Option<CardData>>> {
+    ) -> anyhow::Result<Vec<Option<DuelCardData>>> {
         let mut flags = QUERY_CODE | QUERY_POSITION | QUERY_TYPE;
         if matches!(
             location,
@@ -119,7 +119,7 @@ impl Duel {
         assert!(!ptr.is_null(), "Core returned a null query buffer");
         // Decode before another core call can invalidate the query buffer.
         let data = unsafe { std::slice::from_raw_parts(ptr, length as usize) };
-        decode_location(data, player, location)
+        decode_card_queries(data, player, location)
     }
 
     pub fn add_card(

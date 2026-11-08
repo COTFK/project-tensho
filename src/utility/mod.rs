@@ -1,18 +1,18 @@
-mod card_database;
+mod card_catalog;
+mod card_text;
 mod courtier;
 mod deck;
-mod labels;
 pub mod macros;
 mod script;
 
-pub use card_database::get_card_data;
-pub use card_database::get_card_label;
-pub use card_database::store_card_data;
+pub use card_catalog::get_card_text;
+pub use card_catalog::read_card_definition;
+pub use card_catalog::store_card_definitions;
+pub use card_text::get_optional_string_label;
 pub use courtier::ARCHETYPE_SCRIPT;
-pub use courtier::fetch_card_data;
-pub use deck::EXTRA_DECK_IDS;
-pub use deck::MAIN_DECK_IDS;
-pub use labels::get_optional_string_label;
+pub use courtier::fetch_card_definitions;
+pub use deck::EXTRA_DECK_CODES;
+pub use deck::MAIN_DECK_CODES;
 pub use script::Scripts;
 pub use script::cache_scripts;
 
@@ -30,20 +30,23 @@ pub const COURTIER_API_URL: &str = env!("COURTIER_API_URL");
 
 const COURTIER_CARD_BATCH_SIZE: usize = 100;
 
-fn courtier_card_id_batches(ids: &[u32]) -> std::slice::Chunks<'_, u32> {
-    ids.chunks(COURTIER_CARD_BATCH_SIZE)
+fn courtier_card_code_batches(codes: &[u32]) -> std::slice::Chunks<'_, u32> {
+    codes.chunks(COURTIER_CARD_BATCH_SIZE)
 }
 
-fn courtier_card_id_query(ids: &[u32]) -> Vec<(&'static str, String)> {
-    ids.iter().map(|id| ("ids", format!("{id:08}"))).collect()
+fn courtier_card_code_query(codes: &[u32]) -> Vec<(&'static str, String)> {
+    codes
+        .iter()
+        .map(|code| ("ids", format!("{code:08}")))
+        .collect()
 }
 
-pub fn card_image_url(id: u32) -> String {
-    format!("{COURTIER_API_URL}/v1/images/{id:08}")
+pub fn card_image_url(code: u32) -> String {
+    format!("{COURTIER_API_URL}/v1/images/{code:08}")
 }
 
-pub fn card_thumbnail_url(id: u32) -> String {
-    format!("{}/thumbnail", card_image_url(id))
+pub fn card_thumbnail_url(code: u32) -> String {
+    format!("{}/thumbnail", card_image_url(code))
 }
 
 #[cfg(test)]

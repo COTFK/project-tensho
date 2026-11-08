@@ -12,7 +12,7 @@ fn parses_sample_selected_card() {
         CoreMessage::try_from(SAMPLE.as_slice()).unwrap(),
         CoreMessage::CardSelected(CardSelectedMessageData {
             cards: vec![CardLocationInfo {
-                controller: Some(Player::Player),
+                controller: Some(Player::Local),
                 location: CardLocationKind::Known(CardLocation::MonsterZone),
                 sequence: 5,
                 position: CardLocationPosition::Position(CardPositionFlags::FACE_UP_ATTACK),

@@ -1,15 +1,15 @@
 use dioxus::prelude::*;
 
 use crate::duel::cards::CardAddress;
-use crate::duel::input::{CardAction, CardActions, PendingInput};
-use crate::ocgcore::CardData;
+use crate::duel::input::{CardActionOptions, CardIntent, PendingInput};
+use crate::ocgcore::DuelCardData;
 use crate::ocgcore::constants::{BattlePosition, CardLocation};
 use crate::ui::components::svg::{BoltShieldIcon, LightningTrioIcon, SummonIcon};
-use crate::ui::components::{ActionButton, Card, CardActionMenu, CardImage};
+use crate::ui::components::{Card, CardActionMenu, CardImage, LabeledIconButton};
 
 #[component]
-pub(super) fn InteractiveCard(
-    card: CardData,
+pub(super) fn CardWithActions(
+    card: DuelCardData,
     address: CardAddress,
     image: CardImage,
     #[props(default)] passive: bool,
@@ -18,14 +18,14 @@ pub(super) fn InteractiveCard(
     suppress: bool,
 ) -> Element {
     let pending = use_context::<ReadSignal<Option<PendingInput>>>();
-    let onaction = use_context::<EventHandler<CardAction>>();
+    let onaction = use_context::<EventHandler<CardIntent>>();
     let actions = if passive {
-        CardActions::default()
+        CardActionOptions::default()
     } else {
         pending
             .read()
             .as_ref()
-            .map(|input| input.card_actions(address))
+            .map(|input| input.card_action_options(address))
             .unwrap_or_default()
     };
     let hand = address.location == CardLocation::Hand;
@@ -62,34 +62,34 @@ pub(super) fn InteractiveCard(
                 class: menu_class,
                 trigger: selected && !suppress && (can_activate || (hand && (actions.summon.is_some() || can_set))),
                 if hand && actions.summon.is_some() {
-                    ActionButton {
+                    LabeledIconButton {
                         label: "Summon",
                         class: "border-cyan-500 text-cyan-300",
                         onclick: move |event: MouseEvent| {
                             event.stop_propagation();
-                            onaction.call(CardAction::Summon(address));
+                            onaction.call(CardIntent::Summon(address));
                         },
                         SummonIcon {}
                     }
                 }
                 if can_activate {
-                    ActionButton {
+                    LabeledIconButton {
                         label: "Activate",
                         class: "border-yellow-500 text-yellow-300",
                         onclick: move |event: MouseEvent| {
                             event.stop_propagation();
-                            onaction.call(CardAction::Activate(address));
+                            onaction.call(CardIntent::Activate(address));
                         },
                         LightningTrioIcon {}
                     }
                 }
                 if hand && can_set {
-                    ActionButton {
+                    LabeledIconButton {
                         label: "Set",
                         class: "border-orange-500 text-orange-400",
                         onclick: move |event: MouseEvent| {
                             event.stop_propagation();
-                            onaction.call(CardAction::Set(address));
+                            onaction.call(CardIntent::Set(address));
                         },
                         BoltShieldIcon {}
                     }
@@ -107,7 +107,7 @@ pub(super) fn InteractiveCard(
                 onclick: move |event: MouseEvent| {
                     event.stop_propagation();
                     if passive { return; }
-                    onaction.call(CardAction::Select(address));
+                    onaction.call(CardIntent::Select(address));
                 },
             }
         }

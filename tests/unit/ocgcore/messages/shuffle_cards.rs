@@ -12,7 +12,7 @@ fn parses_sample_shuffled_hand_in_order() {
     assert_eq!(
         CoreMessage::try_from(SAMPLE.as_slice()).unwrap(),
         CoreMessage::ShuffleHand(ShuffleCardsMessageData {
-            player: Player::Player,
+            player: Player::Local,
             card_codes: vec![97_268_402, 97_268_402, 65_305_978, 40_366_667, 44_455_560],
         })
     );
@@ -25,7 +25,7 @@ fn parses_extra_deck_with_the_same_wire_format() {
     assert_eq!(
         CoreMessage::try_from(bytes.as_slice()).unwrap(),
         CoreMessage::ShuffleExtra(ShuffleCardsMessageData {
-            player: Player::Player,
+            player: Player::Local,
             card_codes: vec![97_268_402, 97_268_402, 65_305_978, 40_366_667, 44_455_560],
         })
     );
@@ -48,7 +48,7 @@ fn preserves_hidden_codes_and_empty_hands() {
     assert_eq!(
         CoreMessage::try_from([6, 0, 0, 0, 33, 0, 0, 0, 0, 0].as_slice()).unwrap(),
         CoreMessage::ShuffleHand(ShuffleCardsMessageData {
-            player: Player::Player,
+            player: Player::Local,
             card_codes: vec![],
         })
     );
@@ -87,7 +87,7 @@ fn parses_shuffled_hand_among_framed_messages() {
         parse_messages(&bytes).unwrap().as_slice(),
         [
             CoreMessage::NewPhase(_),
-            CoreMessage::ShuffleHand(ShuffleCardsMessageData { player: Player::Player, card_codes }),
+            CoreMessage::ShuffleHand(ShuffleCardsMessageData { player: Player::Local, card_codes }),
             CoreMessage::SpecialSummoned
         ] if card_codes.len() == 5
     ));

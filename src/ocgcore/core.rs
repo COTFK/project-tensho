@@ -18,7 +18,7 @@ pub use super::duel::Duel;
 
 /// The internal structure that our FFI `payload` will point to.
 /// This groups everything the trampolines need to do their job.
-pub(super) struct DuelContext {
+pub(super) struct CoreCallbacks {
     pub script_reader: ScriptReaderFn,
     pub card_reader: CardReaderFn,
     pub log_handler: LogHandlerFn,
@@ -26,7 +26,7 @@ pub(super) struct DuelContext {
 
 #[derive(Clone)]
 pub struct OCGCore {
-    _context: Rc<DuelContext>,
+    _context: Rc<CoreCallbacks>,
 }
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
@@ -41,7 +41,7 @@ impl OCGCore {
     ) -> anyhow::Result<Self> {
         ocgcore_ffi::initialize().await;
 
-        let _context = Rc::new(DuelContext {
+        let _context = Rc::new(CoreCallbacks {
             card_reader,
             script_reader,
             log_handler,
@@ -57,7 +57,7 @@ impl OCGCore {
     pub fn create_duel(&self, starting_draw_count: u32) -> anyhow::Result<Duel> {
         let mut duel: OCG_Duel = std::ptr::null_mut();
 
-        let payload_ptr = &*self._context as *const DuelContext as *mut c_void;
+        let payload_ptr = &*self._context as *const CoreCallbacks as *mut c_void;
         let options = OCG_DuelOptions {
             seed: [
                 rand::random(),

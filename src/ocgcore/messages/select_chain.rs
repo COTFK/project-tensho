@@ -1,11 +1,11 @@
 use crate::ocgcore::constants::CardLocation;
 use crate::ocgcore::constants::Player;
-use crate::ocgcore::data::CardData;
+use crate::ocgcore::data::DuelCardData;
 
 #[derive(Hash, Debug, Clone, PartialEq, Eq)]
 pub struct SelectChainMessageData {
     pub player: u8,
-    pub effects: Vec<CardData>,
+    pub effects: Vec<DuelCardData>,
 }
 
 impl TryFrom<&[u8]> for SelectChainMessageData {
@@ -30,7 +30,7 @@ impl TryFrom<&[u8]> for SelectChainMessageData {
                 let location = CardLocation::try_from(bytes[offset + 5])?;
                 let sequence = bytes[offset + 6];
 
-                effects.push(CardData {
+                effects.push(DuelCardData {
                     action_index: Some(index as u8),
                     card_code,
                     controller,

@@ -24,7 +24,7 @@ fn sample() -> Vec<u8> {
 fn decodes_set_shuffle_with_revealed_and_concealed_destinations() {
     let bytes = sample();
     let first = CardLocationInfo {
-        controller: Some(Player::Player),
+        controller: Some(Player::Local),
         location: CardLocationKind::Known(CardLocation::MonsterZone),
         sequence: 256,
         position: CardLocationPosition::Position(CardPositionFlags::FACE_DOWN_DEFENSE),

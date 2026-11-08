@@ -8,7 +8,7 @@ use crate::ocgcore::messages::{CoreMessage, MoveMessageData};
 
 pub(crate) fn location(address: Option<CardAddress>) -> CardLocationInfo {
     CardLocationInfo {
-        controller: Some(address.map_or(Player::Player, |address| address.controller)),
+        controller: Some(address.map_or(Player::Local, |address| address.controller)),
         location: address.map_or(CardLocationKind::None, |address| {
             CardLocationKind::Known(address.location)
         }),

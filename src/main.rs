@@ -7,9 +7,9 @@ mod utility;
 
 use dioxus::prelude::*;
 
-use crate::duel::controller::cache_cards;
+use crate::duel::controller::cache_duel_scripts;
 use crate::duel::controller::load_core;
-use crate::ui::DuelWrapper;
+use crate::ui::DuelHost;
 use crate::ui::LoadingScreen;
 use crate::ui::RotateDeviceOverlay;
 use crate::utility::BUILD_VERSION;
@@ -31,8 +31,8 @@ fn main() {
 
 #[component]
 pub fn App(hand: Option<String>) -> Element {
-    let cache_resource = use_resource(cache_cards);
-    let scripts = match &*cache_resource.read() {
+    let scripts_resource = use_resource(cache_duel_scripts);
+    let scripts = match &*scripts_resource.read() {
         None => return rsx! {LoadingScreen {  }},
         Some(Err(e)) => return rsx!("{e:#?}"),
         Some(Ok(scripts)) => scripts.clone(),
@@ -45,7 +45,7 @@ pub fn App(hand: Option<String>) -> Element {
 
     rsx!(
         RotateDeviceOverlay {}
-        DuelWrapper {
+        DuelHost {
             core_resource: core_resource,
             custom_hand: hand,
         }

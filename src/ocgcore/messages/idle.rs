@@ -1,18 +1,22 @@
 use crate::ocgcore::constants::{CardLocation, Player};
-use crate::ocgcore::data::CardData;
+use crate::ocgcore::data::DuelCardData;
 use crate::ocgcore::utility::{read_u8, read_u32, read_u64};
 
 #[derive(Hash, Debug, Clone, PartialEq, Eq, Default)]
 pub struct IdleMessageData {
     pub playerid: u8,
-    pub normal_summons: Vec<CardData>,
-    pub special_summons: Vec<CardData>,
-    pub monster_sets: Vec<CardData>,
-    pub spell_trap_sets: Vec<CardData>,
-    pub activatable_effects: Vec<CardData>,
+    pub normal_summons: Vec<DuelCardData>,
+    pub special_summons: Vec<DuelCardData>,
+    pub monster_sets: Vec<DuelCardData>,
+    pub spell_trap_sets: Vec<DuelCardData>,
+    pub activatable_effects: Vec<DuelCardData>,
 }
 
-fn read_cards(bytes: &[u8], cursor: &mut usize, effects: bool) -> anyhow::Result<Vec<CardData>> {
+fn read_cards(
+    bytes: &[u8],
+    cursor: &mut usize,
+    effects: bool,
+) -> anyhow::Result<Vec<DuelCardData>> {
     let count = read_u32(bytes, cursor, "idle card count")? as usize;
     let width = if effects { 19 } else { 10 };
     anyhow::ensure!(
@@ -32,7 +36,7 @@ fn read_cards(bytes: &[u8], cursor: &mut usize, effects: bool) -> anyhow::Result
         } else {
             None
         };
-        cards.push(CardData {
+        cards.push(DuelCardData {
             card_code,
             controller,
             location,

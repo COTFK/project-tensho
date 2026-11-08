@@ -17,7 +17,7 @@ fn parses_sample_confirm_cards() {
             player: Player::Opponent,
             cards: vec![ConfirmedCard {
                 card_code: 65_305_978,
-                controller: Some(Player::Player),
+                controller: Some(Player::Local),
                 location: CardLocationKind::Known(CardLocation::Hand),
                 sequence: 4,
             }],
@@ -48,7 +48,7 @@ fn parses_empty_and_multiple_cards_with_full_width_values() {
     assert_eq!(
         CoreMessage::try_from(empty.as_slice()).unwrap(),
         CoreMessage::ConfirmCards(ConfirmCardsMessageData {
-            player: Player::Player,
+            player: Player::Local,
             cards: vec![],
         })
     );

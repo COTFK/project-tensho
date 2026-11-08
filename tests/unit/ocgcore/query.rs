@@ -21,8 +21,8 @@ fn frame(payload: &[u8]) -> Vec<u8> {
     .concat()
 }
 
-fn decode(bytes: &[u8]) -> anyhow::Result<Vec<Option<CardData>>> {
-    decode_location(bytes, Player::Opponent, CardLocation::MonsterZone)
+fn decode(bytes: &[u8]) -> anyhow::Result<Vec<Option<DuelCardData>>> {
+    decode_card_queries(bytes, Player::Opponent, CardLocation::MonsterZone)
 }
 
 #[test]
@@ -55,7 +55,7 @@ fn decodes_properties_and_preserves_slot_order() {
         decode(&frame(&payload)).unwrap(),
         vec![
             None,
-            Some(CardData {
+            Some(DuelCardData {
                 card_code: 12345,
                 controller: Player::Opponent,
                 location: CardLocation::MonsterZone,
@@ -70,7 +70,7 @@ fn decodes_properties_and_preserves_slot_order() {
                 ..Default::default()
             }),
             None,
-            Some(CardData {
+            Some(DuelCardData {
                 card_code: 12345,
                 controller: Player::Opponent,
                 location: CardLocation::MonsterZone,

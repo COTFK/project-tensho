@@ -65,7 +65,7 @@ impl Subscriber for RecordingSubscriber {
 fn callback_preserves_core_log_severity_and_message() {
     let subscriber = RecordingSubscriber::default();
     let events = subscriber.events.clone();
-    let mut context = DuelContext {
+    let mut context = CoreCallbacks {
         card_reader: |_| panic!("Unexpected card lookup"),
         script_reader: Box::new(|_| None),
         log_handler: log_core_message,
@@ -81,7 +81,7 @@ fn callback_preserves_core_log_severity_and_message() {
         ] {
             unsafe {
                 log_handler_trampoline(
-                    (&mut context as *mut DuelContext).cast(),
+                    (&mut context as *mut CoreCallbacks).cast(),
                     message.as_ptr(),
                     kind,
                 )

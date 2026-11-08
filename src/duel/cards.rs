@@ -1,7 +1,7 @@
 use anyhow::{Context, ensure};
 use ocgcore_ffi::constants::{MSG_RELOAD_FIELD, MSG_TAG_SWAP};
 
-use crate::ocgcore::CardData;
+use crate::ocgcore::DuelCardData;
 use crate::ocgcore::constants::{CardLocation, Player};
 use crate::ocgcore::location_info::{
     CardLocationInfo, CardLocationKind, CardLocationPosition, CardPositionFlags,
@@ -12,9 +12,9 @@ use crate::ocgcore::messages::{
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct CardId(u64);
+pub(crate) struct CardInstanceId(u64);
 
-impl std::fmt::Display for CardId {
+impl std::fmt::Display for CardInstanceId {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(formatter)
     }
@@ -30,35 +30,35 @@ pub(crate) struct CardAddress {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CardPlacement {
     Zone(CardAddress),
-    Overlay { host: CardId, sequence: u32 },
+    Overlay { host: CardInstanceId, sequence: u32 },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct Card {
-    pub id: CardId,
+pub(crate) struct TrackedCard {
+    pub id: CardInstanceId,
     pub code: u32,
     pub placement: CardPlacement,
     pub position: Option<CardPositionFlags>,
-    pub data: Option<CardData>,
+    pub data: Option<DuelCardData>,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub(crate) struct CardTracker {
-    cards: Vec<Card>,
+    cards: Vec<TrackedCard>,
     next_id: u64,
 }
 
 impl CardTracker {
     pub fn from_decks(main_deck: &[u32], extra_deck: &[u32]) -> anyhow::Result<Self> {
-        let mut layer = Self::default();
+        let mut tracker = Self::default();
         for (location, codes) in [
             (CardLocation::Deck, main_deck),
             (CardLocation::ExtraDeck, extra_deck),
         ] {
             for (sequence, &code) in codes.iter().enumerate() {
-                layer.insert(
+                tracker.insert(
                     CardAddress {
-                        controller: Player::Player,
+                        controller: Player::Local,
                         location,
                         sequence: sequence as u32,
                     },
@@ -66,16 +66,16 @@ impl CardTracker {
                 )?;
             }
         }
-        Ok(layer)
+        Ok(tracker)
     }
 
-    pub fn insert(&mut self, address: CardAddress, code: u32) -> anyhow::Result<CardId> {
+    pub fn insert(&mut self, address: CardAddress, code: u32) -> anyhow::Result<CardInstanceId> {
         ensure!(
             self.card_at(address).is_none(),
             "Card address is already occupied"
         );
         let id = self.allocate_id();
-        self.cards.push(Card {
+        self.cards.push(TrackedCard {
             id,
             code,
             placement: CardPlacement::Zone(address),
@@ -85,21 +85,21 @@ impl CardTracker {
         Ok(id)
     }
 
-    pub fn cards(&self) -> &[Card] {
+    pub fn cards(&self) -> &[TrackedCard] {
         &self.cards
     }
 
-    pub fn card_at(&self, address: CardAddress) -> Option<&Card> {
+    pub fn card_at(&self, address: CardAddress) -> Option<&TrackedCard> {
         self.cards
             .iter()
             .find(|card| card.placement == CardPlacement::Zone(address))
     }
 
-    pub fn card_by_id(&self, id: CardId) -> Option<&Card> {
+    pub fn card_by_id(&self, id: CardInstanceId) -> Option<&TrackedCard> {
         self.cards.iter().find(|card| card.id == id)
     }
 
-    pub fn card_at_location(&self, info: CardLocationInfo) -> anyhow::Result<Option<&Card>> {
+    pub fn card_at_location(&self, info: CardLocationInfo) -> anyhow::Result<Option<&TrackedCard>> {
         let Some(placement) = self.placement_from(info)? else {
             return Ok(None);
         };
@@ -109,7 +109,7 @@ impl CardTracker {
     pub fn update_queried_data(
         &mut self,
         address: CardAddress,
-        data: CardData,
+        data: DuelCardData,
     ) -> anyhow::Result<()> {
         let card = self
             .cards
@@ -117,19 +117,19 @@ impl CardTracker {
             .find(|card| card.placement == CardPlacement::Zone(address))
             .with_context(|| format!("No tracked card for queried data at {address:?}"))?;
         if address.location == CardLocation::Graveyard {
-            Self::update_code(card, data.card_code);
+            Self::update_code_if_known(card, data.card_code);
         }
         card.data = Some(data);
         Ok(())
     }
 
-    pub fn zone_data(&self, location: CardLocation) -> Option<Vec<Option<CardData>>> {
+    pub fn zone_data(&self, location: CardLocation) -> Option<Vec<Option<DuelCardData>>> {
         let mut data = Vec::new();
         for card in &self.cards {
             let CardPlacement::Zone(address) = card.placement else {
                 continue;
             };
-            if address.controller != Player::Player || address.location != location {
+            if address.controller != Player::Local || address.location != location {
                 continue;
             }
             let index = usize::try_from(address.sequence).ok()?;
@@ -215,9 +215,9 @@ impl CardTracker {
 
     fn apply_swap(&mut self, message: &SwapMessageData) -> anyhow::Result<()> {
         let (first, first_placement) =
-            self.swap_card_source(message.first_location, message.first_code)?;
+            self.prepare_swap_source(message.first_location, message.first_code)?;
         let (second, second_placement) =
-            self.swap_card_source(message.second_location, message.second_code)?;
+            self.prepare_swap_source(message.second_location, message.second_code)?;
         self.cards[first].placement = second_placement;
         self.cards[second].placement = first_placement;
         Ok(())
@@ -348,7 +348,7 @@ impl CardTracker {
         Ok(())
     }
 
-    fn swap_card_source(
+    fn prepare_swap_source(
         &mut self,
         info: CardLocationInfo,
         code: u32,
@@ -367,7 +367,7 @@ impl CardTracker {
             .position(|card| card.placement == placement)
             .context("No card at swap location")?;
         let card = &mut self.cards[index];
-        Self::update_code(card, code);
+        Self::update_code_if_known(card, code);
         card.position = Some(position);
         Ok((index, placement))
     }
@@ -400,7 +400,7 @@ impl CardTracker {
     }
 
     fn reverse_decks(&mut self) {
-        for player in [Player::Player, Player::Opponent] {
+        for player in [Player::Local, Player::Opponent] {
             let len = self.pile_len(player, CardLocation::Deck);
             for card in &mut self.cards {
                 if let CardPlacement::Zone(address) = &mut card.placement {
@@ -445,7 +445,7 @@ impl CardTracker {
                 .iter_mut()
                 .find(|card| card.placement == CardPlacement::Zone(address))
                 .context("No card at confirmed top location")?;
-            Self::update_code(card, confirmed.card_code);
+            Self::update_code_if_known(card, confirmed.card_code);
         }
         Ok(())
     }
@@ -463,7 +463,7 @@ impl CardTracker {
                 "Shuffle card count does not match the tracked pile"
             );
         }
-        let cards: Vec<Card> = (0..len)
+        let cards: Vec<TrackedCard> = (0..len)
             .map(|sequence| {
                 self.card_at(CardAddress {
                     controller: player,
@@ -514,7 +514,7 @@ impl CardTracker {
                 card.code = code.unwrap_or(0);
                 card.position = None;
             } else if let Some(code) = code {
-                Self::update_code(card, code);
+                Self::update_code_if_known(card, code);
             }
         }
         Ok(())
@@ -525,10 +525,10 @@ impl CardTracker {
             message.previous.len() == message.current.len(),
             "Set-card shuffle location counts do not match"
         );
-        let mut sources: Vec<(Card, CardAddress, CardPositionFlags)> =
+        let mut sources: Vec<(TrackedCard, CardAddress, CardPositionFlags)> =
             Vec::with_capacity(message.previous.len());
         for &info in &message.previous {
-            let (address, position) = self.set_shuffle_location(info)?;
+            let (address, position) = self.resolve_set_shuffle_location(info)?;
             let card = *self
                 .card_at(address)
                 .context("Set-card shuffle source is empty")?;
@@ -539,7 +539,7 @@ impl CardTracker {
         let mut used = Vec::new();
         for (index, info) in message.current.iter().enumerate() {
             if let Some(info) = info {
-                let (address, _) = self.set_shuffle_location(*info)?;
+                let (address, _) = self.resolve_set_shuffle_location(*info)?;
                 destinations[index] = Some(address);
                 used.push(address);
             }
@@ -596,7 +596,7 @@ impl CardTracker {
         Ok(())
     }
 
-    fn set_shuffle_location(
+    fn resolve_set_shuffle_location(
         &self,
         info: CardLocationInfo,
     ) -> anyhow::Result<(CardAddress, CardPositionFlags)> {
@@ -637,12 +637,12 @@ impl CardTracker {
             .iter_mut()
             .find(|card| card.placement == placement)
             .context("No card at appearance update location")?;
-        Self::update_code(card, code);
+        Self::update_code_if_known(card, code);
         card.position = Some(position);
         Ok(())
     }
 
-    fn update_code(card: &mut Card, code: u32) {
+    fn update_code_if_known(card: &mut TrackedCard, code: u32) {
         if code != 0 {
             card.code = code;
         }
@@ -705,7 +705,7 @@ impl CardTracker {
 
     fn place_moved_card(
         &mut self,
-        before: Option<Card>,
+        before: Option<TrackedCard>,
         current: Option<CardPlacement>,
         code: u32,
         position: Option<CardPositionFlags>,
@@ -720,7 +720,7 @@ impl CardTracker {
             } else {
                 code
             };
-            self.place_card(Card {
+            self.place_card(TrackedCard {
                 id,
                 code,
                 placement,
@@ -730,7 +730,7 @@ impl CardTracker {
         }
     }
 
-    fn remove_card(&mut self, placement: CardPlacement) -> anyhow::Result<Card> {
+    fn remove_card(&mut self, placement: CardPlacement) -> anyhow::Result<TrackedCard> {
         let index = self
             .cards
             .iter()
@@ -762,7 +762,7 @@ impl CardTracker {
         Ok(removed)
     }
 
-    fn place_card(&mut self, card: Card) {
+    fn place_card(&mut self, card: TrackedCard) {
         if let CardPlacement::Zone(address) = card.placement {
             if Self::is_pile(address.location) {
                 for other in &mut self.cards {
@@ -799,8 +799,8 @@ impl CardTracker {
         )
     }
 
-    fn allocate_id(&mut self) -> CardId {
-        let id = CardId(self.next_id);
+    fn allocate_id(&mut self) -> CardInstanceId {
+        let id = CardInstanceId(self.next_id);
         self.next_id += 1;
         id
     }

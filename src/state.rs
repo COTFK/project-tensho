@@ -4,76 +4,76 @@ use std::future::pending;
 use crate::define_ui_state;
 use crate::duel::cards::{CardAddress, CardTracker};
 use crate::duel::controller::{
-    self, DuelController, DuelSetup, process_until_input, resolve_chain_event,
+    self, DuelController, DuelSetup, process_until_blocked, resolve_chain_event,
 };
-use crate::duel::input::{CardAction, CardActions, PendingInput};
+use crate::duel::input::{CardActionOptions, CardIntent, PendingInput};
 use crate::ocgcore::OCGCore;
 use crate::ocgcore::Response;
 use crate::ocgcore::constants::CardLocation;
 use crate::ocgcore::constants::Phase;
 use crate::ocgcore::messages::CoreMessage;
 use crate::ui::card_animation::plan_animation;
-use crate::ui::playback::Playback;
-use crate::ui::view_state::ViewState;
+use crate::ui::playback::DuelPlayback;
+use crate::ui::view_state::DuelViewState;
 use ocgcore_ffi::enums::OCG_DuelStatus;
 
-pub(crate) fn current_menu_actions(
-    state: &UIState,
-    view: &ViewState,
+pub(crate) fn current_card_action_options(
+    state: &DuelState,
+    view: &DuelViewState,
     address: CardAddress,
-) -> Option<CardActions> {
+) -> Option<CardActionOptions> {
     if !view.is_selected(address, state.cards.peek().as_ref())
         || !view.effects_to_select_from.peek().is_empty()
     {
         tracing::warn!("Ignoring a stale or suppressed card action at {address:?}");
         return None;
     }
-    Some(prompt_actions(state, address))
+    Some(prompt_card_action_options(state, address))
 }
 
-fn prompt_actions(state: &UIState, address: CardAddress) -> CardActions {
+fn prompt_card_action_options(state: &DuelState, address: CardAddress) -> CardActionOptions {
     state
         .pending_input
         .read()
         .as_ref()
-        .map(|input| input.card_actions(address))
+        .map(|input| input.card_action_options(address))
         .unwrap_or_default()
 }
 
-pub(crate) fn handle_card_action(
-    mut state: UIState,
-    mut view: ViewState,
-    playback: Playback,
+pub(crate) fn handle_card_intent(
+    mut state: DuelState,
+    mut view: DuelViewState,
+    playback: DuelPlayback,
     controller: ReadSignal<Option<DuelController>>,
-    action: CardAction,
+    action: CardIntent,
 ) {
     if state.interaction_blocked(playback) {
         tracing::warn!("Ignoring card action while interaction is blocked");
         return;
     }
-    if let Some(response) = resolve_card_action(&mut state, &mut view, action) {
+    if let Some(response) = apply_card_intent(&mut state, &mut view, action) {
         send_response(state, view, playback, controller, response);
     }
 }
 
-pub(crate) fn resolve_card_action(
-    state: &mut UIState,
-    view: &mut ViewState,
-    action: CardAction,
+pub(crate) fn apply_card_intent(
+    state: &mut DuelState,
+    view: &mut DuelViewState,
+    action: CardIntent,
 ) -> Option<Response> {
     let address = match action {
-        CardAction::Select(address)
-        | CardAction::Summon(address)
-        | CardAction::Activate(address)
-        | CardAction::Set(address)
-        | CardAction::SpecialSummon(address) => address,
+        CardIntent::Select(address)
+        | CardIntent::Summon(address)
+        | CardIntent::Activate(address)
+        | CardIntent::Set(address)
+        | CardIntent::SpecialSummon(address) => address,
     };
-    if matches!(action, CardAction::Select(_)) {
-        let actions = prompt_actions(state, address);
+    if matches!(action, CardIntent::Select(_)) {
+        let actions = prompt_card_action_options(state, address);
         if address.location != CardLocation::Hand {
             if let Some(index) = actions.tribute {
                 state.pending_input.with_mut(|input| {
-                    let Some(PendingInput::Tribute { selected, .. }) = input else {
+                    let Some(PendingInput::TributeSelection { selected, .. }) = input else {
                         tracing::warn!("Tribute selection is no longer available at {address:?}");
                         return;
                     };
@@ -104,15 +104,15 @@ pub(crate) fn resolve_card_action(
             tracing::warn!("Ignoring a stale or suppressed pile action at {address:?}");
             return None;
         }
-        prompt_actions(state, address)
+        prompt_card_action_options(state, address)
     } else {
-        let Some(actions) = current_menu_actions(state, view, address) else {
+        let Some(actions) = current_card_action_options(state, view, address) else {
             return None;
         };
         actions
     };
     match action {
-        CardAction::Summon(_) => {
+        CardIntent::Summon(_) => {
             let Some(index) = actions.summon else {
                 tracing::warn!("Summon is no longer available at {address:?}");
                 return None;
@@ -120,7 +120,7 @@ pub(crate) fn resolve_card_action(
             view.selected_card.set(None);
             Some(Response::NormalSummon { index })
         }
-        CardAction::Set(_) => {
+        CardIntent::Set(_) => {
             if let Some(index) = actions.spell_trap_set {
                 view.selected_card.set(None);
                 Some(Response::SetSpellTrap { index })
@@ -132,7 +132,7 @@ pub(crate) fn resolve_card_action(
                 None
             }
         }
-        CardAction::Activate(_) => {
+        CardIntent::Activate(_) => {
             let hand = address.location == CardLocation::Hand;
             if let Some(prompted) = actions.prompted {
                 if let Some(index) = prompted.action_index {
@@ -160,18 +160,18 @@ pub(crate) fn resolve_card_action(
                 None
             }
         }
-        CardAction::SpecialSummon(_) => {
+        CardIntent::SpecialSummon(_) => {
             let Some(index) = actions.special_summon else {
                 tracing::warn!("Special summon is no longer available at {address:?}");
                 return None;
             };
             Some(Response::SpecialSummon { index })
         }
-        CardAction::Select(_) => unreachable!(),
+        CardIntent::Select(_) => unreachable!(),
     }
 }
 
-define_ui_state!(UIState {
+define_ui_state!(DuelState {
     cards: Option<CardTracker>,
     current_phase: Option<Phase>,
     pending_input: Option<PendingInput>,
@@ -180,10 +180,10 @@ define_ui_state!(UIState {
     failure: Option<String>,
 });
 
-pub(crate) fn run_game_loop(
-    mut state: UIState,
-    mut view: ViewState,
-    mut playback: Playback,
+pub(crate) fn process_duel_until_blocked(
+    mut state: DuelState,
+    mut view: DuelViewState,
+    mut playback: DuelPlayback,
     controller: ReadSignal<Option<DuelController>>,
 ) {
     let tracking = state.cards;
@@ -192,7 +192,7 @@ pub(crate) fn run_game_loop(
     }
     let controller = controller().expect("Duel context missing active controller");
     let mut duel_finished = state.duel_finished;
-    process_until_input(
+    process_until_blocked(
         || {
             let status = controller.process();
             if status == OCG_DuelStatus::OCG_DUEL_STATUS_END {
@@ -204,7 +204,7 @@ pub(crate) fn run_game_loop(
             let before = tracking.peek().as_ref().cloned();
             let messages = controller.parse_messages();
             let waiting =
-                handle_core_messages(&mut state, &mut view, &controller, &messages, playback);
+                apply_core_message_batch(&mut state, &mut view, &controller, &messages, playback);
             if (state.restarting)() || (state.failure)().is_some() {
                 return true;
             }
@@ -222,9 +222,9 @@ pub(crate) fn run_game_loop(
 }
 
 pub(crate) fn handle_right_click(
-    state: UIState,
-    mut view: ViewState,
-    playback: Playback,
+    state: DuelState,
+    mut view: DuelViewState,
+    playback: DuelPlayback,
     controller: ReadSignal<Option<DuelController>>,
     evt: MouseEvent,
 ) {
@@ -263,9 +263,9 @@ pub(crate) async fn load_duel(
 }
 
 pub(crate) fn send_response(
-    mut state: UIState,
-    mut view: ViewState,
-    playback: Playback,
+    mut state: DuelState,
+    mut view: DuelViewState,
+    playback: DuelPlayback,
     controller: ReadSignal<Option<DuelController>>,
     response: Response,
 ) {
@@ -284,42 +284,42 @@ pub(crate) fn send_response(
     view.reset();
 }
 
-impl UIState {
+impl DuelState {
     pub(crate) fn waiting_on_input(&self) -> bool {
         self.pending_input.read().is_some()
     }
 
-    pub(crate) fn interaction_blocked(&self, playback: Playback) -> bool {
+    pub(crate) fn interaction_blocked(&self, playback: DuelPlayback) -> bool {
         (self.restarting)() || (self.failure)().is_some() || playback.is_active()
     }
 
-    pub(crate) fn processing_blocked(&self, playback: Playback) -> bool {
+    pub(crate) fn processing_blocked(&self, playback: DuelPlayback) -> bool {
         self.interaction_blocked(playback) || (self.duel_finished)() || self.waiting_on_input()
     }
 
-    pub(crate) fn modals_suppressed(&self, startup_ready: bool, playback: Playback) -> bool {
+    pub(crate) fn modals_suppressed(&self, startup_ready: bool, playback: DuelPlayback) -> bool {
         (!startup_ready && (self.failure)().is_none()) || self.interaction_blocked(playback)
     }
 
-    pub(crate) fn reset_duel(&mut self, view: &mut ViewState, mut playback: Playback) {
+    pub(crate) fn reset_duel(&mut self, view: &mut DuelViewState, mut playback: DuelPlayback) {
         playback.cancel();
         self.reset();
         view.reset();
     }
 
-    pub(crate) fn restart(&mut self, view: &mut ViewState, playback: Playback) {
+    pub(crate) fn restart(&mut self, view: &mut DuelViewState, playback: DuelPlayback) {
         self.reset_duel(view, playback);
         self.restarting.set(true);
     }
 
-    pub(crate) fn fail(&mut self, error: String, mut playback: Playback) {
+    pub(crate) fn fail(&mut self, error: String, mut playback: DuelPlayback) {
         if self.failure.peek().is_none() {
             playback.cancel();
             self.failure.set(Some(error));
         }
     }
 
-    fn tracking_failed(&mut self, view: &mut ViewState, error: String, playback: Playback) {
+    fn tracking_failed(&mut self, view: &mut DuelViewState, error: String, playback: DuelPlayback) {
         tracing::error!("{error}");
         self.cards.set(None);
         view.selected_card.set(None);
@@ -328,20 +328,20 @@ impl UIState {
 
     fn apply_card_message(
         &mut self,
-        view: &mut ViewState,
+        view: &mut DuelViewState,
         message: &CoreMessage,
-        playback: Playback,
+        playback: DuelPlayback,
     ) -> bool {
         if self.interaction_blocked(playback) {
             return false;
         }
         let mut cards = self.cards;
         let result = cards.with_mut(|tracking| {
-            let layer = tracking
+            let tracker = tracking
                 .as_mut()
                 .expect("Card tracking missing for active duel");
-            layer.apply(message)?;
-            view.reconcile_selection(layer);
+            tracker.apply(message)?;
+            view.reconcile_selection(tracker);
             Ok::<_, anyhow::Error>(())
         });
         if let Err(error) = result {
@@ -360,12 +360,12 @@ impl UIState {
     }
 }
 
-fn handle_core_messages(
-    state: &mut UIState,
-    view: &mut ViewState,
+fn apply_core_message_batch(
+    state: &mut DuelState,
+    view: &mut DuelViewState,
     controller: &DuelController,
     messages: &[CoreMessage],
-    mut playback: Playback,
+    mut playback: DuelPlayback,
 ) -> bool {
     let mut tracking = state.cards;
     let mut pending_input = state.pending_input;
@@ -381,10 +381,10 @@ fn handle_core_messages(
         }
         {
             let cards = tracking.peek();
-            let layer = cards
+            let tracker = cards
                 .as_ref()
                 .expect("Card tracking missing for active duel");
-            if let Some(event) = resolve_chain_event(&message, layer) {
+            if let Some(event) = resolve_chain_event(&message, tracker) {
                 playback.chain.write().record(event);
             }
         }
@@ -397,11 +397,11 @@ fn handle_core_messages(
     }
 
     let result = tracking.with_mut(|tracking| {
-        let layer = tracking
+        let tracker = tracking
             .as_mut()
             .expect("Card tracking missing for active duel");
-        controller.refresh_data(layer)?;
-        view.reconcile_selection(layer);
+        controller.refresh_queried_card_data(tracker)?;
+        view.reconcile_selection(tracker);
         Ok::<_, anyhow::Error>(())
     });
     if let Err(error) = result {

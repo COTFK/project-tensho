@@ -1,15 +1,15 @@
 use anyhow::Context;
 use rand::seq::SliceRandom;
 
-use super::cards::{CardId, CardPlacement, CardTracker};
+use super::cards::{CardInstanceId, CardPlacement, CardTracker};
 use super::input::PendingInput;
 use crate::ocgcore::constants::{CardLocation, Phase, Player};
 use crate::ocgcore::messages::CoreMessage;
-use crate::ocgcore::{CardData, Duel, OCGCore, Response, log_core_message};
+use crate::ocgcore::{Duel, DuelCardData, OCGCore, Response, log_core_message};
 use crate::settings::CustomHand;
 use crate::utility::{
-    ARCHETYPE_SCRIPT, EXTRA_DECK_IDS, MAIN_DECK_IDS, Scripts, cache_scripts, fetch_card_data,
-    get_card_data, get_card_label, store_card_data,
+    ARCHETYPE_SCRIPT, EXTRA_DECK_CODES, MAIN_DECK_CODES, Scripts, cache_scripts,
+    fetch_card_definitions, get_card_text, read_card_definition, store_card_definitions,
 };
 use ocgcore_ffi::enums::OCG_DuelStatus;
 
@@ -27,7 +27,7 @@ pub(crate) struct DuelSetup {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct ChainLink {
     pub number: u32,
-    pub card: Option<CardId>,
+    pub card: Option<CardInstanceId>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -110,10 +110,10 @@ impl DuelController {
                 *current_phase = Some(message.phase);
             }
             CoreMessage::Idle(actions) => {
-                *pending_input = Some(PendingInput::Idle(actions));
+                *pending_input = Some(PendingInput::ActionSelection(actions));
             }
             CoreMessage::SelectPlace(message) => {
-                *pending_input = Some(PendingInput::Place(message.zones));
+                *pending_input = Some(PendingInput::FieldPlacement(message.zones));
             }
             CoreMessage::SelectChain(message) => {
                 if message.effects.is_empty() {
@@ -121,10 +121,10 @@ impl DuelController {
                     *pending_input = None;
                     return true;
                 }
-                *pending_input = Some(PendingInput::Chain(message));
+                *pending_input = Some(PendingInput::ChainResponse(message));
             }
             CoreMessage::SelectEffectYN(message) => {
-                *pending_input = Some(PendingInput::EffectYesNo(CardData {
+                *pending_input = Some(PendingInput::EffectConfirmation(DuelCardData {
                     card_code: message.0.card_code,
                     controller: message.0.controller,
                     location: message.0.location,
@@ -133,11 +133,11 @@ impl DuelController {
                 }));
             }
             CoreMessage::SelectCard(message) => {
-                *pending_input = Some(PendingInput::Cards(message));
+                *pending_input = Some(PendingInput::CardSelection(message));
             }
             CoreMessage::SelectYesNo(message) => {
-                let label = get_card_label(message.card_code).unwrap();
-                *pending_input = Some(PendingInput::YesNo(
+                let label = get_card_text(message.card_code).unwrap();
+                *pending_input = Some(PendingInput::Confirmation(
                     label
                         .optional_strings
                         .get(&message.string_index)
@@ -146,37 +146,37 @@ impl DuelController {
                 ));
             }
             CoreMessage::SelectPosition(message) => {
-                *pending_input = Some(PendingInput::Position(message.positions));
+                *pending_input = Some(PendingInput::BattlePositionSelection(message.positions));
             }
             CoreMessage::SelectUnselectCard(message) => {
-                *pending_input = Some(PendingInput::Unselect(message));
+                *pending_input = Some(PendingInput::CardToggleSelection(message));
             }
             CoreMessage::SelectTribute(message) => {
-                *pending_input = Some(PendingInput::Tribute {
+                *pending_input = Some(PendingInput::TributeSelection {
                     message,
                     selected: Vec::new(),
                 });
             }
             CoreMessage::SelectOption(message) => {
-                *pending_input = Some(PendingInput::Options(message));
+                *pending_input = Some(PendingInput::OptionSelection(message));
             }
             CoreMessage::AnnounceNumber(message) => {
-                *pending_input = Some(PendingInput::Numbers(message));
+                *pending_input = Some(PendingInput::NumberSelection(message));
             }
             CoreMessage::SortCard(message) => {
-                *pending_input = Some(PendingInput::Sort(message));
+                *pending_input = Some(PendingInput::CardOrdering(message));
             }
             _ => {}
         }
         false
     }
 
-    pub fn refresh_data(&self, cards: &mut CardTracker) -> anyhow::Result<()> {
-        refresh_data(cards, &self.duel)
+    pub fn refresh_queried_card_data(&self, cards: &mut CardTracker) -> anyhow::Result<()> {
+        refresh_queried_card_data(cards, &self.duel)
     }
 }
 
-pub(crate) fn process_until_input(
+pub(crate) fn process_until_blocked(
     mut process: impl FnMut() -> OCG_DuelStatus,
     mut handle_message: impl FnMut() -> bool,
 ) {
@@ -189,23 +189,23 @@ pub(crate) fn process_until_input(
     }
 }
 
-pub(crate) async fn cache_cards() -> anyhow::Result<Scripts> {
-    let all_cards = MAIN_DECK_IDS
+pub(crate) async fn cache_duel_scripts() -> anyhow::Result<Scripts> {
+    let deck_codes = MAIN_DECK_CODES
         .into_iter()
-        .chain(EXTRA_DECK_IDS)
+        .chain(EXTRA_DECK_CODES)
         .collect::<Vec<_>>();
-    cache_scripts(&all_cards).await
+    cache_scripts(&deck_codes).await
 }
 
-fn pull_ids_to_front(main_array: &mut [u32; 40], target_ids: &[u32]) {
+fn move_card_codes_to_front(main_deck: &mut [u32; 40], target_codes: &[u32]) {
     let mut front_index = 0;
-    for &target_id in target_ids {
-        if let Some(pos) = main_array[front_index..]
+    for &target_code in target_codes {
+        if let Some(pos) = main_deck[front_index..]
             .iter()
-            .position(|item| *item == target_id)
+            .position(|item| *item == target_code)
         {
             let actual_idx = front_index + pos;
-            main_array[front_index..=actual_idx].rotate_right(1);
+            main_deck[front_index..=actual_idx].rotate_right(1);
             front_index += 1;
         }
     }
@@ -213,7 +213,7 @@ fn pull_ids_to_front(main_array: &mut [u32; 40], target_ids: &[u32]) {
 
 pub(crate) async fn load_core(scripts: Scripts) -> anyhow::Result<OCGCore> {
     OCGCore::load(
-        get_card_data,
+        read_card_definition,
         Box::new(move |name: &str| scripts.get(name).cloned()),
         log_core_message,
     )
@@ -224,16 +224,16 @@ pub(crate) async fn load_duel(
     core: OCGCore,
     custom_hand: Option<String>,
 ) -> anyhow::Result<DuelSetup> {
-    let ids = MAIN_DECK_IDS
+    let deck_codes = MAIN_DECK_CODES
         .into_iter()
-        .chain(EXTRA_DECK_IDS)
+        .chain(EXTRA_DECK_CODES)
         .collect::<Vec<_>>();
     let archetype_script = core
         .script(ARCHETYPE_SCRIPT)
         .ok_or_else(|| anyhow::anyhow!("{ARCHETYPE_SCRIPT} is not loaded"))?;
-    store_card_data(fetch_card_data(ids, &archetype_script).await?);
+    store_card_definitions(fetch_card_definitions(deck_codes, &archetype_script).await?);
 
-    let mut main_deck = MAIN_DECK_IDS;
+    let mut main_deck = MAIN_DECK_CODES;
     main_deck.shuffle(&mut rand::rng());
     let mut starting_draw_count = 5u32;
     if let Some(card_list) = custom_hand
@@ -241,10 +241,10 @@ pub(crate) async fn load_duel(
     {
         let parsed_custom_hand: CustomHand = CustomHand::try_from(card_list)?;
         starting_draw_count = parsed_custom_hand.0.len() as u32;
-        pull_ids_to_front(&mut main_deck, parsed_custom_hand.0.as_slice());
+        move_card_codes_to_front(&mut main_deck, parsed_custom_hand.0.as_slice());
         main_deck.reverse();
     }
-    let cards = CardTracker::from_decks(&main_deck, &EXTRA_DECK_IDS)?;
+    let cards = CardTracker::from_decks(&main_deck, &EXTRA_DECK_CODES)?;
     let duel = core.create_duel(starting_draw_count)?;
     for name in ["constant.lua", "utility.lua"] {
         let script = core
@@ -252,21 +252,21 @@ pub(crate) async fn load_duel(
             .ok_or_else(|| anyhow::anyhow!("{name} is not loaded"))?;
         core.load_script(&duel, &script, name)?;
     }
-    for card_id in main_deck {
+    for card_code in main_deck {
         duel.add_card(
-            Player::Player,
-            card_id,
-            Player::Player,
+            Player::Local,
+            card_code,
+            Player::Local,
             CardLocation::Deck,
             0,
             0,
         );
     }
-    for card_id in EXTRA_DECK_IDS {
+    for card_code in EXTRA_DECK_CODES {
         duel.add_card(
-            Player::Player,
-            card_id,
-            Player::Player,
+            Player::Local,
+            card_code,
+            Player::Local,
             CardLocation::ExtraDeck,
             0,
             10,
@@ -279,8 +279,8 @@ pub(crate) async fn load_duel(
     })
 }
 
-fn refresh_data(layer: &mut CardTracker, duel: &Duel) -> anyhow::Result<()> {
-    let player = Player::Player;
+fn refresh_queried_card_data(tracker: &mut CardTracker, duel: &Duel) -> anyhow::Result<()> {
+    let player = Player::Local;
     for location in [
         CardLocation::Deck,
         CardLocation::Hand,
@@ -293,7 +293,7 @@ fn refresh_data(layer: &mut CardTracker, duel: &Duel) -> anyhow::Result<()> {
         let core_cards = duel
             .query_cards(player, location)
             .with_context(|| format!("Cannot query {player:?} {location}"))?;
-        let addresses: Vec<_> = layer
+        let addresses: Vec<_> = tracker
             .cards()
             .iter()
             .filter_map(|card| match card.placement {
@@ -310,7 +310,7 @@ fn refresh_data(layer: &mut CardTracker, duel: &Duel) -> anyhow::Result<()> {
                 .get(address.sequence as usize)
                 .and_then(|card| *card)
                 .with_context(|| format!("No queried card at {address:?}"))?;
-            layer.update_queried_data(address, data)?;
+            tracker.update_queried_data(address, data)?;
         }
     }
     Ok(())

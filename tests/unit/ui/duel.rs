@@ -2,7 +2,7 @@ use super::*;
 use crate::duel::cards::CardTracker;
 use crate::duel::controller::{ChainEvent, ChainLink, resolve_chain_event};
 use crate::duel::input::PendingInput;
-use crate::ocgcore::CardData;
+use crate::ocgcore::DuelCardData;
 use crate::ui::card_animation::CardAnimationState;
 use crate::ui::chain::ChainPlayback;
 use crate::ui::playback::use_playback;
@@ -15,16 +15,16 @@ fn startup_combines_layout_core_and_both_playbacks_and_stays_ready_on_resize() {
     use std::cell::RefCell;
 
     thread_local! {
-        static CONTEXT: RefCell<Option<(UIState, Playback, Signal<bool>, Signal<LayoutStatus>)>> =
+        static CONTEXT: RefCell<Option<(DuelState, DuelPlayback, Signal<bool>, Signal<LayoutStatus>)>> =
             const { RefCell::new(None) };
     }
 
     fn app() -> Element {
-        let mut state = use_context_provider(UIState::default);
+        let mut state = use_context_provider(DuelState::default);
         let playback = use_playback();
         let mut ready = use_signal(|| false);
         let layout = use_signal(LayoutStatus::default);
-        use_effect(move || synchronize_layout(&mut state, &mut ready, playback, layout()));
+        use_effect(move || apply_layout_status(&mut state, &mut ready, playback, layout()));
         CONTEXT.with(|slot| *slot.borrow_mut() = Some((state, playback, ready, layout)));
         rsx! {}
     }
@@ -46,7 +46,7 @@ fn startup_combines_layout_core_and_both_playbacks_and_stays_ready_on_resize() {
 
     state
         .pending_input
-        .set(Some(PendingInput::YesNo("Activate?".into())));
+        .set(Some(PendingInput::Confirmation("Activate?".into())));
     playback
         .animation
         .write()
@@ -91,20 +91,20 @@ fn startup_combines_layout_core_and_both_playbacks_and_stays_ready_on_resize() {
 #[test]
 fn a_finished_duel_can_complete_startup_after_layout_and_playback_settle() {
     fn app() -> Element {
-        let mut state = use_context_provider(UIState::default);
+        let mut state = use_context_provider(DuelState::default);
         let mut playback = use_playback();
         let mut ready = use_signal(|| false);
         state.duel_finished.set(true);
-        synchronize_layout(&mut state, &mut ready, playback, LayoutStatus::Pending);
+        apply_layout_status(&mut state, &mut ready, playback, LayoutStatus::Pending);
         assert!(!*ready.peek());
         playback
             .animation
             .write()
             .begin(vec![], CardTracker::default());
-        synchronize_layout(&mut state, &mut ready, playback, LayoutStatus::Ready);
+        apply_layout_status(&mut state, &mut ready, playback, LayoutStatus::Ready);
         assert!(!*ready.peek());
         playback.cancel();
-        synchronize_layout(&mut state, &mut ready, playback, LayoutStatus::Ready);
+        apply_layout_status(&mut state, &mut ready, playback, LayoutStatus::Ready);
         assert!(*ready.peek());
         rsx! {}
     }
@@ -115,13 +115,13 @@ fn a_finished_duel_can_complete_startup_after_layout_and_playback_settle() {
 #[test]
 fn layout_reports_cannot_unlock_failed_or_restarting_duels() {
     fn app() -> Element {
-        let mut state = use_context_provider(UIState::default);
+        let mut state = use_context_provider(DuelState::default);
         let playback = use_playback();
         let mut ready = use_signal(|| false);
         state.restarting.set(true);
-        synchronize_layout(&mut state, &mut ready, playback, LayoutStatus::Ready);
+        apply_layout_status(&mut state, &mut ready, playback, LayoutStatus::Ready);
         assert!(!*ready.peek());
-        synchronize_layout(
+        apply_layout_status(
             &mut state,
             &mut ready,
             playback,
@@ -131,9 +131,9 @@ fn layout_reports_cannot_unlock_failed_or_restarting_duels() {
 
         state.restarting.set(false);
         state.failure.set(Some("existing failure".into()));
-        synchronize_layout(&mut state, &mut ready, playback, LayoutStatus::Ready);
+        apply_layout_status(&mut state, &mut ready, playback, LayoutStatus::Ready);
         assert!(!*ready.peek());
-        synchronize_layout(
+        apply_layout_status(
             &mut state,
             &mut ready,
             playback,
@@ -151,22 +151,22 @@ fn restart_button_cancels_playback_and_clears_pending_input_and_view() {
     use crate::duel::cards::CardAddress;
     use crate::ocgcore::constants::{CardLocation, Player};
     use crate::ocgcore::messages::CoreMessage;
-    use crate::ui::card_animation::AnimationPhase;
+    use crate::ui::card_animation::CardAnimationPhase;
     use dioxus::core::{AttributeValue, Mutation};
     use std::cell::RefCell;
 
     thread_local! {
-        static STATE: RefCell<Option<UIState>> = const { RefCell::new(None) };
-        static VIEW: RefCell<Option<ViewState>> = const { RefCell::new(None) };
+        static STATE: RefCell<Option<DuelState>> = const { RefCell::new(None) };
+        static VIEW: RefCell<Option<DuelViewState>> = const { RefCell::new(None) };
         static ANIMATION: RefCell<Option<Signal<CardAnimationState>>> = const { RefCell::new(None) };
         static CHAIN: RefCell<Option<Signal<ChainPlayback>>> = const { RefCell::new(None) };
     }
 
     fn app() -> Element {
-        let playback = use_hook(Playback::default);
-        let view = use_hook(ViewState::default);
+        let playback = use_hook(DuelPlayback::default);
+        let view = use_hook(DuelViewState::default);
         let state = use_hook(|| {
-            let mut state = UIState::default();
+            let mut state = DuelState::default();
             state.restarting.set(true);
             state
         });
@@ -182,9 +182,9 @@ fn restart_button_cancels_playback_and_clears_pending_input_and_view() {
             duel_resource,
             deck_codes: vec![],
         });
-        assert!(try_consume_context::<UIState>().is_none());
-        assert!(try_consume_context::<ViewState>().is_none());
-        assert!(try_consume_context::<Playback>().is_none());
+        assert!(try_consume_context::<DuelState>().is_none());
+        assert!(try_consume_context::<DuelViewState>().is_none());
+        assert!(try_consume_context::<DuelPlayback>().is_none());
         STATE.with(|slot| *slot.borrow_mut() = Some(state));
         VIEW.with(|slot| *slot.borrow_mut() = Some(view));
         ANIMATION.with(|slot| *slot.borrow_mut() = Some(playback.animation));
@@ -217,7 +217,7 @@ fn restart_button_cancels_playback_and_clears_pending_input_and_view() {
     let card = cards
         .insert(
             CardAddress {
-                controller: Player::Player,
+                controller: Player::Local,
                 location: CardLocation::MonsterZone,
                 sequence: 0,
             },
@@ -227,13 +227,13 @@ fn restart_button_cancels_playback_and_clears_pending_input_and_view() {
     state.cards.set(Some(cards.clone()));
     view.selected_card.set(Some(card));
     view.open_pile.set(Some(CardLocation::Graveyard));
-    view.effects_to_select_from.set(vec![CardData {
+    view.effects_to_select_from.set(vec![DuelCardData {
         card_code: 1,
         ..Default::default()
     }]);
     state
         .pending_input
-        .set(Some(PendingInput::YesNo("Activate?".into())));
+        .set(Some(PendingInput::Confirmation("Activate?".into())));
     animation.write().begin(vec![card], cards.clone());
     let message = CoreMessage::try_from(
         [
@@ -267,11 +267,11 @@ fn restart_button_cancels_playback_and_clears_pending_input_and_view() {
     assert!(!chain.peek().has_pending_frames());
     animation
         .write()
-        .advance(generation, AnimationPhase::Moving);
+        .advance(generation, CardAnimationPhase::Moving);
     chain.write().start();
     assert!(!animation.peek().is_active());
     assert!(!chain.peek().active);
-    assert!(state.interaction_blocked(Playback { animation, chain }));
+    assert!(state.interaction_blocked(DuelPlayback { animation, chain }));
     STATE.with(|slot| *slot.borrow_mut() = None);
     VIEW.with(|slot| *slot.borrow_mut() = None);
     ANIMATION.with(|slot| *slot.borrow_mut() = None);
@@ -288,7 +288,7 @@ fn interaction_gate_removes_inert_when_playback_finishes() {
     fn app() -> Element {
         let active = use_signal(|| false);
         ACTIVE.with(|slot| *slot.borrow_mut() = Some(active));
-        rsx! { InteractionGate { active: active(), button { "Action" } } }
+        rsx! { InteractionGate { blocked: active(), button { "Action" } } }
     }
     let mut dom = VirtualDom::new(app);
     let initial = dom.rebuild_to_vec();
@@ -335,7 +335,7 @@ fn interaction_gate_removes_inert_when_playback_finishes() {
 #[cfg(not(target_arch = "wasm32"))]
 fn bound_actions_responses_and_right_click_need_only_explicit_inputs() {
     use crate::duel::cards::CardAddress;
-    use crate::duel::input::CardAction;
+    use crate::duel::input::CardIntent;
     use crate::ocgcore::Response;
     use crate::ocgcore::constants::{CardLocation, Player};
     use crate::ocgcore::messages::IdleMessageData;
@@ -343,13 +343,13 @@ fn bound_actions_responses_and_right_click_need_only_explicit_inputs() {
     use std::cell::RefCell;
 
     thread_local! {
-        static INPUTS: RefCell<Option<(UIState, ViewState, Playback)>> = const { RefCell::new(None) };
+        static INPUTS: RefCell<Option<(DuelState, DuelViewState, DuelPlayback)>> = const { RefCell::new(None) };
     }
 
     fn app() -> Element {
-        let mut state = use_hook(UIState::default);
-        let view = use_hook(ViewState::default);
-        let playback = use_hook(Playback::default);
+        let mut state = use_hook(DuelState::default);
+        let view = use_hook(DuelViewState::default);
+        let playback = use_hook(DuelPlayback::default);
         let controller = use_signal(|| {
             let core = futures::executor::block_on(OCGCore::load(
                 |_| panic!("Unexpected card lookup"),
@@ -360,7 +360,7 @@ fn bound_actions_responses_and_right_click_need_only_explicit_inputs() {
             Some(DuelController::new(core.create_duel(0).unwrap()))
         });
         let hand = CardAddress {
-            controller: Player::Player,
+            controller: Player::Local,
             location: CardLocation::Hand,
             sequence: 0,
         };
@@ -371,18 +371,18 @@ fn bound_actions_responses_and_right_click_need_only_explicit_inputs() {
         });
         let controller_input = use_hook(move || ReadSignal::new(controller));
         use_duel_contexts(state, view, playback, controller_input);
-        assert!(try_consume_context::<UIState>().is_none());
-        assert!(try_consume_context::<ViewState>().is_none());
-        assert!(try_consume_context::<Playback>().is_none());
+        assert!(try_consume_context::<DuelState>().is_none());
+        assert!(try_consume_context::<DuelViewState>().is_none());
+        assert!(try_consume_context::<DuelPlayback>().is_none());
         assert!(try_consume_context::<Signal<Option<DuelController>>>().is_none());
-        let onaction = use_context::<EventHandler<CardAction>>();
+        let onaction = use_context::<EventHandler<CardIntent>>();
         let onresponse = use_context::<EventHandler<Response>>();
         INPUTS.with(|slot| *slot.borrow_mut() = Some((state, view, playback)));
         rsx! {
             main {
                 id: "coordination",
                 oncontextmenu: move |event| handle_right_click(state, view, playback, controller_input, event),
-                button { id: "select", onclick: move |_| onaction.call(CardAction::Select(hand)), "Select" }
+                button { id: "select", onclick: move |_| onaction.call(CardIntent::Select(hand)), "Select" }
                 button { id: "respond", onclick: move |_| onresponse.call(Response::No), "Respond" }
             }
         }
@@ -422,14 +422,14 @@ fn bound_actions_responses_and_right_click_need_only_explicit_inputs() {
     assert_eq!(*view.open_pile.peek(), Some(CardLocation::Graveyard));
     state
         .pending_input
-        .set(Some(PendingInput::YesNo("Activate?".into())));
+        .set(Some(PendingInput::Confirmation("Activate?".into())));
     events::dispatch(&dom, "click", respond);
     assert!(!state.waiting_on_input());
     assert!(view.selected_card.peek().is_none());
     assert!(view.open_pile.peek().is_none());
-    state
-        .pending_input
-        .set(Some(PendingInput::Idle(IdleMessageData::default())));
+    state.pending_input.set(Some(PendingInput::ActionSelection(
+        IdleMessageData::default(),
+    )));
     events::dispatch(&dom, "click", select);
     view.open_pile.set(Some(CardLocation::ExtraDeck));
     events::dispatch(&dom, "contextmenu", main);
@@ -438,9 +438,10 @@ fn bound_actions_responses_and_right_click_need_only_explicit_inputs() {
     assert!(view.open_pile.peek().is_none());
     state
         .pending_input
-        .set(Some(PendingInput::YesNo("Activate?".into())));
+        .set(Some(PendingInput::Confirmation("Activate?".into())));
     view.open_pile.set(Some(CardLocation::Graveyard));
-    view.effects_to_select_from.set(vec![CardData::default()]);
+    view.effects_to_select_from
+        .set(vec![DuelCardData::default()]);
     playback
         .animation
         .write()
@@ -482,11 +483,11 @@ fn replaces_tracking_and_ui_state_when_a_duel_restarts() {
         .unwrap();
         let first = DuelController::new(core.create_duel(0).unwrap());
         let second = DuelController::new(core.create_duel(0).unwrap());
-        let mut state = use_context_provider(UIState::default);
+        let mut state = use_context_provider(DuelState::default);
         let playback = use_playback();
         let mut animation = playback.animation;
         let mut chain = playback.chain;
-        let mut view = use_context_provider(ViewState::default);
+        let mut view = use_context_provider(DuelViewState::default);
         let mut duel = use_context_provider(|| Signal::new(None::<DuelController>));
         let mut tracking = state.cards;
         let initial = DuelSetup {
@@ -515,13 +516,13 @@ fn replaces_tracking_and_ui_state_when_a_duel_restarts() {
         view.selected_card.set(Some(selected));
         view.open_pile
             .set(Some(crate::ocgcore::constants::CardLocation::ExtraDeck));
-        view.effects_to_select_from.set(vec![CardData {
+        view.effects_to_select_from.set(vec![DuelCardData {
             card_code: 1,
             ..Default::default()
         }]);
         state
             .pending_input
-            .set(Some(PendingInput::YesNo("Activate?".into())));
+            .set(Some(PendingInput::Confirmation("Activate?".into())));
         state.restarting.set(true);
         state.failure.set(Some("test failure".into()));
         tracking.set(None);
@@ -571,7 +572,7 @@ fn replaces_tracking_and_ui_state_when_a_duel_restarts() {
         animation.write().begin(vec![card], source);
         animation.write().advance(
             generation,
-            crate::ui::card_animation::AnimationPhase::Moving,
+            crate::ui::card_animation::CardAnimationPhase::Moving,
         );
         assert!(animation.peek().is_active());
         chain.write().record(ChainEvent::Added(ChainLink {

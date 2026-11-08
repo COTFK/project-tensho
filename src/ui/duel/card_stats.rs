@@ -1,11 +1,11 @@
 use dioxus::prelude::*;
 
-use crate::ocgcore::{CardData, CardType};
-use crate::utility::get_card_data;
+use crate::ocgcore::{CardType, DuelCardData};
+use crate::utility::read_card_definition;
 
 #[component]
-pub(super) fn CardStats(card: CardData) -> Element {
-    let original_card = get_card_data(card.card_code);
+pub(super) fn CardStats(card: DuelCardData) -> Element {
+    let original_card = read_card_definition(card.card_code);
     rsx! {
         div {
             class: "absolute top-0 left-0 text-white text-[8px] md:text-xs lg:text-base font-semibold z-5 bg-gray-900/75 pl-0.5 pr-1 pb-0.5 rounded-br-lg",

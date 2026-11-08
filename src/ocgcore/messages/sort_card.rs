@@ -1,11 +1,11 @@
-use crate::ocgcore::CardData;
+use crate::ocgcore::DuelCardData;
 use crate::ocgcore::constants::CardLocation;
 use crate::ocgcore::constants::Player;
 
 #[derive(Hash, Debug, Clone, PartialEq, Eq)]
 pub struct SortCardMessageData {
     pub player: u8,
-    pub cards: Vec<CardData>,
+    pub cards: Vec<DuelCardData>,
 }
 
 impl TryFrom<&[u8]> for SortCardMessageData {
@@ -28,7 +28,7 @@ impl TryFrom<&[u8]> for SortCardMessageData {
             let location = bytes[offset + 5];
             let sequence = bytes[offset + 6];
 
-            cards.push(CardData {
+            cards.push(DuelCardData {
                 card_code,
                 controller: Player::try_from(controller)?,
                 location: CardLocation::try_from(location)?,

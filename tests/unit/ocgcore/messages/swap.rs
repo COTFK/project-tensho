@@ -26,7 +26,7 @@ fn decodes_swap_card_codes_and_source_locations() {
         CoreMessage::Swap(SwapMessageData {
             first_code: 100,
             first_location: CardLocationInfo {
-                controller: Some(Player::Player),
+                controller: Some(Player::Local),
                 location: CardLocationKind::Known(CardLocation::MonsterZone),
                 sequence: 256,
                 position: CardLocationPosition::Position(CardPositionFlags::FACE_UP_DEFENSE),

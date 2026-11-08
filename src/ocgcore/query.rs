@@ -5,14 +5,14 @@ use ocgcore_ffi::constants::{
 };
 
 use super::constants::{BattlePosition, CardLocation, Player};
-use super::data::{CardData, CardType};
+use super::data::{CardType, DuelCardData};
 use super::utility::{read_u16, read_u32};
 
-pub(super) fn decode_location(
+pub(super) fn decode_card_queries(
     bytes: &[u8],
     controller: Player,
     location: CardLocation,
-) -> anyhow::Result<Vec<Option<CardData>>> {
+) -> anyhow::Result<Vec<Option<DuelCardData>>> {
     let mut cursor = 0;
     let payload_len = usize::try_from(read_u32(bytes, &mut cursor, "query payload length")?)?;
     let end = cursor
@@ -30,7 +30,7 @@ pub(super) fn decode_location(
             continue;
         }
 
-        let mut card = CardData {
+        let mut card = DuelCardData {
             controller,
             location,
             sequence,

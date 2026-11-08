@@ -4,12 +4,12 @@ use super::card_animation::CardAnimationState;
 use super::chain::ChainPlayback;
 
 #[derive(Clone, Copy, Default, PartialEq)]
-pub(crate) struct Playback {
+pub(crate) struct DuelPlayback {
     pub animation: Signal<CardAnimationState>,
     pub chain: Signal<ChainPlayback>,
 }
 
-impl Playback {
+impl DuelPlayback {
     pub fn is_active(&self) -> bool {
         self.animation.read().is_active() || self.chain.read().active
     }
@@ -21,6 +21,6 @@ impl Playback {
 }
 
 #[cfg(test)]
-pub(crate) fn use_playback() -> Playback {
-    use_context_provider(Playback::default)
+pub(crate) fn use_playback() -> DuelPlayback {
+    use_context_provider(DuelPlayback::default)
 }

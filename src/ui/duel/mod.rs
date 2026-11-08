@@ -1,3 +1,4 @@
+mod board;
 mod card_interaction;
 mod card_layout;
 mod card_stats;
@@ -7,7 +8,6 @@ mod effect_pile;
 mod extra_deck;
 mod field;
 mod hand;
-mod layered_field;
 mod layout_anchors;
 mod main_deck;
 mod modal;
@@ -19,31 +19,31 @@ use web_sys::window;
 
 use crate::duel::controller::{DuelController, DuelSetup};
 use crate::ocgcore::OCGCore;
-use crate::state::UIState;
+use crate::state::DuelState;
 use crate::state::handle_right_click;
 use crate::state::load_duel;
-use crate::state::run_game_loop;
-use crate::state::{handle_card_action, send_response};
+use crate::state::process_duel_until_blocked;
+use crate::state::{handle_card_intent, send_response};
 use crate::ui::LoadingScreen;
 use crate::ui::card_animation::use_animation_completion;
 use crate::ui::chain::use_chain_playback;
+use crate::ui::components::IconButton;
 use crate::ui::components::ModalSuppression;
-use crate::ui::components::UIButton;
 use crate::ui::components::svg::FullscreenIcon;
 use crate::ui::components::svg::ResetIcon;
-use crate::ui::playback::Playback;
-use crate::ui::view_state::ViewState;
-use layered_field::{LayeredField, LayoutStatus};
-use modal::ModalContainer;
+use crate::ui::playback::DuelPlayback;
+use crate::ui::view_state::DuelViewState;
+use board::{DuelBoard, LayoutStatus};
+use modal::DuelModals;
 
 #[component]
-pub fn DuelWrapper(
+pub fn DuelHost(
     core_resource: Resource<anyhow::Result<OCGCore>>,
     custom_hand: Option<String>,
 ) -> Element {
-    let mut state = use_hook(UIState::default);
-    let mut view = use_hook(ViewState::default);
-    let playback = use_hook(Playback::default);
+    let mut state = use_hook(DuelState::default);
+    let mut view = use_hook(DuelViewState::default);
+    let playback = use_hook(DuelPlayback::default);
     let mut controller = use_signal(|| None::<DuelController>);
     let controller_input = use_hook(move || ReadSignal::new(controller));
     use_duel_contexts(state, view, playback, controller_input);
@@ -89,9 +89,9 @@ pub fn DuelWrapper(
 }
 
 fn use_duel_contexts(
-    state: UIState,
-    view: ViewState,
-    playback: Playback,
+    state: DuelState,
+    view: DuelViewState,
+    playback: DuelPlayback,
     controller: ReadSignal<Option<DuelController>>,
 ) {
     use_context_provider(|| ReadSignal::new(state.cards));
@@ -105,7 +105,7 @@ fn use_duel_contexts(
     });
     use_context_provider(|| {
         EventHandler::new(move |action| {
-            handle_card_action(state, view, playback, controller, action)
+            handle_card_intent(state, view, playback, controller, action)
         })
     });
     let links = use_memo(move || playback.chain.read().displayed.clone());
@@ -113,9 +113,9 @@ fn use_duel_contexts(
 }
 
 fn install_duel(
-    state: &mut UIState,
-    view: &mut ViewState,
-    playback: Playback,
+    state: &mut DuelState,
+    view: &mut DuelViewState,
+    playback: DuelPlayback,
     controller: &mut Signal<Option<DuelController>>,
     setup: Option<DuelSetup>,
 ) {
@@ -138,14 +138,14 @@ fn install_duel(
 
 #[component]
 fn DuelScreen(
-    mut state: UIState,
-    mut view: ViewState,
-    playback: Playback,
+    mut state: DuelState,
+    mut view: DuelViewState,
+    playback: DuelPlayback,
     controller: ReadSignal<Option<DuelController>>,
     duel_resource: Resource<anyhow::Result<DuelSetup>>,
     deck_codes: Vec<u32>,
 ) -> Element {
-    use_context_provider(layout_anchors::LayoutAnchors::default);
+    use_context_provider(layout_anchors::LayoutAnchorRegistry::default);
     let revision = use_context_provider(|| layout_anchors::LayoutRevision(Signal::new(0)));
     let mut startup_ready = use_signal(|| false);
     let mut layout_status = use_signal(LayoutStatus::default);
@@ -155,9 +155,9 @@ fn DuelScreen(
     use_animation_completion(playback.animation);
     use_chain_playback(playback.chain);
 
-    use_effect(move || run_game_loop(state, view, playback, controller));
+    use_effect(move || process_duel_until_blocked(state, view, playback, controller));
     use_effect(move || {
-        synchronize_layout(&mut state, &mut startup_ready, playback, layout_status());
+        apply_layout_status(&mut state, &mut startup_ready, playback, layout_status());
     });
 
     let loading = !startup_ready() && (state.failure)().is_none();
@@ -173,8 +173,8 @@ fn DuelScreen(
 
             },
             InteractionGate {
-                active: loading,
-            UIButton {
+                blocked: loading,
+            IconButton {
                 class: "fixed top-3 left-3 z-50 w-max h-max p-2",
                 label: "Restart game",
                 onclick: move |_| {
@@ -184,7 +184,7 @@ fn DuelScreen(
                 },
                 ResetIcon {}
             }
-            UIButton {
+            IconButton {
                 label: "Toggle fullscreen",
                 class: "fixed top-3 right-3 z-50 w-max h-max p-2",
                 onclick: move |_| {
@@ -199,12 +199,12 @@ fn DuelScreen(
                 FullscreenIcon {}
             }
             InteractionGate {
-                active: modal_suppressed(),
-                ModalContainer {}
+                blocked: modal_suppressed(),
+                DuelModals {}
             }
             InteractionGate {
-                active: state.interaction_blocked(playback),
-                LayeredField {
+                blocked: state.interaction_blocked(playback),
+                DuelBoard {
                     tracking: state.cards,
                     selected: view.selected_card,
                     animation: playback.animation,
@@ -243,10 +243,10 @@ fn DuelScreen(
     )
 }
 
-fn synchronize_layout(
-    state: &mut UIState,
+fn apply_layout_status(
+    state: &mut DuelState,
     startup_ready: &mut Signal<bool>,
-    playback: Playback,
+    playback: DuelPlayback,
     layout: LayoutStatus,
 ) {
     if (state.failure)().is_some() || (state.restarting)() {
@@ -269,11 +269,11 @@ fn synchronize_layout(
 }
 
 #[component]
-fn InteractionGate(active: bool, children: Element) -> Element {
+fn InteractionGate(blocked: bool, children: Element) -> Element {
     rsx! {
         div {
-            inert: if active { Some("") } else { None },
-            class: if active { "pointer-events-none" },
+            inert: if blocked { Some("") } else { None },
+            class: if blocked { "pointer-events-none" },
             {children}
         }
     }

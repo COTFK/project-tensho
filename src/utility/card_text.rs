@@ -1,15 +1,15 @@
 use std::collections::HashMap;
 
-use super::card_database::get_card_label;
+use super::card_catalog::get_card_text;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CardLabel {
+pub struct CardText {
     pub name: String,
     pub optional_strings: HashMap<usize, String>,
 }
 
-pub fn build_card_label(code: u32, name: String) -> CardLabel {
-    CardLabel {
+pub fn build_card_text(code: u32, name: String) -> CardText {
+    CardText {
         name,
         optional_strings: optional_strings(code),
     }
@@ -45,11 +45,11 @@ fn optional_strings(code: u32) -> HashMap<usize, String> {
 }
 
 pub fn get_optional_string_label(card_code: u32, string_index: usize) -> String {
-    get_card_label(card_code)
-        .and_then(|card_label| card_label.optional_strings.get(&string_index).cloned())
+    get_card_text(card_code)
+        .and_then(|card_text| card_text.optional_strings.get(&string_index).cloned())
         .unwrap_or_else(|| String::from("error"))
 }
 
 #[cfg(test)]
-#[path = "../../tests/unit/utility/labels.rs"]
+#[path = "../../tests/unit/utility/card_text.rs"]
 mod tests;

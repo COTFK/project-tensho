@@ -1,20 +1,20 @@
 use dioxus::prelude::*;
 
 use super::chain_badges::ChainBadges;
-use crate::ocgcore::CardData;
+use crate::ocgcore::DuelCardData;
 use crate::ui::components::{Card, CardActionMenu, CardImage};
 
 pub(super) const PILE_LIST_CLASS: &str = "flex flex-row min-w-[40vw] w-full max-w-[77vw] h-max gap-0.5 px-2 overflow-x-auto scroll-smooth scrollbar-thin";
 
 #[derive(Clone, PartialEq)]
-pub(super) struct PileCard {
-    pub data: CardData,
+pub(super) struct PileCardRowData {
+    pub data: DuelCardData,
     pub links: Vec<u32>,
 }
 
 #[component]
 pub(super) fn PileCardRow(
-    card: PileCard,
+    card: PileCardRowData,
     is_selected: bool,
     highlighted: bool,
     show_actions: bool,

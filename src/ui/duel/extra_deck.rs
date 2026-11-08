@@ -1,18 +1,18 @@
 use dioxus::prelude::*;
 
 use super::constants::ZONE_SIZE;
-use super::pile_cards::{PILE_LIST_CLASS, PileCard, PileCardRow};
+use super::pile_cards::{PILE_LIST_CLASS, PileCardRow, PileCardRowData};
 use crate::duel::cards::CardAddress;
-use crate::duel::input::CardAction;
-use crate::ocgcore::CardData;
+use crate::duel::input::CardIntent;
+use crate::ocgcore::DuelCardData;
 use crate::ocgcore::constants::CardLocation;
-use crate::ui::components::ActionButton;
-use crate::ui::components::OptionButton;
+use crate::ui::components::LabeledIconButton;
 use crate::ui::components::PickerModal;
+use crate::ui::components::TextButton;
 use crate::ui::components::svg::SummonIcon;
 
 #[component]
-pub fn ExtraDeck(has_cards: bool, highlighted: bool, onbrowse: EventHandler<()>) -> Element {
+pub fn ExtraDeckZone(has_cards: bool, highlighted: bool, onbrowse: EventHandler<()>) -> Element {
     rsx!(
         div {
             class: "relative bg-slate-50/2 {ZONE_SIZE} aspect-square flex items-center justify-center border-0.5",
@@ -35,11 +35,11 @@ pub fn ExtraDeck(has_cards: bool, highlighted: bool, onbrowse: EventHandler<()>)
 
 #[component]
 pub fn ExtraDeckModal(
-    extra_deck: Vec<PileCard>,
-    available_special_summons: Vec<CardData>,
+    extra_deck: Vec<PileCardRowData>,
+    available_special_summons: Vec<DuelCardData>,
     mut open_pile: Signal<Option<CardLocation>>,
     suppress_actions: bool,
-    onaction: EventHandler<CardAction>,
+    onaction: EventHandler<CardIntent>,
 ) -> Element {
     let mut selected_card = use_signal(|| None);
 
@@ -67,12 +67,12 @@ pub fn ExtraDeckModal(
                                 highlighted: is_special_summonable && !suppress_actions,
                                 show_actions: selected_card() == Some(index) && is_special_summonable && !suppress_actions,
                                 onselect: move |_| selected_card.set(Some(index)),
-                                ActionButton {
+                                LabeledIconButton {
                                     label: "Summon",
                                     class: "border-yellow-500 text-yellow-300",
                                     onclick: move |_| {
                                         if is_special_summonable {
-                                            onaction.call(CardAction::SpecialSummon(CardAddress {
+                                            onaction.call(CardIntent::SpecialSummon(CardAddress {
                                                 controller: data.controller,
                                                 location: CardLocation::ExtraDeck,
                                                 sequence: u32::from(data.sequence),
@@ -89,7 +89,7 @@ pub fn ExtraDeckModal(
 
                 }
             }
-            OptionButton {
+            TextButton {
                 label: "Close",
                 onclick: move |_| {
                     open_pile.set(None);

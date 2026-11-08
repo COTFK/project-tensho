@@ -1,55 +1,55 @@
 use anyhow::{Context, ensure};
 use std::collections::HashMap;
 
-use super::layout_anchors::{Anchor, CardAnchor};
-use crate::duel::cards::{Card, CardAddress, CardId, CardPlacement, CardTracker};
-use crate::ocgcore::CardData;
+use super::layout_anchors::{AnchorGeometry, LayoutAnchorId};
+use crate::duel::cards::{CardAddress, CardInstanceId, CardPlacement, CardTracker, TrackedCard};
 use crate::ocgcore::CardType;
+use crate::ocgcore::DuelCardData;
 use crate::ocgcore::constants::{BattlePosition, CardLocation, Player};
-use crate::ui::card_animation::{AnimationPhase, CardAnimationState};
+use crate::ui::card_animation::{CardAnimationPhase, CardAnimationState};
 use crate::ui::components::CardImage;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum CardAppearance {
+pub(super) enum CardRenderMode {
     Interactive,
     Pile(CardImage),
     Material,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(super) struct CardTarget {
-    pub id: CardId,
+pub(super) struct CardLayoutTarget {
+    pub id: CardInstanceId,
     pub address: CardAddress,
-    pub anchor: CardAnchor,
-    pub data: CardData,
+    pub geometry: AnchorGeometry,
+    pub data: DuelCardData,
     pub rotation: f64,
     pub stack_order: i32,
-    pub appearance: CardAppearance,
+    pub render_mode: CardRenderMode,
 }
 
 #[derive(Clone, PartialEq)]
-pub(super) struct PreviewSnapshot {
+pub(super) struct CardLayoutSnapshot {
     pub cards: CardTracker,
-    pub selected: Option<CardId>,
+    pub selected: Option<CardInstanceId>,
 }
 
 pub(super) fn snapshot(
     tracking: Option<CardTracker>,
-    selected: Option<CardId>,
-) -> Option<PreviewSnapshot> {
+    selected: Option<CardInstanceId>,
+) -> Option<CardLayoutSnapshot> {
     match tracking {
         Some(cards)
             if cards.cards().iter().all(|card| {
-                !matches!(card.placement, CardPlacement::Zone(address) if address.controller == Player::Player)
+                !matches!(card.placement, CardPlacement::Zone(address) if address.controller == Player::Local)
                     || card.data.is_some()
-            }) => Some(PreviewSnapshot { cards, selected }),
+            }) => Some(CardLayoutSnapshot { cards, selected }),
         _ => None,
     }
 }
 
-pub(super) struct PreviewGeometry {
-    pub anchors: HashMap<Anchor, CardAnchor>,
-    pub hand_base: CardAnchor,
+pub(super) struct LayoutGeometry {
+    pub anchors: HashMap<LayoutAnchorId, AnchorGeometry>,
+    pub hand_base: AnchorGeometry,
 }
 
 fn hand_transform(index: usize, hand_size: usize) -> (i32, i32) {
@@ -60,11 +60,11 @@ fn hand_transform(index: usize, hand_size: usize) -> (i32, i32) {
 }
 
 fn hand_position(
-    base: CardAnchor,
+    base: AnchorGeometry,
     index: usize,
     count: usize,
     selected: bool,
-) -> (CardAnchor, f64, usize) {
+) -> (AnchorGeometry, f64, usize) {
     let (distance, default_y) = hand_transform(index, count);
     let rotation = if selected { 0 } else { distance };
     let translate_y = if selected { -25 } else { default_y };
@@ -73,7 +73,7 @@ fn hand_position(
     // The hand slots are 10vw wide with -1.1vw margins on both sides.
     let spacing = base.width * 0.78;
     (
-        CardAnchor {
+        AnchorGeometry {
             center_x: base.center_x + (index as f64 - (count as f64 - 1.0) / 2.0) * spacing
                 - angle.sin() * shift,
             center_y: base.center_y + angle.cos() * shift,
@@ -84,16 +84,16 @@ fn hand_position(
     )
 }
 
-fn local_hand(card: &Card) -> bool {
+fn local_hand(card: &TrackedCard) -> bool {
     matches!(card.placement, CardPlacement::Zone(address)
-        if address.controller == Player::Player && address.location == CardLocation::Hand)
+        if address.controller == Player::Local && address.location == CardLocation::Hand)
 }
 
-pub(super) fn shuffle_source_cards(cards: &mut Vec<Card>, playback: &CardAnimationState) {
+pub(super) fn shuffle_source_cards(cards: &mut Vec<TrackedCard>, playback: &CardAnimationState) {
     if let Some(source) = playback
         .source
         .as_ref()
-        .filter(|_| playback.phase == AnimationPhase::HandShuffleGathering)
+        .filter(|_| playback.phase == CardAnimationPhase::HandShuffleGathering)
     {
         cards.retain(|card| !local_hand(card));
         cards.extend(
@@ -107,25 +107,25 @@ pub(super) fn shuffle_source_cards(cards: &mut Vec<Card>, playback: &CardAnimati
 }
 
 pub(super) fn shuffle_source_targets(
-    targets: &mut Vec<CardTarget>,
-    base: CardAnchor,
+    targets: &mut Vec<CardLayoutTarget>,
+    base: AnchorGeometry,
     playback: &CardAnimationState,
 ) -> anyhow::Result<()> {
     if let Some(source) = playback
         .source
         .as_ref()
-        .filter(|_| playback.phase == AnimationPhase::HandShuffleGathering)
+        .filter(|_| playback.phase == CardAnimationPhase::HandShuffleGathering)
     {
         targets.retain(|target| target.address.location != CardLocation::Hand);
         for card in source.cards().iter().filter(|card| local_hand(card)) {
             let CardPlacement::Zone(address) = card.placement else {
                 unreachable!()
             };
-            targets.push(CardTarget {
+            targets.push(CardLayoutTarget {
                 id: card.id,
                 address,
-                anchor: base,
-                data: CardData {
+                geometry: base,
+                data: DuelCardData {
                     card_code: card.data.map_or(card.code, |data| data.card_code),
                     controller: address.controller,
                     location: address.location,
@@ -134,7 +134,7 @@ pub(super) fn shuffle_source_targets(
                 },
                 rotation: 0.0,
                 stack_order: 50 + i32::try_from(address.sequence)?,
-                appearance: CardAppearance::Interactive,
+                render_mode: CardRenderMode::Interactive,
             });
         }
     }
@@ -142,27 +142,27 @@ pub(super) fn shuffle_source_targets(
 }
 
 pub(super) fn gather_hand(
-    base: CardAnchor,
-    targets: &mut [CardTarget],
+    base: AnchorGeometry,
+    targets: &mut [CardLayoutTarget],
     playback: &CardAnimationState,
 ) {
     if matches!(
         playback.phase,
-        AnimationPhase::HandShuffleGathering | AnimationPhase::HandShuffleStacking
+        CardAnimationPhase::HandShuffleGathering | CardAnimationPhase::HandShuffleStacking
     ) {
         for target in targets.iter_mut().filter(|target| {
-            target.address.controller == Player::Player
+            target.address.controller == Player::Local
                 && target.address.location == CardLocation::Hand
         }) {
-            target.anchor = base;
+            target.geometry = base;
             target.rotation = 0.0;
         }
     }
 }
 
 pub(super) fn preserve_pile_images(
-    snapshot: &PreviewSnapshot,
-    targets: &mut [CardTarget],
+    snapshot: &CardLayoutSnapshot,
+    targets: &mut [CardLayoutTarget],
     playback: &CardAnimationState,
 ) -> anyhow::Result<()> {
     let Some(source) = playback.source.as_ref().filter(|_| playback.is_active()) else {
@@ -180,7 +180,7 @@ pub(super) fn preserve_pile_images(
                 let CardPlacement::Zone(new) = current.placement else {
                     return None;
                 };
-                (old.controller == Player::Player
+                (old.controller == Player::Local
                     && old.location == location
                     && new.controller == old.controller
                     && new.location == location)
@@ -190,7 +190,7 @@ pub(super) fn preserve_pile_images(
         let old_image = if let Some(sequence) = surviving_top {
             let data = source
                 .card_at(CardAddress {
-                    controller: Player::Player,
+                    controller: Player::Local,
                     location,
                     sequence,
                 })
@@ -202,22 +202,22 @@ pub(super) fn preserve_pile_images(
         };
         for target in targets.iter_mut().filter(|target| {
             target.address.location == location
-                && matches!(target.appearance, CardAppearance::Pile(_))
+                && matches!(target.render_mode, CardRenderMode::Pile(_))
         }) {
             let was_in_pile = source.card_by_id(target.id).is_some_and(|card| {
                 matches!(
                     card.placement, CardPlacement::Zone(address)
-                        if address.controller == Player::Player && address.location == location
+                        if address.controller == Player::Local && address.location == location
                 )
             });
             if was_in_pile {
-                target.appearance =
-                    CardAppearance::Pile(old_image.context("Previous pile image is missing")?);
+                target.render_mode =
+                    CardRenderMode::Pile(old_image.context("Previous pile image is missing")?);
             } else if matches!(
-                target.appearance,
-                CardAppearance::Pile(CardImage::Thumbnail(_))
+                target.render_mode,
+                CardRenderMode::Pile(CardImage::Thumbnail(_))
             ) {
-                target.appearance = CardAppearance::Pile(if target.data.card_code == 0 {
+                target.render_mode = CardRenderMode::Pile(if target.data.card_code == 0 {
                     CardImage::CardBack
                 } else {
                     CardImage::Thumbnail(target.data)
@@ -228,7 +228,7 @@ pub(super) fn preserve_pile_images(
     Ok(())
 }
 
-fn pile_face(location: CardLocation, top: CardData) -> CardImage {
+fn pile_face(location: CardLocation, top: DuelCardData) -> CardImage {
     if location == CardLocation::Banishment
         && !matches!(
             top.position,
@@ -251,9 +251,9 @@ fn pile_face(location: CardLocation, top: CardData) -> CardImage {
 }
 
 pub(super) fn targets(
-    snapshot: &PreviewSnapshot,
-    geometry: &PreviewGeometry,
-) -> anyhow::Result<Vec<CardTarget>> {
+    snapshot: &CardLayoutSnapshot,
+    geometry: &LayoutGeometry,
+) -> anyhow::Result<Vec<CardLayoutTarget>> {
     let mut targets = Vec::new();
     for location in [
         CardLocation::MonsterZone,
@@ -270,7 +270,7 @@ pub(super) fn targets(
             .iter()
             .filter_map(|card| match card.placement {
                 CardPlacement::Zone(address)
-                    if address.controller == Player::Player && address.location == location =>
+                    if address.controller == Player::Local && address.location == location =>
                 {
                     Some((address, card))
                 }
@@ -296,7 +296,7 @@ pub(super) fn targets(
             let data = card
                 .data
                 .with_context(|| format!("Card data is missing at {address:?}"))?;
-            let (anchor, rotation, stack_order, appearance) = match location {
+            let (anchor, rotation, stack_order, render_mode) = match location {
                 CardLocation::MonsterZone | CardLocation::SpellTrapZone => {
                     let count = if location == CardLocation::MonsterZone {
                         7
@@ -310,11 +310,11 @@ pub(super) fn targets(
                     (
                         *geometry
                             .anchors
-                            .get(&Anchor::Zone(location, address.sequence))
+                            .get(&LayoutAnchorId::Zone(location, address.sequence))
                             .context("Field anchor missing")?,
                         0.0,
                         2,
-                        CardAppearance::Interactive,
+                        CardRenderMode::Interactive,
                     )
                 }
                 CardLocation::Hand => {
@@ -328,13 +328,13 @@ pub(super) fn targets(
                         anchor,
                         rotation,
                         50 + i32::try_from(stack)?,
-                        CardAppearance::Interactive,
+                        CardRenderMode::Interactive,
                     )
                 }
                 _ => (
                     *geometry
                         .anchors
-                        .get(&Anchor::Pile(location))
+                        .get(&LayoutAnchorId::Pile(location))
                         .context("Pile anchor missing")?,
                     if location == CardLocation::Banishment {
                         -90.0
@@ -342,21 +342,21 @@ pub(super) fn targets(
                         0.0
                     },
                     1,
-                    CardAppearance::Pile(pile_image.context("Pile image is missing")?),
+                    CardRenderMode::Pile(pile_image.context("Pile image is missing")?),
                 ),
             };
-            let interactive = appearance == CardAppearance::Interactive;
-            targets.push(CardTarget {
+            let interactive = render_mode == CardRenderMode::Interactive;
+            targets.push(CardLayoutTarget {
                 id: card.id,
                 address,
-                anchor,
+                geometry: anchor,
                 data: if matches!(
                     location,
                     CardLocation::MonsterZone | CardLocation::SpellTrapZone
                 ) {
                     data
                 } else {
-                    CardData {
+                    DuelCardData {
                         card_code: if interactive {
                             data.card_code
                         } else {
@@ -370,7 +370,7 @@ pub(super) fn targets(
                 },
                 rotation,
                 stack_order,
-                appearance,
+                render_mode,
             });
         }
     }
@@ -385,21 +385,21 @@ pub(super) fn targets(
         let CardPlacement::Zone(address) = host.placement else {
             anyhow::bail!("Material host is not in a zone")
         };
-        if address.controller != Player::Player {
+        if address.controller != Player::Local {
             continue;
         }
         let host_target = targets
             .iter()
             .find(|target| target.id == host.id)
             .context("Material host has no visible target")?;
-        let mut anchor = host_target.anchor;
+        let mut anchor = host_target.geometry;
         anchor.center_x += anchor.width * (0.12 + f64::from(sequence) * 0.06);
         anchor.center_y += anchor.height * 0.12;
-        targets.push(CardTarget {
+        targets.push(CardLayoutTarget {
             id: card.id,
             address,
-            anchor,
-            data: CardData {
+            geometry: anchor,
+            data: DuelCardData {
                 card_code: card.code,
                 controller: address.controller,
                 location: address.location,
@@ -408,7 +408,7 @@ pub(super) fn targets(
             },
             rotation: 0.0,
             stack_order: 1,
-            appearance: CardAppearance::Material,
+            render_mode: CardRenderMode::Material,
         });
     }
     Ok(targets)

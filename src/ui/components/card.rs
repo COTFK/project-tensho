@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::ocgcore::CardData;
+use crate::ocgcore::DuelCardData;
 use crate::utility::CARD_BACK;
 use crate::utility::EXTRA_BACK;
 use crate::utility::card_image_url;
@@ -8,8 +8,8 @@ use crate::utility::card_thumbnail_url;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CardImage {
-    Face(CardData),
-    Thumbnail(CardData),
+    Face(DuelCardData),
+    Thumbnail(DuelCardData),
     CardBack,
     ExtraDeckBack,
 }

@@ -3,14 +3,14 @@ use dioxus::prelude::*;
 use std::collections::{BTreeSet, HashMap};
 
 use super::card_layout::{
-    CardTarget, PreviewGeometry, gather_hand, preserve_pile_images, shuffle_source_cards,
+    CardLayoutTarget, LayoutGeometry, gather_hand, preserve_pile_images, shuffle_source_cards,
     shuffle_source_targets, snapshot, targets,
 };
-use super::field::Field;
-use super::hand::Hand;
-use super::layout_anchors::{Anchor, AnchorNotReady, LayoutAnchors, LayoutRevision};
+use super::field::FieldGrid;
+use super::hand::HandLayout;
+use super::layout_anchors::{AnchorNotReady, LayoutAnchorId, LayoutAnchorRegistry, LayoutRevision};
 use super::persistent_card_layer::{PersistentCardLayer, card_image};
-use crate::duel::cards::{CardAddress, CardId, CardTracker};
+use crate::duel::cards::{CardAddress, CardInstanceId, CardTracker};
 use crate::duel::controller::ChainLink;
 use crate::ocgcore::constants::{CardLocation, Player};
 use crate::ui::card_animation::{CardAnimationState, wait_millis};
@@ -54,7 +54,7 @@ fn artwork_status(
     (failed, ready)
 }
 
-async fn measure_field(anchors: &LayoutAnchors) -> anyhow::Result<PreviewGeometry> {
+async fn measure_field(anchors: &LayoutAnchorRegistry) -> anyhow::Result<LayoutGeometry> {
     let mut measured = HashMap::with_capacity(17);
     for (location, count) in [
         (CardLocation::MonsterZone, 7),
@@ -62,12 +62,12 @@ async fn measure_field(anchors: &LayoutAnchors) -> anyhow::Result<PreviewGeometr
     ] {
         for sequence in 0..count {
             let address = CardAddress {
-                controller: Player::Player,
+                controller: Player::Local,
                 location,
                 sequence,
             };
             measured.insert(
-                Anchor::Zone(location, sequence),
+                LayoutAnchorId::Zone(location, sequence),
                 anchors
                     .measure(address)
                     .await
@@ -82,19 +82,19 @@ async fn measure_field(anchors: &LayoutAnchors) -> anyhow::Result<PreviewGeometr
         CardLocation::Banishment,
     ] {
         let address = CardAddress {
-            controller: Player::Player,
+            controller: Player::Local,
             location,
             sequence: 0,
         };
         measured.insert(
-            Anchor::Pile(location),
+            LayoutAnchorId::Pile(location),
             anchors
                 .measure(address)
                 .await
                 .with_context(|| format!("Cannot measure {address:?}"))?,
         );
     }
-    Ok(PreviewGeometry {
+    Ok(LayoutGeometry {
         anchors: measured,
         hand_base: anchors
             .measure_hand_base()
@@ -103,7 +103,9 @@ async fn measure_field(anchors: &LayoutAnchors) -> anyhow::Result<PreviewGeometr
     })
 }
 
-async fn measure_field_when_ready(anchors: &LayoutAnchors) -> anyhow::Result<PreviewGeometry> {
+async fn measure_field_when_ready(
+    anchors: &LayoutAnchorRegistry,
+) -> anyhow::Result<LayoutGeometry> {
     for _ in 0..10 {
         match measure_field(anchors).await {
             Err(error) if error.is::<AnchorNotReady>() => wait_millis(100).await,
@@ -114,18 +116,18 @@ async fn measure_field_when_ready(anchors: &LayoutAnchors) -> anyhow::Result<Pre
 }
 
 #[component]
-pub(super) fn LayeredField(
+pub(super) fn DuelBoard(
     tracking: ReadSignal<Option<CardTracker>>,
-    selected: ReadSignal<Option<CardId>>,
+    selected: ReadSignal<Option<CardInstanceId>>,
     animation: ReadSignal<CardAnimationState>,
     preloading: bool,
     effects_open: bool,
     deck_codes: Vec<u32>,
     onlayout: EventHandler<LayoutStatus>,
 ) -> Element {
-    let anchors = use_context::<LayoutAnchors>();
+    let anchors = use_context::<LayoutAnchorRegistry>();
     let revision = use_context::<LayoutRevision>();
-    let mut layered_mounted = use_signal(|| false);
+    let mut card_layer_mounted = use_signal(|| false);
     let artwork = use_signal(HashMap::<String, ArtworkStatus>::new);
     let chain_links = use_context::<Memo<Vec<ChainLink>>>();
     let resource = use_resource(move || {
@@ -182,7 +184,7 @@ pub(super) fn LayeredField(
     }
     let artwork_state = artwork();
     let status = layout_status(
-        layered_mounted(),
+        card_layer_mounted(),
         current_revision,
         result.as_ref(),
         resolved.as_ref(),
@@ -190,7 +192,7 @@ pub(super) fn LayeredField(
         preloading,
     );
     use_effect(use_reactive(&status, move |status| onlayout.call(status)));
-    let layered = matches!(&resolved, Some(Ok(_)));
+    let targets_ready = matches!(&resolved, Some(Ok(_)));
     let visible_targets = resolved
         .as_ref()
         .and_then(|result| result.as_ref().ok())
@@ -207,15 +209,15 @@ pub(super) fn LayeredField(
         .and_then(|cards| cards.zone_data(CardLocation::Hand))
         .map_or(0, |cards| cards.len());
     rsx! {
-        Field {}
-        Hand { hand_size }
+        FieldGrid {}
+        HandLayout { hand_size }
         // Remeasure after the card layer is first ready.
-        if layered {
+        if targets_ready {
             div {
                 class: "hidden",
                 onmounted: move |_| {
                     revision.invalidate();
-                    layered_mounted.set(true);
+                    card_layer_mounted.set(true);
                 },
             }
         }
@@ -263,10 +265,10 @@ fn ArtworkPreloader(
 }
 
 fn layout_status(
-    layered_mounted: bool,
+    card_layer_mounted: bool,
     current_revision: u64,
-    measured: Option<&(u64, Result<PreviewGeometry, String>)>,
-    targets: Option<&Result<Vec<CardTarget>, String>>,
+    measured: Option<&(u64, Result<LayoutGeometry, String>)>,
+    targets: Option<&Result<Vec<CardLayoutTarget>, String>>,
     artwork: (Option<String>, bool),
     preloading: bool,
 ) -> LayoutStatus {
@@ -283,7 +285,7 @@ fn layout_status(
         let action = if preloading { "measure" } else { "remeasure" };
         return LayoutStatus::Failed(format!("Cannot {action} the field: {error}"));
     }
-    if layered_mounted
+    if card_layer_mounted
         && geometry.is_some_and(Result::is_ok)
         && targets.is_some_and(Result::is_ok)
         && (!preloading || artwork.1)
@@ -295,5 +297,5 @@ fn layout_status(
 }
 
 #[cfg(test)]
-#[path = "../../../tests/unit/ui/layered_field.rs"]
+#[path = "../../../tests/unit/ui/board.rs"]
 mod tests;

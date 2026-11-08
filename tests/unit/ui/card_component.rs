@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn card_images_use_the_requested_face_thumbnail_or_back() {
-    let card = CardData {
+    let card = DuelCardData {
         card_code: 12345,
         ..Default::default()
     };

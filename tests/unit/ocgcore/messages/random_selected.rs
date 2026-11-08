@@ -17,7 +17,7 @@ const SAMPLE: [u8; 70] = [
 fn parses_sample_random_selection() {
     let face_down = CardPositionFlags::FACE_DOWN_ATTACK | CardPositionFlags::FACE_DOWN_DEFENSE;
     let cards = [0, 5, 10, 12, 13, 14].map(|sequence| CardLocationInfo {
-        controller: Some(Player::Player),
+        controller: Some(Player::Local),
         location: CardLocationKind::Known(CardLocation::ExtraDeck),
         sequence,
         position: CardLocationPosition::Position(face_down),
@@ -25,7 +25,7 @@ fn parses_sample_random_selection() {
     assert_eq!(
         CoreMessage::try_from(SAMPLE.as_slice()).unwrap(),
         CoreMessage::RandomSelected(RandomSelectedMessageData {
-            player: Player::Player,
+            player: Player::Local,
             cards: cards.to_vec(),
         })
     );

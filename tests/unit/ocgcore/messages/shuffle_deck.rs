@@ -3,7 +3,7 @@ use crate::ocgcore::messages::{CoreMessage, parse_messages};
 
 #[test]
 fn parses_shuffle_deck_for_both_players() {
-    for (value, player) in [(0, Player::Player), (1, Player::Opponent)] {
+    for (value, player) in [(0, Player::Local), (1, Player::Opponent)] {
         let bytes = [2, 0, 0, 0, 32, value];
         assert_eq!(
             CoreMessage::try_from(bytes.as_slice()).unwrap(),
@@ -39,7 +39,7 @@ fn parses_shuffle_deck_among_framed_messages() {
         parse_messages(&bytes).unwrap().as_slice(),
         [
             CoreMessage::ShuffleDeck(ShuffleDeckMessageData {
-                player: Player::Player
+                player: Player::Local
             }),
             CoreMessage::NewPhase(_)
         ]

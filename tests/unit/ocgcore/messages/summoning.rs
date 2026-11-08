@@ -17,7 +17,7 @@ fn parses_sample_summoning() {
         CoreMessage::Summoning(SummoningMessageData {
             card_code: 90_681_088,
             location: CardLocationInfo {
-                controller: Some(Player::Player),
+                controller: Some(Player::Local),
                 location: CardLocationKind::Known(CardLocation::MonsterZone),
                 sequence: 2,
                 position: CardLocationPosition::Position(CardPositionFlags::FACE_UP_ATTACK),
@@ -33,7 +33,7 @@ fn parses_sample_special_summoning() {
         CoreMessage::SpecialSummoning(SummoningMessageData {
             card_code: 2_526_224,
             location: CardLocationInfo {
-                controller: Some(Player::Player),
+                controller: Some(Player::Local),
                 location: CardLocationKind::Known(CardLocation::MonsterZone),
                 sequence: 2,
                 position: CardLocationPosition::Position(CardPositionFlags::FACE_UP_ATTACK),

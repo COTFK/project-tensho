@@ -2,21 +2,21 @@ use crate::duel::input::PendingInput;
 use dioxus::prelude::*;
 
 use super::constants::ZONE_SIZE;
-use super::effect_pile::EffectPile;
-use super::extra_deck::ExtraDeck;
-use super::layout_anchors::{Anchor, LayoutAnchor, LayoutRevision};
-use super::main_deck::MainDeck;
+use super::effect_pile::EffectPileZone;
+use super::extra_deck::ExtraDeckZone;
+use super::layout_anchors::{LayoutAnchor, LayoutAnchorId, LayoutRevision};
+use super::main_deck::MainDeckZone;
 use crate::duel::cards::CardTracker;
-use crate::ocgcore::CardData;
+use crate::ocgcore::DuelCardData;
 use crate::ocgcore::Response;
 use crate::ocgcore::constants::{CardLocation, Player};
 
 #[component]
-pub fn Field() -> Element {
+pub fn FieldGrid() -> Element {
     let revision = use_context::<LayoutRevision>();
     let tracking = use_context::<ReadSignal<Option<CardTracker>>>();
     let pending = use_context::<ReadSignal<Option<PendingInput>>>();
-    let effects = use_context::<Signal<Vec<CardData>>>();
+    let effects = use_context::<Signal<Vec<DuelCardData>>>();
     let mut open_pile = use_context::<Signal<Option<CardLocation>>>();
     let has_cards = |location| {
         tracking
@@ -34,52 +34,52 @@ pub fn Field() -> Element {
         })
     };
     let suppressed = !effects.read().is_empty();
-    let has_summons = matches!(&*pending.read(), Some(PendingInput::Idle(actions))
+    let has_summons = matches!(&*pending.read(), Some(PendingInput::ActionSelection(actions))
         if actions.special_summons.iter().any(|card| card.location == CardLocation::ExtraDeck));
     rsx!(
         div {
             class: "pt-[15vh] max-w-[90vw] w-fit mx-auto grid grid-cols-7 gap-0.5 justify-items-center",
             onresize: move |_| revision.invalidate(),
-            div { class: "col-start-3 row-start-1", Zone { index: 5, location: CardLocation::MonsterZone } }
-            div { class: "col-start-5 row-start-1", Zone { index: 6, location: CardLocation::MonsterZone } }
-            div { class: "col-start-7 row-start-1 relative {ZONE_SIZE}", PileAnchor { location: CardLocation::Banishment } EffectPile {
+            div { class: "col-start-3 row-start-1", FieldZone { index: 5, location: CardLocation::MonsterZone } }
+            div { class: "col-start-5 row-start-1", FieldZone { index: 6, location: CardLocation::MonsterZone } }
+            div { class: "col-start-7 row-start-1 relative {ZONE_SIZE}", PileAnchor { location: CardLocation::Banishment } EffectPileZone {
                 location: CardLocation::Banishment,
                 has_cards: has_cards(CardLocation::Banishment),
                 highlighted: prompted(CardLocation::Banishment) && !suppressed,
                 onbrowse: move |location| open_pile.set(Some(location)),
             } }
-            div { class: "col-start-1 row-start-2", Zone { index: 5, location: CardLocation::SpellTrapZone } }
-            div { class: "col-start-2 row-start-2", Zone { index: 0, location: CardLocation::MonsterZone } }
-            div { class: "col-start-3 row-start-2", Zone { index: 1, location: CardLocation::MonsterZone } }
-            div { class: "col-start-4 row-start-2", Zone { index: 2, location: CardLocation::MonsterZone } }
-            div { class: "col-start-5 row-start-2", Zone { index: 3, location: CardLocation::MonsterZone } }
-            div { class: "col-start-6 row-start-2", Zone { index: 4, location: CardLocation::MonsterZone } }
-            div { class: "col-start-7 row-start-2 relative", PileAnchor { location: CardLocation::Graveyard } EffectPile {
+            div { class: "col-start-1 row-start-2", FieldZone { index: 5, location: CardLocation::SpellTrapZone } }
+            div { class: "col-start-2 row-start-2", FieldZone { index: 0, location: CardLocation::MonsterZone } }
+            div { class: "col-start-3 row-start-2", FieldZone { index: 1, location: CardLocation::MonsterZone } }
+            div { class: "col-start-4 row-start-2", FieldZone { index: 2, location: CardLocation::MonsterZone } }
+            div { class: "col-start-5 row-start-2", FieldZone { index: 3, location: CardLocation::MonsterZone } }
+            div { class: "col-start-6 row-start-2", FieldZone { index: 4, location: CardLocation::MonsterZone } }
+            div { class: "col-start-7 row-start-2 relative", PileAnchor { location: CardLocation::Graveyard } EffectPileZone {
                 location: CardLocation::Graveyard,
                 has_cards: has_cards(CardLocation::Graveyard),
                 highlighted: prompted(CardLocation::Graveyard) && !suppressed,
                 onbrowse: move |location| open_pile.set(Some(location)),
             } }
-            div { class: "col-start-1 row-start-3 relative", PileAnchor { location: CardLocation::ExtraDeck } ExtraDeck {
+            div { class: "col-start-1 row-start-3 relative", PileAnchor { location: CardLocation::ExtraDeck } ExtraDeckZone {
                 has_cards: has_cards(CardLocation::ExtraDeck),
                 highlighted: has_summons && !suppressed,
                 onbrowse: move |_| open_pile.set(Some(CardLocation::ExtraDeck)),
             } }
-            div { class: "col-start-2 row-start-3", Zone { index: 0, location: CardLocation::SpellTrapZone } }
-            div { class: "col-start-3 row-start-3", Zone { index: 1, location: CardLocation::SpellTrapZone } }
-            div { class: "col-start-4 row-start-3", Zone { index: 2, location: CardLocation::SpellTrapZone } }
-            div { class: "col-start-5 row-start-3", Zone { index: 3, location: CardLocation::SpellTrapZone } }
-            div { class: "col-start-6 row-start-3", Zone { index: 4, location: CardLocation::SpellTrapZone } }
-            div { class: "col-start-7 row-start-3 relative", PileAnchor { location: CardLocation::Deck } MainDeck {} }
+            div { class: "col-start-2 row-start-3", FieldZone { index: 0, location: CardLocation::SpellTrapZone } }
+            div { class: "col-start-3 row-start-3", FieldZone { index: 1, location: CardLocation::SpellTrapZone } }
+            div { class: "col-start-4 row-start-3", FieldZone { index: 2, location: CardLocation::SpellTrapZone } }
+            div { class: "col-start-5 row-start-3", FieldZone { index: 3, location: CardLocation::SpellTrapZone } }
+            div { class: "col-start-6 row-start-3", FieldZone { index: 4, location: CardLocation::SpellTrapZone } }
+            div { class: "col-start-7 row-start-3 relative", PileAnchor { location: CardLocation::Deck } MainDeckZone {} }
         }
     )
 }
 
 #[component]
-fn Zone(index: u8, location: CardLocation) -> Element {
+fn FieldZone(index: u8, location: CardLocation) -> Element {
     let pending = use_context::<ReadSignal<Option<PendingInput>>>();
     let onresponse = use_context::<EventHandler<Response>>();
-    let placeable_on = matches!(pending(), Some(PendingInput::Place(zones))
+    let placeable_on = matches!(pending(), Some(PendingInput::FieldPlacement(zones))
         if zones.iter().any(|zone| zone.location == location && zone.sequence == index));
     rsx!(
         div {
@@ -89,14 +89,14 @@ fn Zone(index: u8, location: CardLocation) -> Element {
             onclick: move |_| {
                 if placeable_on {
                     onresponse.call(Response::Place {
-                        controller: Player::Player as u8,
+                        controller: Player::Local as u8,
                         location: location as u8,
                         index,
                     });
                 }
             },
             LayoutAnchor {
-                anchor: Anchor::Zone(location, u32::from(index)),
+                anchor: LayoutAnchorId::Zone(location, u32::from(index)),
                 class: "absolute h-full aspect-[59/86] p-[clamp(1px,0.3vw,5px)] pointer-events-none",
             }
         }
@@ -110,7 +110,7 @@ fn PileAnchor(location: CardLocation) -> Element {
             div {
                 class: "absolute inset-[clamp(2px,0.6vw,8px)] flex items-center justify-center pointer-events-none",
                 LayoutAnchor {
-                    anchor: Anchor::Pile(location),
+                    anchor: LayoutAnchorId::Pile(location),
                     class: "h-full aspect-[59/86]",
                 }
             }
@@ -120,7 +120,7 @@ fn PileAnchor(location: CardLocation) -> Element {
             div {
                 class: "absolute inset-[clamp(2px,0.6vw,8px)] flex items-center justify-center",
                 LayoutAnchor {
-                    anchor: Anchor::Pile(location),
+                    anchor: LayoutAnchorId::Pile(location),
                     class: "w-full aspect-[59/86]",
                 }
                 }

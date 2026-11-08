@@ -8,7 +8,7 @@ fn parses_win_message() {
     assert_eq!(
         CoreMessage::try_from(bytes.as_slice()).unwrap(),
         CoreMessage::Win(WinMessageData {
-            winner: Winner::Player(Player::Player),
+            winner: Winner::Player(Player::Local),
             reason: WinReason::DeckOut,
         })
     );
@@ -29,7 +29,7 @@ fn preserves_draw_and_card_defined_reason() {
 #[test]
 fn parses_all_winners() {
     for (value, winner) in [
-        (0, Winner::Player(Player::Player)),
+        (0, Winner::Player(Player::Local)),
         (1, Winner::Player(Player::Opponent)),
         (2, Winner::Draw),
     ] {

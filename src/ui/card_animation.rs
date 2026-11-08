@@ -1,4 +1,4 @@
-use crate::duel::cards::{CardId, CardPlacement, CardTracker};
+use crate::duel::cards::{CardInstanceId, CardPlacement, CardTracker};
 use crate::ocgcore::constants::{CardLocation, Player};
 use crate::ocgcore::messages::CoreMessage;
 use dioxus::prelude::*;
@@ -8,7 +8,7 @@ pub(crate) const ANIMATION_MILLIS: u32 = 300;
 const COMPLETION_MARGIN_MILLIS: u32 = 50;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) enum AnimationPhase {
+pub(crate) enum CardAnimationPhase {
     #[default]
     Idle,
     Moving,
@@ -19,75 +19,75 @@ pub(crate) enum AnimationPhase {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct CardAnimationState {
-    pub phase: AnimationPhase,
+    pub phase: CardAnimationPhase,
     // Invalidates timers from cancelled or superseded animations.
     pub generation: u64,
-    pub moving: Vec<CardId>,
+    pub moving: Vec<CardInstanceId>,
     // Previous state for preserving pile images during movement.
     pub source: Option<CardTracker>,
 }
 
 impl CardAnimationState {
     pub fn is_active(&self) -> bool {
-        self.phase != AnimationPhase::Idle
+        self.phase != CardAnimationPhase::Idle
     }
 
     pub fn cancel(&mut self) {
         self.generation = self.generation.wrapping_add(1);
-        self.phase = AnimationPhase::Idle;
+        self.phase = CardAnimationPhase::Idle;
         self.moving.clear();
         self.source = None;
     }
 
-    pub fn begin(&mut self, moving: Vec<CardId>, source: CardTracker) {
+    pub fn begin(&mut self, moving: Vec<CardInstanceId>, source: CardTracker) {
         self.generation = self.generation.wrapping_add(1);
         self.moving = moving;
         self.source = Some(source);
-        self.phase = AnimationPhase::Moving;
+        self.phase = CardAnimationPhase::Moving;
     }
 
-    pub fn begin_gather(&mut self, mut moving: Vec<CardId>, source: CardTracker) {
+    pub fn begin_gather(&mut self, mut moving: Vec<CardInstanceId>, source: CardTracker) {
         moving.extend(source.cards().iter().filter_map(|card| {
             matches!(card.placement, CardPlacement::Zone(address)
-                if address.controller == Player::Player && address.location == CardLocation::Hand)
+                if address.controller == Player::Local && address.location == CardLocation::Hand)
             .then_some(card.id)
         }));
         self.begin(moving, source);
-        self.phase = AnimationPhase::HandShuffleGathering;
+        self.phase = CardAnimationPhase::HandShuffleGathering;
     }
 
-    pub(crate) fn advance(&mut self, generation: u64, phase: AnimationPhase) {
+    pub(crate) fn advance(&mut self, generation: u64, phase: CardAnimationPhase) {
         if self.generation != generation || self.phase != phase {
             return;
         }
         match phase {
-            AnimationPhase::HandShuffleGathering => {
-                self.phase = AnimationPhase::HandShuffleStacking
+            CardAnimationPhase::HandShuffleGathering => {
+                self.phase = CardAnimationPhase::HandShuffleStacking
             }
-            AnimationPhase::HandShuffleStacking => {
-                self.phase = AnimationPhase::HandShuffleSpreading
+            CardAnimationPhase::HandShuffleStacking => {
+                self.phase = CardAnimationPhase::HandShuffleSpreading
             }
-            AnimationPhase::Moving | AnimationPhase::HandShuffleSpreading => {
+            CardAnimationPhase::Moving | CardAnimationPhase::HandShuffleSpreading => {
                 self.finish(generation)
             }
-            AnimationPhase::Idle => {}
+            CardAnimationPhase::Idle => {}
         }
     }
 
     pub fn finish(&mut self, generation: u64) {
         if self.is_active() && self.generation == generation {
-            self.phase = AnimationPhase::Idle;
+            self.phase = CardAnimationPhase::Idle;
             self.moving.clear();
             self.source = None;
         }
     }
 }
 
-fn visible(layer: &CardTracker, placement: CardPlacement) -> bool {
+fn is_animatable_placement(tracker: &CardTracker, placement: CardPlacement) -> bool {
     let address = match placement {
         CardPlacement::Zone(address) => address,
         CardPlacement::Overlay { host, .. } => {
-            let Some(host) = layer.card_by_id(host) else {
+            let Some(host) = tracker.card_by_id(host) else {
                 return false;
             };
             let CardPlacement::Zone(address) = host.placement else {
@@ -96,7 +96,7 @@ fn visible(layer: &CardTracker, placement: CardPlacement) -> bool {
             address
         }
     };
-    address.controller == Player::Player
+    address.controller == Player::Local
         && matches!(
             address.location,
             CardLocation::Deck
@@ -110,12 +110,12 @@ fn visible(layer: &CardTracker, placement: CardPlacement) -> bool {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) enum CardAnimation {
-    Movement(Vec<CardId>),
-    HandShuffle(Vec<CardId>),
+pub(crate) enum CardAnimationPlan {
+    Movement(Vec<CardInstanceId>),
+    HandShuffle(Vec<CardInstanceId>),
 }
 
-impl CardAnimation {
+impl CardAnimationPlan {
     pub fn begin(self, state: &mut CardAnimationState, source: CardTracker) {
         match self {
             Self::Movement(moving) => state.begin(moving, source),
@@ -128,21 +128,21 @@ pub(crate) fn plan_animation(
     messages: &[CoreMessage],
     before: &CardTracker,
     after: &CardTracker,
-) -> Option<CardAnimation> {
+) -> Option<CardAnimationPlan> {
     let mut moving = movements(before, after);
     if messages.iter().any(|message| {
         matches!(message, CoreMessage::ShuffleHand(data)
-            if data.player == Player::Player && data.card_codes.len() > 1)
+            if data.player == Player::Local && data.card_codes.len() > 1)
     }) {
         if let Some(shuffled) = reshuffled_hand(before, after) {
             moving.extend(shuffled);
-            return Some(CardAnimation::HandShuffle(moving));
+            return Some(CardAnimationPlan::HandShuffle(moving));
         }
     }
-    (!moving.is_empty()).then_some(CardAnimation::Movement(moving))
+    (!moving.is_empty()).then_some(CardAnimationPlan::Movement(moving))
 }
 
-fn movements(before: &CardTracker, after: &CardTracker) -> Vec<CardId> {
+fn movements(before: &CardTracker, after: &CardTracker) -> Vec<CardInstanceId> {
     // Animate only cards visible at both ends of a transition.
     before
         .cards()
@@ -150,21 +150,21 @@ fn movements(before: &CardTracker, after: &CardTracker) -> Vec<CardId> {
         .filter_map(|old| {
             let new = after.card_by_id(old.id)?;
             ((old.placement != new.placement || old.position != new.position)
-                && visible(before, old.placement)
-                && visible(after, new.placement))
+                && is_animatable_placement(before, old.placement)
+                && is_animatable_placement(after, new.placement))
             .then_some(old.id)
         })
         .collect()
 }
 
-fn reshuffled_hand(before: &CardTracker, after: &CardTracker) -> Option<Vec<CardId>> {
-    let hand = |layer: &CardTracker| {
-        layer
+fn reshuffled_hand(before: &CardTracker, after: &CardTracker) -> Option<Vec<CardInstanceId>> {
+    let hand = |tracker: &CardTracker| {
+        tracker
             .cards()
             .iter()
             .filter(|card| {
                 matches!(card.placement, CardPlacement::Zone(address)
-                if address.controller == Player::Player && address.location == CardLocation::Hand)
+                if address.controller == Player::Local && address.location == CardLocation::Hand)
             })
             .map(|card| card.id)
             .collect::<Vec<_>>()
@@ -180,7 +180,7 @@ pub(crate) fn use_animation_completion(mut animation: Signal<CardAnimationState>
         let current = animation();
         if current.is_active() {
             spawn(async move {
-                if current.phase == AnimationPhase::HandShuffleStacking {
+                if current.phase == CardAnimationPhase::HandShuffleStacking {
                     // Give newly keyed cards a frame at the stack before spreading.
                     wait_millis(COMPLETION_MARGIN_MILLIS).await;
                 } else {

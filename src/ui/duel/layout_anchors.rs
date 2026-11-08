@@ -10,18 +10,18 @@ use crate::duel::cards::CardAddress;
 use crate::ocgcore::constants::{CardLocation, Player};
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
-pub(super) enum Anchor {
+pub(super) enum LayoutAnchorId {
     Zone(CardLocation, u32),
     HandBase,
     Pile(CardLocation),
 }
 
-impl TryFrom<CardAddress> for Anchor {
+impl TryFrom<CardAddress> for LayoutAnchorId {
     type Error = anyhow::Error;
 
     fn try_from(address: CardAddress) -> anyhow::Result<Self> {
         ensure!(
-            address.controller == Player::Player,
+            address.controller == Player::Local,
             "No opponent layout anchors"
         );
         match address.location {
@@ -41,7 +41,7 @@ impl TryFrom<CardAddress> for Anchor {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(super) struct CardAnchor {
+pub(super) struct AnchorGeometry {
     pub center_x: f64,
     pub center_y: f64,
     pub width: f64,
@@ -59,7 +59,7 @@ impl std::fmt::Display for AnchorNotReady {
 
 impl std::error::Error for AnchorNotReady {}
 
-impl CardAnchor {
+impl AnchorGeometry {
     fn from_rect(rect: PixelsRect) -> anyhow::Result<Self> {
         if rect.size.width == 0.0 || rect.size.height == 0.0 {
             return Err(AnchorNotReady("Card anchor has no size yet").into());
@@ -85,14 +85,14 @@ impl CardAnchor {
 type AnchorEntry = (Rc<()>, Rc<MountedData>);
 
 #[derive(Clone, Default)]
-pub(super) struct LayoutAnchors(Rc<RefCell<HashMap<Anchor, AnchorEntry>>>);
+pub(super) struct LayoutAnchorRegistry(Rc<RefCell<HashMap<LayoutAnchorId, AnchorEntry>>>);
 
-impl LayoutAnchors {
-    pub(super) fn insert(&self, anchor: Anchor, owner: Rc<()>, element: Rc<MountedData>) {
+impl LayoutAnchorRegistry {
+    pub(super) fn insert(&self, anchor: LayoutAnchorId, owner: Rc<()>, element: Rc<MountedData>) {
         self.0.borrow_mut().insert(anchor, (owner, element));
     }
 
-    fn remove(&self, anchor: Anchor, owner: &Rc<()>) {
+    fn remove(&self, anchor: LayoutAnchorId, owner: &Rc<()>) {
         let mut anchors = self.0.borrow_mut();
         if anchors
             .get(&anchor)
@@ -102,17 +102,18 @@ impl LayoutAnchors {
         }
     }
 
-    pub async fn measure(&self, address: CardAddress) -> anyhow::Result<CardAnchor> {
-        self.measure_anchor(Anchor::try_from(address)?).await
+    pub async fn measure(&self, address: CardAddress) -> anyhow::Result<AnchorGeometry> {
+        self.measure_anchor(LayoutAnchorId::try_from(address)?)
+            .await
     }
 
-    pub async fn measure_hand_base(&self) -> anyhow::Result<CardAnchor> {
-        self.measure_anchor(Anchor::HandBase).await
+    pub async fn measure_hand_base(&self) -> anyhow::Result<AnchorGeometry> {
+        self.measure_anchor(LayoutAnchorId::HandBase).await
     }
 
-    async fn measure_anchor(&self, anchor: Anchor) -> anyhow::Result<CardAnchor> {
+    async fn measure_anchor(&self, anchor: LayoutAnchorId) -> anyhow::Result<AnchorGeometry> {
         let (missing, measuring, changed) = match anchor {
-            Anchor::HandBase => (
+            LayoutAnchorId::HandBase => (
                 "Hand anchor not mounted",
                 "Measuring hand anchor",
                 "Hand anchor changed while measuring",
@@ -142,7 +143,7 @@ impl LayoutAnchors {
                 .is_some_and(|entry| Rc::ptr_eq(&entry.1, &element)),
             changed
         );
-        CardAnchor::from_rect(rect)
+        AnchorGeometry::from_rect(rect)
     }
 }
 
@@ -157,8 +158,8 @@ impl LayoutRevision {
 }
 
 #[component]
-pub(super) fn LayoutAnchor(anchor: Anchor, class: &'static str) -> Element {
-    let anchors = use_context::<LayoutAnchors>();
+pub(super) fn LayoutAnchor(anchor: LayoutAnchorId, class: &'static str) -> Element {
+    let anchors = use_context::<LayoutAnchorRegistry>();
     let revision = use_context::<LayoutRevision>();
     let owner = use_hook(|| Rc::new(()));
     use_drop({

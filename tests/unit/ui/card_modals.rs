@@ -1,9 +1,9 @@
 use super::*;
 use crate::duel::cards::CardTracker;
 use crate::duel::input::PendingInput;
-use crate::ocgcore::CardData;
+use crate::ocgcore::DuelCardData;
 use crate::ocgcore::messages::{SelectCardMessageData, SortCardMessageData};
-use crate::state::UIState;
+use crate::state::DuelState;
 use crate::ui::card_animation::CardAnimationState;
 use crate::ui::components::ModalSuppression;
 use crate::ui::playback::use_playback;
@@ -17,12 +17,12 @@ mod events;
 mod pile_modals;
 
 thread_local! {
-    static STATE: RefCell<Option<UIState>> = const { RefCell::new(None) };
+    static STATE: RefCell<Option<DuelState>> = const { RefCell::new(None) };
     static PLAYBACK: RefCell<Option<Signal<CardAnimationState>>> = const { RefCell::new(None) };
 }
 
 fn app() -> Element {
-    let state = use_hook(UIState::default);
+    let state = use_hook(DuelState::default);
     let playback = use_playback();
     let suppressed = use_memo(move || state.interaction_blocked(playback));
     use_context_provider(|| ModalSuppression(suppressed));
@@ -30,12 +30,12 @@ fn app() -> Element {
     PLAYBACK.with(|slot| *slot.borrow_mut() = Some(playback.animation));
     let pending = (state.pending_input)();
     rsx! {
-        CardSelector {
-            selectables: match &pending { Some(PendingInput::Cards(message)) => Some(message.clone()), _ => None },
+        CardSelectionModal {
+            selectables: match &pending { Some(PendingInput::CardSelection(message)) => Some(message.clone()), _ => None },
             onresponse: |_| -> () { panic!("Unexpected picker submission") },
         }
-        SortCardSelector {
-            sort_cards: match &pending { Some(PendingInput::Sort(message)) => Some(message.clone()), _ => None },
+        CardOrderingModal {
+            sort_cards: match &pending { Some(PendingInput::CardOrdering(message)) => Some(message.clone()), _ => None },
             onresponse: |_| -> () { panic!("Unexpected picker submission") },
         }
     }
@@ -46,7 +46,7 @@ fn pile_rows_keep_card_order_and_chain_links_without_playback_state() {
     use crate::duel::cards::{CardAddress, CardPlacement};
     let mut tracking = CardTracker::default();
     let grave = CardAddress {
-        controller: Player::Player,
+        controller: Player::Local,
         location: CardLocation::Graveyard,
         sequence: 0,
     };
@@ -76,7 +76,7 @@ fn pile_rows_keep_card_order_and_chain_links_without_playback_state() {
         tracking
             .update_queried_data(
                 address,
-                CardData {
+                DuelCardData {
                     card_code: card.code,
                     controller: address.controller,
                     location: address.location,
@@ -124,19 +124,19 @@ fn selection_and_sorting_lists_survive_cleared_prompts_while_closing() {
         let mut dom = VirtualDom::new(app);
         dom.rebuild_in_place();
         dom.process_events();
-        let card = CardData {
+        let card = DuelCardData {
             card_code: 42,
             ..Default::default()
         };
         STATE.with(|slot| {
             let mut state = slot.borrow().unwrap();
             state.pending_input.set(Some(if sorting {
-                PendingInput::Sort(SortCardMessageData {
+                PendingInput::CardOrdering(SortCardMessageData {
                     player: 0,
                     cards: vec![card],
                 })
             } else {
-                PendingInput::Cards(SelectCardMessageData {
+                PendingInput::CardSelection(SelectCardMessageData {
                     min_select: 1,
                     max_select: 1,
                     cards: vec![card],
@@ -185,7 +185,7 @@ fn playback_suppression_preserves_pending_requests_and_picker_selections() {
         dom.rebuild_in_place();
         dom.process_events();
         let cards = [42, 43]
-            .map(|card_code| CardData {
+            .map(|card_code| DuelCardData {
                 card_code,
                 ..Default::default()
             })
@@ -193,9 +193,9 @@ fn playback_suppression_preserves_pending_requests_and_picker_selections() {
         let state = STATE.with(|slot| {
             let mut state = slot.borrow().unwrap();
             state.pending_input.set(Some(if sorting {
-                PendingInput::Sort(SortCardMessageData { player: 0, cards })
+                PendingInput::CardOrdering(SortCardMessageData { player: 0, cards })
             } else {
-                PendingInput::Cards(SelectCardMessageData {
+                PendingInput::CardSelection(SelectCardMessageData {
                     min_select: 2,
                     max_select: 2,
                     cards,
@@ -218,7 +218,7 @@ fn playback_suppression_preserves_pending_requests_and_picker_selections() {
                 _ => None,
             })
             .expect("Picker should require both cards");
-        let card_ids = opened
+        let card_element_ids = opened
             .edits
             .iter()
             .filter_map(|edit| match edit {
@@ -228,14 +228,14 @@ fn playback_suppression_preserves_pending_requests_and_picker_selections() {
                 _ => None,
             })
             .collect::<Vec<_>>();
-        assert_eq!(card_ids.len(), 2);
+        assert_eq!(card_element_ids.len(), 2);
         dom.process_events();
-        events::dispatch(&dom, "click", card_ids[0]);
+        events::dispatch(&dom, "click", card_element_ids[0]);
         let selected = dom.render_immediate_to_vec();
         assert!(
             selected.edits.iter().any(|edit| matches!(edit,
                 Mutation::SetAttribute { name: "class", value: AttributeValue::Text(class), id, .. }
-                    if *id == card_ids[0] && class.contains("border-yellow-300")
+                    if *id == card_element_ids[0] && class.contains("border-yellow-300")
             )),
             "{:?}",
             selected.edits
@@ -285,7 +285,7 @@ fn playback_suppression_preserves_pending_requests_and_picker_selections() {
             resumed.edits
         );
         dom.process_events();
-        events::dispatch(&dom, "click", card_ids[1]);
+        events::dispatch(&dom, "click", card_element_ids[1]);
         let completed = dom.render_immediate_to_vec();
         assert!(completed.edits.iter().any(|edit| matches!(edit,
             Mutation::SetAttribute { name: "disabled", value: AttributeValue::Bool(false), id, .. }

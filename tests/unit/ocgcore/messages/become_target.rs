@@ -12,7 +12,7 @@ fn parses_sample_target() {
         CoreMessage::try_from(SAMPLE.as_slice()).unwrap(),
         CoreMessage::BecomeTarget(BecomeTargetMessageData {
             targets: vec![CardLocationInfo {
-                controller: Some(Player::Player),
+                controller: Some(Player::Local),
                 location: CardLocationKind::Known(CardLocation::SpellTrapZone),
                 sequence: 5,
                 position: CardLocationPosition::Position(

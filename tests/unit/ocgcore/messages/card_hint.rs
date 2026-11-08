@@ -14,7 +14,7 @@ fn parses_sample_card_hint() {
         CoreMessage::try_from(SAMPLE.as_slice()).unwrap(),
         CoreMessage::CardHint(CardHintMessageData {
             location: CardLocationInfo {
-                controller: Some(Player::Player),
+                controller: Some(Player::Local),
                 location: CardLocationKind::Known(CardLocation::Hand),
                 sequence: 4,
                 position: CardLocationPosition::Position(

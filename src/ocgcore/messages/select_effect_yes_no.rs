@@ -1,9 +1,9 @@
-use crate::ocgcore::CardData;
+use crate::ocgcore::DuelCardData;
 use crate::ocgcore::constants::CardLocation;
 use crate::ocgcore::constants::Player;
 
 #[derive(Hash, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct SelectEffectYNMessageData(pub CardData);
+pub struct SelectEffectYNMessageData(pub DuelCardData);
 
 impl TryFrom<&[u8]> for SelectEffectYNMessageData {
     type Error = anyhow::Error;
@@ -15,7 +15,7 @@ impl TryFrom<&[u8]> for SelectEffectYNMessageData {
         let location = CardLocation::try_from(bytes[11]).unwrap();
         let sequence = bytes[12];
 
-        Ok(SelectEffectYNMessageData(CardData {
+        Ok(SelectEffectYNMessageData(DuelCardData {
             card_code,
             controller,
             location,

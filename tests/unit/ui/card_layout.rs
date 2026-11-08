@@ -1,10 +1,10 @@
 use super::*;
 
-fn set_data(cards: &mut CardTracker, address: CardAddress, data: CardData) {
+fn set_data(cards: &mut CardTracker, address: CardAddress, data: DuelCardData) {
     cards.update_queried_data(address, data).unwrap();
 }
 
-fn refresh_data(snapshot: &mut PreviewSnapshot) {
+fn refresh_queried_card_data(snapshot: &mut CardLayoutSnapshot) {
     for card in snapshot.cards.cards().to_vec() {
         if let CardPlacement::Zone(address) = card.placement {
             let mut data = card.data.unwrap_or_default();
@@ -17,14 +17,14 @@ fn refresh_data(snapshot: &mut PreviewSnapshot) {
     }
 }
 
-fn fixture() -> (PreviewSnapshot, PreviewGeometry) {
-    let mut snapshot = PreviewSnapshot {
+fn fixture() -> (CardLayoutSnapshot, LayoutGeometry) {
+    let mut snapshot = CardLayoutSnapshot {
         cards: CardTracker::default(),
         selected: None,
     };
-    let mut geometry = PreviewGeometry {
+    let mut geometry = LayoutGeometry {
         anchors: HashMap::with_capacity(17),
-        hand_base: CardAnchor {
+        hand_base: AnchorGeometry {
             center_x: 550.0,
             center_y: 473.0,
             width: 100.0,
@@ -38,8 +38,8 @@ fn fixture() -> (PreviewSnapshot, PreviewGeometry) {
         CardLocation::Banishment,
     ] {
         geometry.anchors.insert(
-            Anchor::Pile(location),
-            CardAnchor {
+            LayoutAnchorId::Pile(location),
+            AnchorGeometry {
                 center_x: 629.5,
                 center_y: 443.0,
                 width: 59.0,
@@ -53,23 +53,23 @@ fn fixture() -> (PreviewSnapshot, PreviewGeometry) {
     ] {
         for sequence in 0..count {
             let address = CardAddress {
-                controller: Player::Player,
+                controller: Player::Local,
                 location,
                 sequence,
             };
             let code = 100 + sequence;
             snapshot.cards.insert(address, code).unwrap();
-            let data = CardData {
+            let data = DuelCardData {
                 card_code: code,
-                controller: Player::Player,
+                controller: Player::Local,
                 location,
                 sequence: u8::try_from(sequence).unwrap(),
                 ..Default::default()
             };
             set_data(&mut snapshot.cards, address, data);
             geometry.anchors.insert(
-                Anchor::Zone(location, sequence),
-                CardAnchor {
+                LayoutAnchorId::Zone(location, sequence),
+                AnchorGeometry {
                     center_x: f64::from(sequence) * 100.0 + 29.5,
                     center_y: 63.0,
                     width: 59.0,
@@ -81,7 +81,7 @@ fn fixture() -> (PreviewSnapshot, PreviewGeometry) {
     (snapshot, geometry)
 }
 
-fn all_locations_fixture() -> (PreviewSnapshot, PreviewGeometry) {
+fn all_locations_fixture() -> (CardLayoutSnapshot, LayoutGeometry) {
     let (mut snapshot, geometry) = fixture();
     for location in [
         CardLocation::Hand,
@@ -94,7 +94,7 @@ fn all_locations_fixture() -> (PreviewSnapshot, PreviewGeometry) {
             .cards
             .insert(
                 CardAddress {
-                    controller: Player::Player,
+                    controller: Player::Local,
                     location,
                     sequence: 0,
                 },
@@ -102,7 +102,7 @@ fn all_locations_fixture() -> (PreviewSnapshot, PreviewGeometry) {
             )
             .unwrap();
     }
-    refresh_data(&mut snapshot);
+    refresh_queried_card_data(&mut snapshot);
     (snapshot, geometry)
 }
 
@@ -117,14 +117,15 @@ fn field_targets_preserve_identity_geometry_and_queried_data() {
             let CardPlacement::Zone(address) = card.placement else {
                 unreachable!()
             };
-            CardTarget {
+            CardLayoutTarget {
                 id: card.id,
                 address,
-                anchor: geometry.anchors[&Anchor::Zone(address.location, address.sequence)],
+                geometry: geometry.anchors
+                    [&LayoutAnchorId::Zone(address.location, address.sequence)],
                 data: card.data.unwrap(),
                 rotation: 0.0,
                 stack_order: 2,
-                appearance: CardAppearance::Interactive,
+                render_mode: CardRenderMode::Interactive,
             }
         })
         .collect();
@@ -143,7 +144,8 @@ fn geometry_identity_and_target_order_do_not_depend_on_map_insertion_order() {
             let CardPlacement::Zone(address) = card.placement else {
                 unreachable!()
             };
-            (address.location != CardLocation::Hand).then(|| Anchor::try_from(address).unwrap())
+            (address.location != CardLocation::Hand)
+                .then(|| LayoutAnchorId::try_from(address).unwrap())
         })
         .collect();
     assert_eq!(keys.len(), 17);
@@ -154,7 +156,7 @@ fn geometry_identity_and_target_order_do_not_depend_on_map_insertion_order() {
             let index = index as f64;
             (
                 anchor,
-                CardAnchor {
+                AnchorGeometry {
                     center_x: 100.0 * index,
                     center_y: 20.0 + index,
                     width: 59.0 + index,
@@ -163,7 +165,7 @@ fn geometry_identity_and_target_order_do_not_depend_on_map_insertion_order() {
             )
         })
         .collect();
-    let mut expected_targets = None::<Vec<CardTarget>>;
+    let mut expected_targets = None::<Vec<CardLayoutTarget>>;
     for order in 0..3 {
         let mut ordered = entries.clone();
         match order {
@@ -181,12 +183,12 @@ fn geometry_identity_and_target_order_do_not_depend_on_map_insertion_order() {
             let expected_anchor = if address.location == CardLocation::Hand {
                 geometry.hand_base
             } else {
-                let key = Anchor::try_from(address).unwrap();
+                let key = LayoutAnchorId::try_from(address).unwrap();
                 entries.iter().find(|(anchor, _)| *anchor == key).unwrap().1
             };
             let target = actual.iter().find(|target| target.id == card.id).unwrap();
             assert_eq!(target.address, address);
-            assert_eq!(target.anchor, expected_anchor);
+            assert_eq!(target.geometry, expected_anchor);
             assert_eq!(
                 target.rotation,
                 if address.location == CardLocation::Banishment {
@@ -215,9 +217,9 @@ fn missing_geometry_preserves_field_and_pile_errors() {
         assert_eq!(
             error.to_string(),
             match anchor {
-                Anchor::Zone(_, _) => "Field anchor missing",
-                Anchor::Pile(_) => "Pile anchor missing",
-                Anchor::HandBase => unreachable!(),
+                LayoutAnchorId::Zone(_, _) => "Field anchor missing",
+                LayoutAnchorId::Pile(_) => "Pile anchor missing",
+                LayoutAnchorId::HandBase => unreachable!(),
             }
         );
         geometry.anchors.insert(anchor, removed);
@@ -233,7 +235,7 @@ fn invalid_or_missing_tracking_never_produces_a_snapshot() {
         .cards
         .insert(
             CardAddress {
-                controller: Player::Player,
+                controller: Player::Local,
                 location: CardLocation::Hand,
                 sequence: 0,
             },
@@ -251,15 +253,15 @@ fn unsupported_occupied_field_slots_fail_instead_of_disappearing() {
     ] {
         let (mut input, mut geometry) = fixture();
         let address = CardAddress {
-            controller: Player::Player,
+            controller: Player::Local,
             location,
             sequence,
         };
         input.cards.insert(address, 1).unwrap();
-        refresh_data(&mut input);
+        refresh_queried_card_data(&mut input);
         geometry
             .anchors
-            .insert(Anchor::Zone(location, sequence), geometry.hand_base);
+            .insert(LayoutAnchorId::Zone(location, sequence), geometry.hand_base);
         let error = targets(&input, &geometry).unwrap_err();
         assert_eq!(
             error.to_string(),
@@ -272,17 +274,17 @@ fn unsupported_occupied_field_slots_fail_instead_of_disappearing() {
 fn hand_and_piles_render_in_sequence_order() {
     let (_, geometry) = fixture();
     for location in [CardLocation::Hand, CardLocation::Graveyard] {
-        let mut snapshot = PreviewSnapshot {
+        let mut snapshot = CardLayoutSnapshot {
             cards: CardTracker::default(),
             selected: None,
         };
         let address = CardAddress {
-            controller: Player::Player,
+            controller: Player::Local,
             location,
             sequence: 1,
         };
         let second = snapshot.cards.insert(address, 2).unwrap();
-        refresh_data(&mut snapshot);
+        refresh_queried_card_data(&mut snapshot);
         let first = snapshot
             .cards
             .insert(
@@ -293,7 +295,7 @@ fn hand_and_piles_render_in_sequence_order() {
                 1,
             )
             .unwrap();
-        refresh_data(&mut snapshot);
+        refresh_queried_card_data(&mut snapshot);
         let targets = targets(&snapshot, &geometry).unwrap();
         assert_eq!(
             targets.iter().map(|target| target.id).collect::<Vec<_>>(),
@@ -304,7 +306,7 @@ fn hand_and_piles_render_in_sequence_order() {
 
 #[test]
 fn hand_fan_uses_slot_spacing_rotation_and_selected_lift() {
-    let base = CardAnchor {
+    let base = AnchorGeometry {
         center_x: 500.0,
         center_y: 600.0,
         width: 100.0,
@@ -321,7 +323,7 @@ fn hand_fan_uses_slot_spacing_rotation_and_selected_lift() {
     assert_eq!(stack, 3);
     assert_eq!(selected.center_x, 500.0);
     assert_eq!(selected.center_y, 563.5);
-    let resized = CardAnchor {
+    let resized = AnchorGeometry {
         width: 200.0,
         height: 292.0,
         ..base
@@ -339,23 +341,23 @@ fn duplicate_hand_cards_keep_identity_when_one_moves_and_the_rest_reindex() {
     use crate::ocgcore::messages::{CoreMessage, MoveMessageData};
 
     let (_, geometry) = fixture();
-    let mut snapshot = PreviewSnapshot {
+    let mut snapshot = CardLayoutSnapshot {
         cards: CardTracker::default(),
         selected: None,
     };
     for sequence in 0..3 {
         let address = CardAddress {
-            controller: Player::Player,
+            controller: Player::Local,
             location: CardLocation::Hand,
             sequence,
         };
         snapshot.cards.insert(address, 42).unwrap();
     }
-    refresh_data(&mut snapshot);
+    refresh_queried_card_data(&mut snapshot);
 
     fn pile_targets_preserve_ids_counts_and_concealment() {
         let (_, geometry) = fixture();
-        let mut snapshot = PreviewSnapshot {
+        let mut snapshot = CardLayoutSnapshot {
             cards: CardTracker::default(),
             selected: None,
         };
@@ -364,7 +366,7 @@ fn duplicate_hand_cards_keep_identity_when_one_moves_and_the_rest_reindex() {
                 .cards
                 .insert(
                     CardAddress {
-                        controller: Player::Player,
+                        controller: Player::Local,
                         location: CardLocation::Deck,
                         sequence,
                     },
@@ -372,13 +374,13 @@ fn duplicate_hand_cards_keep_identity_when_one_moves_and_the_rest_reindex() {
                 )
                 .unwrap();
         }
-        refresh_data(&mut snapshot);
+        refresh_queried_card_data(&mut snapshot);
         let before = targets(&snapshot, &geometry).unwrap();
         assert_eq!(before.len(), 2);
         assert!(
             before
                 .iter()
-                .all(|target| target.appearance == CardAppearance::Pile(CardImage::CardBack))
+                .all(|target| target.render_mode == CardRenderMode::Pile(CardImage::CardBack))
         );
 
         use crate::ocgcore::location_info::{
@@ -390,14 +392,14 @@ fn duplicate_hand_cards_keep_identity_when_one_moves_and_the_rest_reindex() {
         snapshot
             .cards
             .apply(&CoreMessage::Draw(DrawMessageData {
-                player: Player::Player,
+                player: Player::Local,
                 cards: vec![DrawCard {
                     code: 101,
                     position: CardPositionFlags::FACE_DOWN_ATTACK,
                 }],
             }))
             .unwrap();
-        refresh_data(&mut snapshot);
+        refresh_queried_card_data(&mut snapshot);
         let drawn = targets(&snapshot, &geometry).unwrap();
         assert_eq!(
             drawn
@@ -408,7 +410,7 @@ fn duplicate_hand_cards_keep_identity_when_one_moves_and_the_rest_reindex() {
             before[1].id
         );
         let loc = |location| CardLocationInfo {
-            controller: Some(Player::Player),
+            controller: Some(Player::Local),
             location: CardLocationKind::Known(location),
             sequence: 0,
             position: CardLocationPosition::Position(CardPositionFlags::FACE_UP_ATTACK),
@@ -422,7 +424,7 @@ fn duplicate_hand_cards_keep_identity_when_one_moves_and_the_rest_reindex() {
                 reason: MoveReason::EFFECT,
             }))
             .unwrap();
-        refresh_data(&mut snapshot);
+        refresh_queried_card_data(&mut snapshot);
         let discarded = targets(&snapshot, &geometry).unwrap();
         let grave = discarded
             .iter()
@@ -430,8 +432,8 @@ fn duplicate_hand_cards_keep_identity_when_one_moves_and_the_rest_reindex() {
             .unwrap();
         assert_eq!(grave.id, before[1].id);
         assert_eq!(
-            grave.appearance,
-            CardAppearance::Pile(CardImage::Thumbnail(
+            grave.render_mode,
+            CardRenderMode::Pile(CardImage::Thumbnail(
                 snapshot.cards.zone_data(CardLocation::Graveyard).unwrap()[0].unwrap()
             ))
         );
@@ -448,17 +450,17 @@ fn duplicate_hand_cards_keep_identity_when_one_moves_and_the_rest_reindex() {
                 reason: MoveReason::EFFECT,
             }))
             .unwrap();
-        refresh_data(&mut snapshot);
+        refresh_queried_card_data(&mut snapshot);
         set_data(
             &mut snapshot.cards,
             CardAddress {
-                controller: Player::Player,
+                controller: Player::Local,
                 location: CardLocation::Banishment,
                 sequence: 0,
             },
-            CardData {
+            DuelCardData {
                 card_code: 101,
-                controller: Player::Player,
+                controller: Player::Local,
                 location: CardLocation::Banishment,
                 position: Some(BattlePosition::FaceDownDefense),
                 ..Default::default()
@@ -471,8 +473,8 @@ fn duplicate_hand_cards_keep_identity_when_one_moves_and_the_rest_reindex() {
             .unwrap();
         assert_eq!(banished.id, before[1].id);
         assert_eq!(
-            banished.appearance,
-            CardAppearance::Pile(CardImage::CardBack)
+            banished.render_mode,
+            CardRenderMode::Pile(CardImage::CardBack)
         );
     }
 
@@ -483,12 +485,12 @@ fn duplicate_hand_cards_keep_identity_when_one_moves_and_the_rest_reindex() {
         use crate::ocgcore::messages::move_card::MoveReason;
         use crate::ocgcore::messages::{CoreMessage, MoveMessageData};
         let (_, geometry) = fixture();
-        let mut snapshot = PreviewSnapshot {
+        let mut snapshot = CardLayoutSnapshot {
             cards: CardTracker::default(),
             selected: None,
         };
         let address = |location| CardAddress {
-            controller: Player::Player,
+            controller: Player::Local,
             location,
             sequence: 0,
         };
@@ -500,15 +502,15 @@ fn duplicate_hand_cards_keep_identity_when_one_moves_and_the_rest_reindex() {
             .cards
             .insert(address(CardLocation::Hand), 20)
             .unwrap();
-        refresh_data(&mut snapshot);
+        refresh_queried_card_data(&mut snapshot);
         let ordinary = |location| CardLocationInfo {
-            controller: Some(Player::Player),
+            controller: Some(Player::Local),
             location: CardLocationKind::Known(location),
             sequence: 0,
             position: CardLocationPosition::Position(CardPositionFlags::FACE_UP_ATTACK),
         };
         let overlay = CardLocationInfo {
-            controller: Some(Player::Player),
+            controller: Some(Player::Local),
             location: CardLocationKind::Overlay {
                 host: Some(CardLocation::MonsterZone),
             },
@@ -529,7 +531,7 @@ fn duplicate_hand_cards_keep_identity_when_one_moves_and_the_rest_reindex() {
             .iter()
             .find(|target| target.id == material_id)
             .unwrap();
-        assert_eq!(material.appearance, CardAppearance::Material);
+        assert_eq!(material.render_mode, CardRenderMode::Material);
         assert_eq!(material.data.card_code, 20);
         snapshot
             .cards
@@ -540,7 +542,7 @@ fn duplicate_hand_cards_keep_identity_when_one_moves_and_the_rest_reindex() {
                 reason: MoveReason::EFFECT,
             }))
             .unwrap();
-        refresh_data(&mut snapshot);
+        refresh_queried_card_data(&mut snapshot);
         let detached = targets(&snapshot, &geometry).unwrap();
         assert_eq!(
             detached
@@ -558,7 +560,7 @@ fn duplicate_hand_cards_keep_identity_when_one_moves_and_the_rest_reindex() {
     assert_ne!(before[0].id, before[1].id);
     assert_ne!(before[1].id, before[2].id);
     let loc = |location, sequence| CardLocationInfo {
-        controller: Some(Player::Player),
+        controller: Some(Player::Local),
         location: CardLocationKind::Known(location),
         sequence,
         position: CardLocationPosition::Position(CardPositionFlags::FACE_UP_ATTACK),
@@ -572,7 +574,7 @@ fn duplicate_hand_cards_keep_identity_when_one_moves_and_the_rest_reindex() {
             reason: MoveReason::EFFECT,
         }))
         .unwrap();
-    refresh_data(&mut snapshot);
+    refresh_queried_card_data(&mut snapshot);
     let after = targets(&snapshot, &geometry).unwrap();
     assert_eq!(after[0].id, before[0].id);
     assert_eq!(after[1].id, before[1].id);
@@ -591,12 +593,12 @@ fn incoming_graveyard_cards_do_not_replace_the_stationary_pile_image() {
     use crate::ocgcore::messages::move_card::MoveReason;
     use crate::ocgcore::messages::{CoreMessage, MoveMessageData};
     let (_, geometry) = fixture();
-    let mut snapshot = PreviewSnapshot {
+    let mut snapshot = CardLayoutSnapshot {
         cards: CardTracker::default(),
         selected: None,
     };
     let address = |location, sequence| CardAddress {
-        controller: Player::Player,
+        controller: Player::Local,
         location,
         sequence,
     };
@@ -608,11 +610,11 @@ fn incoming_graveyard_cards_do_not_replace_the_stationary_pile_image() {
         .cards
         .insert(address(CardLocation::Hand, 0), 20)
         .unwrap();
-    refresh_data(&mut snapshot);
+    refresh_queried_card_data(&mut snapshot);
     let mut playback = CardAnimationState::default();
     playback.begin(vec![moving], snapshot.cards.clone());
     let loc = |location, sequence| CardLocationInfo {
-        controller: Some(Player::Player),
+        controller: Some(Player::Local),
         location: CardLocationKind::Known(location),
         sequence,
         position: CardLocationPosition::Position(CardPositionFlags::FACE_UP_ATTACK),
@@ -626,7 +628,7 @@ fn incoming_graveyard_cards_do_not_replace_the_stationary_pile_image() {
             reason: MoveReason::EFFECT,
         }))
         .unwrap();
-    refresh_data(&mut snapshot);
+    refresh_queried_card_data(&mut snapshot);
     let mut rendered = targets(&snapshot, &geometry).unwrap();
     preserve_pile_images(&snapshot, &mut rendered, &playback).unwrap();
     assert_eq!(
@@ -634,8 +636,8 @@ fn incoming_graveyard_cards_do_not_replace_the_stationary_pile_image() {
             .iter()
             .find(|target| target.id == stationary)
             .unwrap()
-            .appearance,
-        CardAppearance::Pile(CardImage::Thumbnail(
+            .render_mode,
+        CardRenderMode::Pile(CardImage::Thumbnail(
             snapshot
                 .cards
                 .card_at(address(CardLocation::Graveyard, 0))
@@ -649,10 +651,10 @@ fn incoming_graveyard_cards_do_not_replace_the_stationary_pile_image() {
             .iter()
             .find(|target| target.id == moving)
             .unwrap()
-            .appearance,
-        CardAppearance::Pile(CardImage::Thumbnail(CardData {
+            .render_mode,
+        CardRenderMode::Pile(CardImage::Thumbnail(DuelCardData {
             card_code: 20,
-            controller: Player::Player,
+            controller: Player::Local,
             location: CardLocation::Graveyard,
             sequence: 1,
             ..Default::default()
@@ -666,8 +668,8 @@ fn incoming_graveyard_cards_do_not_replace_the_stationary_pile_image() {
             .iter()
             .find(|target| target.id == stationary)
             .unwrap()
-            .appearance,
-        CardAppearance::Pile(CardImage::Thumbnail(
+            .render_mode,
+        CardRenderMode::Pile(CardImage::Thumbnail(
             snapshot
                 .cards
                 .card_at(address(CardLocation::Graveyard, 1))
@@ -681,7 +683,7 @@ fn incoming_graveyard_cards_do_not_replace_the_stationary_pile_image() {
 #[test]
 fn gathering_stacks_hand_targets_until_spread() {
     let (_, geometry) = fixture();
-    let mut snapshot = PreviewSnapshot {
+    let mut snapshot = CardLayoutSnapshot {
         cards: CardTracker::default(),
         selected: None,
     };
@@ -690,7 +692,7 @@ fn gathering_stacks_hand_targets_until_spread() {
             .cards
             .insert(
                 CardAddress {
-                    controller: Player::Player,
+                    controller: Player::Local,
                     location: CardLocation::Hand,
                     sequence,
                 },
@@ -699,11 +701,11 @@ fn gathering_stacks_hand_targets_until_spread() {
             .unwrap();
     }
 
-    refresh_data(&mut snapshot);
+    refresh_queried_card_data(&mut snapshot);
     let spread_anchors: Vec<_> = targets(&snapshot, &geometry)
         .unwrap()
         .iter()
-        .map(|target| target.anchor)
+        .map(|target| target.geometry)
         .collect();
     let mut playback = CardAnimationState::default();
     playback.begin_gather(vec![], snapshot.cards.clone());
@@ -712,16 +714,19 @@ fn gathering_stacks_hand_targets_until_spread() {
     assert!(
         gathered
             .iter()
-            .all(|target| { target.anchor == geometry.hand_base && target.rotation == 0.0 })
+            .all(|target| { target.geometry == geometry.hand_base && target.rotation == 0.0 })
     );
-    playback.advance(playback.generation, AnimationPhase::HandShuffleGathering);
-    playback.advance(playback.generation, AnimationPhase::HandShuffleStacking);
+    playback.advance(
+        playback.generation,
+        CardAnimationPhase::HandShuffleGathering,
+    );
+    playback.advance(playback.generation, CardAnimationPhase::HandShuffleStacking);
     let mut spread = targets(&snapshot, &geometry).unwrap();
     gather_hand(geometry.hand_base, &mut spread, &playback);
     assert_eq!(
         spread
             .iter()
-            .map(|target| target.anchor)
+            .map(|target| target.geometry)
             .collect::<Vec<_>>(),
         spread_anchors
     );
@@ -732,7 +737,7 @@ fn shuffle_gathers_original_cards_then_spreads_shuffled_cards() {
     use crate::ocgcore::messages::{CoreMessage, ShuffleCardsMessageData};
 
     let (_, geometry) = fixture();
-    let mut before = PreviewSnapshot {
+    let mut before = CardLayoutSnapshot {
         cards: CardTracker::default(),
         selected: None,
     };
@@ -741,7 +746,7 @@ fn shuffle_gathers_original_cards_then_spreads_shuffled_cards() {
             .cards
             .insert(
                 CardAddress {
-                    controller: Player::Player,
+                    controller: Player::Local,
                     location: CardLocation::Hand,
                     sequence: sequence as u32,
                 },
@@ -749,12 +754,12 @@ fn shuffle_gathers_original_cards_then_spreads_shuffled_cards() {
             )
             .unwrap();
     }
-    refresh_data(&mut before);
+    refresh_queried_card_data(&mut before);
     let mut after = before.clone();
     after
         .cards
         .apply(&CoreMessage::ShuffleHand(ShuffleCardsMessageData {
-            player: Player::Player,
+            player: Player::Local,
             card_codes: vec![20, 10],
         }))
         .unwrap();
@@ -762,14 +767,14 @@ fn shuffle_gathers_original_cards_then_spreads_shuffled_cards() {
         .cards
         .insert(
             CardAddress {
-                controller: Player::Player,
+                controller: Player::Local,
                 location: CardLocation::Hand,
                 sequence: 2,
             },
             30,
         )
         .unwrap();
-    refresh_data(&mut after);
+    refresh_queried_card_data(&mut after);
 
     let mut playback = CardAnimationState::default();
     playback.begin_gather(vec![], before.cards.clone());
@@ -783,16 +788,19 @@ fn shuffle_gathers_original_cards_then_spreads_shuffled_cards() {
     for (target, card) in gathered.iter().zip(before.cards.cards()) {
         assert_eq!(target.id, card.id);
         assert_eq!(target.data.card_code, card.code);
-        assert_eq!(target.anchor, geometry.hand_base);
+        assert_eq!(target.geometry, geometry.hand_base);
     }
 
-    playback.advance(playback.generation, AnimationPhase::HandShuffleGathering);
+    playback.advance(
+        playback.generation,
+        CardAnimationPhase::HandShuffleGathering,
+    );
     let mut stacked = targets(&after, &geometry).unwrap();
     gather_hand(geometry.hand_base, &mut stacked, &playback);
     assert!(
         stacked
             .iter()
-            .all(|target| target.anchor == geometry.hand_base)
+            .all(|target| target.geometry == geometry.hand_base)
     );
     assert_eq!(
         stacked
@@ -801,9 +809,9 @@ fn shuffle_gathers_original_cards_then_spreads_shuffled_cards() {
             .collect::<Vec<_>>(),
         vec![20, 10, 30]
     );
-    playback.advance(playback.generation, AnimationPhase::HandShuffleStacking);
+    playback.advance(playback.generation, CardAnimationPhase::HandShuffleStacking);
     let spread = targets(&after, &geometry).unwrap();
     assert_eq!(spread.len(), 3);
-    assert_ne!(spread[0].anchor, spread[1].anchor);
-    assert_ne!(spread[1].anchor, spread[2].anchor);
+    assert_ne!(spread[0].geometry, spread[1].geometry);
+    assert_ne!(spread[1].geometry, spread[2].geometry);
 }

@@ -1,4 +1,4 @@
-use crate::ocgcore::CardData;
+use crate::ocgcore::DuelCardData;
 use crate::ocgcore::constants::CardLocation;
 use crate::ocgcore::constants::Player;
 use ocgcore_ffi::constants::LOCATION_OVERLAY;
@@ -7,7 +7,7 @@ use ocgcore_ffi::constants::LOCATION_OVERLAY;
 pub struct SelectCardMessageData {
     pub min_select: u32,
     pub max_select: u32,
-    pub cards: Vec<CardData>,
+    pub cards: Vec<DuelCardData>,
 }
 
 impl TryFrom<&[u8]> for SelectCardMessageData {
@@ -45,7 +45,7 @@ impl TryFrom<&[u8]> for SelectCardMessageData {
             // 2. Controller Alignment
             let controller_byte = raw_bytes[offset + 4];
             let controller = if controller_byte == 0 {
-                Player::Player
+                Player::Local
             } else {
                 Player::Opponent
             };
@@ -60,7 +60,7 @@ impl TryFrom<&[u8]> for SelectCardMessageData {
             // 4. Sequence placement
             let sequence = raw_bytes[offset + 6];
 
-            cards.push(CardData {
+            cards.push(DuelCardData {
                 card_code,
                 controller,
                 location,

@@ -25,7 +25,7 @@ fn handles_core_requests_without_ui_context() {
     assert_eq!(phase, Some(Phase::Main1));
     let idle = IdleMessageData::default();
     assert!(!controller.handle_message(CoreMessage::Idle(idle.clone()), &mut pending, &mut phase));
-    assert_eq!(pending, Some(PendingInput::Idle(idle)));
+    assert_eq!(pending, Some(PendingInput::ActionSelection(idle)));
     assert!(controller.handle_message(
         CoreMessage::SelectChain(SelectChainMessageData {
             player: 0,
@@ -74,26 +74,19 @@ fn card_tracker_initializer_matches_native_decks_and_custom_hand() {
     let duel = core.create_duel(3).unwrap();
     let mut deck = [10; 40];
     deck[..6].copy_from_slice(&[11, 12, 11, 13, 14, 15]);
-    pull_ids_to_front(&mut deck, &[11, 11, 14]);
+    move_card_codes_to_front(&mut deck, &[11, 11, 14]);
     deck.reverse();
     let extra = [100, 101, 100];
     let mut layer = CardTracker::from_decks(&deck, &extra).unwrap();
 
     for code in deck {
-        duel.add_card(
-            Player::Player,
-            code,
-            Player::Player,
-            CardLocation::Deck,
-            0,
-            0,
-        );
+        duel.add_card(Player::Local, code, Player::Local, CardLocation::Deck, 0, 0);
     }
     for code in extra {
         duel.add_card(
-            Player::Player,
+            Player::Local,
             code,
-            Player::Player,
+            Player::Local,
             CardLocation::ExtraDeck,
             0,
             10,
@@ -107,7 +100,7 @@ fn card_tracker_initializer_matches_native_decks_and_custom_hand() {
                 .filter(|card| matches!(card.placement, CardPlacement::Zone(address) if address.location == location))
                 .map(|card| card.code)
                 .collect::<Vec<_>>(),
-            duel.query_cards(Player::Player, location).unwrap()
+            duel.query_cards(Player::Local, location).unwrap()
                 .iter()
                 .map(|card| card.unwrap().card_code)
                 .collect::<Vec<_>>()
@@ -120,13 +113,13 @@ fn card_tracker_initializer_matches_native_decks_and_custom_hand() {
         for message in &messages {
             layer.apply(message).unwrap();
         }
-        refresh_data(&mut layer, &duel).unwrap();
+        refresh_queried_card_data(&mut layer, &duel).unwrap();
         if messages
             .iter()
             .any(|message| matches!(message, CoreMessage::Draw(_)))
         {
             assert_eq!(
-                duel.query_cards(Player::Player, CardLocation::Hand)
+                duel.query_cards(Player::Local, CardLocation::Hand)
                     .unwrap()
                     .iter()
                     .map(|card| card.unwrap().card_code)
@@ -145,7 +138,7 @@ fn processing_continues_after_draw_until_an_input_prompt() {
     let processed = Cell::new(0);
     let handled = Cell::new(0);
 
-    process_until_input(
+    process_until_blocked(
         || {
             processed.set(processed.get() + 1);
             OCG_DuelStatus::OCG_DUEL_STATUS_CONTINUE
@@ -165,7 +158,7 @@ fn processing_continues_after_automatic_response_and_stops_at_duel_end() {
     let processed = Cell::new(0);
     let handled = Cell::new(0);
 
-    process_until_input(
+    process_until_blocked(
         || {
             processed.set(processed.get() + 1);
             if processed.get() == 1 {
@@ -187,7 +180,7 @@ fn processing_continues_after_automatic_response_and_stops_at_duel_end() {
 #[test]
 fn dispatches_final_messages_when_duel_ends() {
     let mut handled = false;
-    process_until_input(
+    process_until_blocked(
         || OCG_DuelStatus::OCG_DUEL_STATUS_END,
         || {
             handled = true;

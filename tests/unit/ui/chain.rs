@@ -1,5 +1,5 @@
 use super::*;
-use crate::duel::cards::{CardAddress, CardId, CardTracker};
+use crate::duel::cards::{CardAddress, CardInstanceId, CardTracker};
 use crate::duel::controller::resolve_chain_event;
 use crate::duel::test_messages::{location, overlay, overlay_move};
 use crate::ocgcore::constants::{CardLocation, Player};
@@ -9,17 +9,17 @@ use crate::ocgcore::location_info::{
 use crate::ocgcore::messages::ChainLinkMessageData;
 use crate::ocgcore::messages::CoreMessage;
 use crate::ui::playback::use_playback;
-use crate::ui::view_state::ViewState;
+use crate::ui::view_state::DuelViewState;
 
 fn address(location: CardLocation, sequence: u32) -> CardAddress {
     CardAddress {
-        controller: Player::Player,
+        controller: Player::Local,
         location,
         sequence,
     }
 }
 
-fn links_for_card(playback: &ChainPlayback, card: CardId) -> Vec<u32> {
+fn links_for_card(playback: &ChainPlayback, card: CardInstanceId) -> Vec<u32> {
     playback
         .displayed
         .iter()
@@ -109,13 +109,13 @@ fn plays_batched_chain_in_activation_and_resolution_order() {
 
 #[test]
 fn duel_failure_cancels_both_playbacks_and_invalidates_their_completions() {
-    use crate::state::UIState;
-    use crate::ui::card_animation::AnimationPhase;
+    use crate::state::DuelState;
+    use crate::ui::card_animation::CardAnimationPhase;
 
     fn app() -> Element {
-        let mut state = use_context_provider(UIState::default);
+        let mut state = use_context_provider(DuelState::default);
         let playback = use_playback();
-        let mut view = use_context_provider(ViewState::default);
+        let mut view = use_context_provider(DuelViewState::default);
         let mut animation = playback.animation;
         let mut chain = playback.chain;
         let mut cards = CardTracker::default();
@@ -146,7 +146,7 @@ fn duel_failure_cancels_both_playbacks_and_invalidates_their_completions() {
         assert!(!chain.peek().has_pending_frames());
         animation
             .write()
-            .advance(animation_generation, AnimationPhase::Moving);
+            .advance(animation_generation, CardAnimationPhase::Moving);
         chain.write().advance(chain_generation);
         chain.write().start();
         assert!(!animation.peek().is_active());
@@ -161,7 +161,7 @@ fn duel_failure_cancels_both_playbacks_and_invalidates_their_completions() {
         chain.write().start();
         animation
             .write()
-            .advance(animation_generation, AnimationPhase::Moving);
+            .advance(animation_generation, CardAnimationPhase::Moving);
         chain.write().advance(chain_generation);
         assert!(animation.peek().is_active());
         assert!(chain.peek().active);

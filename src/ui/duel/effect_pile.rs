@@ -1,18 +1,18 @@
 use dioxus::prelude::*;
 
 use super::constants::ZONE_SIZE;
-use super::pile_cards::{PILE_LIST_CLASS, PileCard, PileCardRow};
+use super::pile_cards::{PILE_LIST_CLASS, PileCardRow, PileCardRowData};
 use crate::duel::cards::CardAddress;
-use crate::duel::input::CardAction;
-use crate::ocgcore::CardData;
+use crate::duel::input::CardIntent;
+use crate::ocgcore::DuelCardData;
 use crate::ocgcore::constants::CardLocation;
-use crate::ui::components::ActionButton;
-use crate::ui::components::OptionButton;
+use crate::ui::components::LabeledIconButton;
 use crate::ui::components::PickerModal;
+use crate::ui::components::TextButton;
 use crate::ui::components::svg::LightningTrioIcon;
 
 #[component]
-pub fn EffectPile(
+pub fn EffectPileZone(
     location: CardLocation,
     has_cards: bool,
     highlighted: bool,
@@ -49,11 +49,11 @@ pub fn EffectPile(
 #[component]
 pub fn EffectPileModal(
     location: CardLocation,
-    cards: Vec<PileCard>,
-    cards_prompting_to_activate: Vec<CardData>,
+    cards: Vec<PileCardRowData>,
+    cards_prompting_to_activate: Vec<DuelCardData>,
     mut open_pile: Signal<Option<CardLocation>>,
     suppress_actions: bool,
-    onaction: EventHandler<CardAction>,
+    onaction: EventHandler<CardIntent>,
 ) -> Element {
     let title = if location == CardLocation::Banishment {
         "Banishment"
@@ -89,12 +89,12 @@ pub fn EffectPileModal(
                                 highlighted: prompted_card.is_some() && !suppress_actions,
                                 show_actions: selected_card() == Some(index) && prompted_card.is_some() && !suppress_actions,
                                 onselect: move |_| selected_card.set(Some(index)),
-                                ActionButton {
+                                LabeledIconButton {
                                     label: "Activate",
                                     class: "border-yellow-500 text-yellow-300",
                                     onclick: move |_| {
                                         if prompted_card.is_some() && !suppress_actions {
-                                            onaction.call(CardAction::Activate(address));
+                                            onaction.call(CardIntent::Activate(address));
                                             selected_card.set(None);
                                         }
                                     },
@@ -106,7 +106,7 @@ pub fn EffectPileModal(
 
                 }
             }
-            OptionButton {
+            TextButton {
                 label: "Close",
                 onclick: move |_| {
                     open_pile.set(None);

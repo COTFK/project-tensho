@@ -16,7 +16,7 @@ fn parses_sample_move() {
         CoreMessage::Move(MoveMessageData {
             card_code: 44_455_560,
             previous: CardLocationInfo {
-                controller: Some(Player::Player),
+                controller: Some(Player::Local),
                 location: CardLocationKind::Known(CardLocation::Hand),
                 sequence: 3,
                 position: CardLocationPosition::Position(
@@ -24,7 +24,7 @@ fn parses_sample_move() {
                 ),
             },
             current: CardLocationInfo {
-                controller: Some(Player::Player),
+                controller: Some(Player::Local),
                 location: CardLocationKind::Known(CardLocation::MonsterZone),
                 sequence: 2,
                 position: CardLocationPosition::Position(CardPositionFlags::FACE_UP_ATTACK),

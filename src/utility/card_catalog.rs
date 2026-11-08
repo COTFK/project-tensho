@@ -1,4 +1,4 @@
-use super::labels::CardLabel;
+use super::card_text::CardText;
 use ocgcore_ffi::types::OCG_CardData;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -6,66 +6,60 @@ use std::collections::HashMap;
 static EMPTY_SETCODES: [u16; 1] = [0];
 
 std::thread_local! {
-    static CARD_DATABASE: RefCell<CardDatabase> = RefCell::new(CardDatabase::new());
+    static CARD_CATALOG: RefCell<CardCatalog> = RefCell::new(CardCatalog::new());
 }
 
 #[derive(Debug, Clone)]
-pub struct CardData {
+pub struct CardDefinition {
     pub data: OCG_CardData,
-    pub labels: CardLabel,
+    pub text: CardText,
     _setcodes: Box<[u16]>, // owns the buffer that data.setcodes should point to
 }
 
 #[derive(Debug, Clone)]
-pub struct CardDatabase {
-    cards: HashMap<u32, Box<CardData>>,
+pub struct CardCatalog {
+    cards: HashMap<u32, Box<CardDefinition>>,
 }
 
-impl CardDatabase {
+impl CardCatalog {
     pub fn new() -> Self {
         Self {
             cards: HashMap::new(),
         }
     }
 
-    pub fn insert(
-        &mut self,
-        code: u32,
-        mut data: OCG_CardData,
-        setcodes: &[u16],
-        labels: CardLabel,
-    ) {
+    pub fn insert(&mut self, code: u32, mut data: OCG_CardData, setcodes: &[u16], text: CardText) {
         let mut buf: Box<[u16]> = setcodes.iter().copied().chain(std::iter::once(0)).collect();
         data.setcodes = buf.as_mut_ptr();
         self.cards.insert(
             code,
-            Box::new(CardData {
+            Box::new(CardDefinition {
                 data,
-                labels,
+                text,
                 _setcodes: buf,
             }),
         );
     }
 
-    pub fn extend(&mut self, other: CardDatabase) {
+    pub fn extend(&mut self, other: CardCatalog) {
         self.cards.extend(other.cards);
     }
 
-    pub fn get(&self, code: u32) -> Option<&CardData> {
+    pub fn get(&self, code: u32) -> Option<&CardDefinition> {
         self.cards.get(&code).map(|card| card.as_ref())
     }
 }
 
-pub fn store_card_data(db: CardDatabase) {
-    CARD_DATABASE.with(|cache| cache.borrow_mut().extend(db));
+pub fn store_card_definitions(db: CardCatalog) {
+    CARD_CATALOG.with(|cache| cache.borrow_mut().extend(db));
 }
 
-pub fn get_card_label(code: u32) -> Option<CardLabel> {
-    CARD_DATABASE.with(|cache| cache.borrow().get(code).map(|card| card.labels.clone()))
+pub fn get_card_text(code: u32) -> Option<CardText> {
+    CARD_CATALOG.with(|cache| cache.borrow().get(code).map(|card| card.text.clone()))
 }
 
-pub fn get_card_data(code: u32) -> OCG_CardData {
-    CARD_DATABASE
+pub fn read_card_definition(code: u32) -> OCG_CardData {
+    CARD_CATALOG
         .with(|cache| cache.borrow().get(code).map(|card| card.data))
         .unwrap_or_else(|| {
             tracing::error!(code, "engine requested card data that is not cached");

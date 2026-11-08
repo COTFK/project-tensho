@@ -1,9 +1,9 @@
-use super::super::layout_anchors::CardAnchor;
+use super::super::layout_anchors::AnchorGeometry;
 use super::*;
 use crate::duel::cards::{CardAddress, CardTracker};
-use crate::duel::input::{CardAction, PendingInput};
+use crate::duel::input::{CardIntent, PendingInput};
 use crate::duel::test_messages::{location, movement, overlay, overlay_move};
-use crate::ocgcore::CardData;
+use crate::ocgcore::DuelCardData;
 use crate::ui::card_animation::CardAnimationState;
 use crate::ui::chain::ChainPlayback;
 use dioxus::core::{AttributeValue, ElementId, Mutation};
@@ -12,9 +12,9 @@ use std::cell::RefCell;
 fn fixture(
     location: CardLocation,
     position: Option<CardPositionFlags>,
-) -> (TrackedCard, CardTarget) {
+) -> (TrackedCard, CardLayoutTarget) {
     let address = CardAddress {
-        controller: Player::Player,
+        controller: Player::Local,
         location,
         sequence: 0,
     };
@@ -22,25 +22,25 @@ fn fixture(
     let id = layer.insert(address, 12345).unwrap();
     let mut card = *layer.card_at(address).unwrap();
     card.position = position;
-    let target = CardTarget {
+    let target = CardLayoutTarget {
         id,
         address,
-        anchor: CardAnchor {
+        geometry: AnchorGeometry {
             center_x: 120.0,
             center_y: 100.0,
             width: 59.0,
             height: 86.0,
         },
-        data: CardData {
+        data: DuelCardData {
             card_code: 12345,
-            controller: Player::Player,
+            controller: Player::Local,
             location,
             sequence: 0,
             ..Default::default()
         },
         rotation: 0.0,
         stack_order: 2,
-        appearance: CardAppearance::Interactive,
+        render_mode: CardRenderMode::Interactive,
     };
     (card, target)
 }
@@ -54,29 +54,29 @@ fn hidden_piles_overlays_and_unknown_faces_never_expose_card_art() {
         CardLocation::Banishment,
     ] {
         let (card, target) = fixture(location, Some(CardPositionFlags::FACE_UP_ATTACK));
-        assert!(visible_card(card, Some(target)).is_none());
+        assert!(visible_card_target(card, Some(target)).is_none());
     }
     let (mut card, target) = fixture(CardLocation::MonsterZone, None);
-    assert!(visible_card(card, Some(target)).unwrap().1);
+    assert!(visible_card_target(card, Some(target)).unwrap().1);
     card.position = Some(CardPositionFlags::FACE_DOWN_DEFENSE);
-    assert!(visible_card(card, Some(target)).unwrap().1);
+    assert!(visible_card_target(card, Some(target)).unwrap().1);
     card.position = Some(CardPositionFlags::FACE_UP_DEFENSE);
-    assert!(!visible_card(card, Some(target)).unwrap().1);
+    assert!(!visible_card_target(card, Some(target)).unwrap().1);
     card.code = 0;
-    assert!(visible_card(card, Some(target)).unwrap().1);
+    assert!(visible_card_target(card, Some(target)).unwrap().1);
     card.placement = CardPlacement::Overlay {
         host: card.id,
         sequence: 0,
     };
-    assert!(visible_card(card, Some(target)).is_none());
+    assert!(visible_card_target(card, Some(target)).is_none());
 }
 
 #[test]
 fn invalid_geometry_is_not_rendered() {
     let (card, mut target) = fixture(CardLocation::Hand, None);
-    assert!(!visible_card(card, Some(target)).unwrap().1);
-    target.anchor.width = f64::NAN;
-    assert!(visible_card(card, Some(target)).is_none());
+    assert!(!visible_card_target(card, Some(target)).unwrap().1);
+    target.geometry.width = f64::NAN;
+    assert!(visible_card_target(card, Some(target)).is_none());
 }
 
 #[test]
@@ -98,14 +98,14 @@ fn startup_artwork_matches_visible_card_images() {
     assert_eq!(card_image(face_up, Some(target)), Some(CardImage::CardBack));
 
     let (card, mut target) = fixture(CardLocation::ExtraDeck, None);
-    target.appearance = CardAppearance::Pile(CardImage::ExtraDeckBack);
+    target.render_mode = CardRenderMode::Pile(CardImage::ExtraDeckBack);
     assert_eq!(
         card_image(card, Some(target)),
         Some(CardImage::ExtraDeckBack)
     );
 }
 
-fn image_app((card, target): (TrackedCard, CardTarget)) -> Element {
+fn image_app((card, target): (TrackedCard, CardLayoutTarget)) -> Element {
     use_card_inputs();
     rsx! {
         PersistentCardLayer {
@@ -120,7 +120,11 @@ fn image_app((card, target): (TrackedCard, CardTarget)) -> Element {
     }
 }
 
-fn assert_image_policy_and_rendering(card: TrackedCard, target: CardTarget, image: CardImage) {
+fn assert_image_policy_and_rendering(
+    card: TrackedCard,
+    target: CardLayoutTarget,
+    image: CardImage,
+) {
     assert_eq!(card_image(card, Some(target)), Some(image));
     let mut dom = VirtualDom::new_with_props(image_app, (card, target));
     let rendered = dom.rebuild_to_vec();
@@ -214,7 +218,7 @@ fn pile_images_and_material_visibility_keep_their_existing_policy() {
                 CardImage::Face(target.data),
                 CardImage::Thumbnail(target.data),
             ] {
-                target.appearance = CardAppearance::Pile(image);
+                target.render_mode = CardRenderMode::Pile(image);
                 assert_image_policy_and_rendering(card, target, image);
             }
         }
@@ -237,7 +241,7 @@ fn pile_images_and_material_visibility_keep_their_existing_policy() {
                     host: card.id,
                     sequence: 0,
                 };
-                target.appearance = CardAppearance::Material;
+                target.render_mode = CardRenderMode::Material;
                 target.data.position = queried_position;
                 let image = if code != 0 && face_up {
                     CardImage::Face(target.data)
@@ -333,8 +337,8 @@ fn chain_indicators_for_overlay_materials_use_the_host() {
 }
 
 thread_local! {
-    static TEST_STATE: RefCell<Option<Signal<(Vec<TrackedCard>, Vec<CardTarget>)>>> = const { RefCell::new(None) };
-    static TEST_SELECTION: RefCell<Option<Signal<Option<CardId>>>> = const { RefCell::new(None) };
+    static TEST_STATE: RefCell<Option<Signal<(Vec<TrackedCard>, Vec<CardLayoutTarget>)>>> = const { RefCell::new(None) };
+    static TEST_SELECTION: RefCell<Option<Signal<Option<CardInstanceId>>>> = const { RefCell::new(None) };
     static TEST_PLAYBACK: RefCell<Option<Signal<CardAnimationState>>> = const { RefCell::new(None) };
     static TEST_CHAIN: RefCell<Option<Signal<ChainPlayback>>> = const { RefCell::new(None) };
 }
@@ -358,7 +362,7 @@ fn use_card_inputs() {
     let pending = use_signal(|| None::<PendingInput>);
     use_context_provider(|| ReadSignal::new(pending));
     use_context_provider(|| {
-        EventHandler::new(|_: CardAction| -> () { panic!("Unexpected card action") })
+        EventHandler::new(|_: CardIntent| -> () { panic!("Unexpected card action") })
     });
 }
 
@@ -403,7 +407,7 @@ fn rendered_card_displays_chain_numbers_and_removes_them_when_resolved() {
 
 fn field_app() -> Element {
     use_card_inputs();
-    let selected = use_signal(|| None::<CardId>);
+    let selected = use_signal(|| None::<CardInstanceId>);
     let playback = use_signal(CardAnimationState::default);
     let (card, target) = fixture(
         CardLocation::MonsterZone,
@@ -450,7 +454,7 @@ fn two_field_cards_app() -> Element {
     }
 }
 
-fn stats_root(edits: &[Mutation], card: CardId) -> ElementId {
+fn stats_root(edits: &[Mutation], card: CardInstanceId) -> ElementId {
     edits
         .iter()
         .find_map(|mutation| match mutation {
@@ -587,7 +591,7 @@ fn app() -> Element {
     } }
 }
 
-fn card_root(edits: &[Mutation], id: CardId) -> ElementId {
+fn card_root(edits: &[Mutation], id: CardInstanceId) -> ElementId {
     edits
         .iter()
         .find_map(|mutation| match mutation {
@@ -621,7 +625,7 @@ fn movement_and_property_updates_keep_the_same_root_node() {
             _ => None,
         })
         .unwrap();
-    target.anchor.center_x += 80.0;
+    target.geometry.center_x += 80.0;
     target.rotation = -90.0;
     target.stack_order = 8;
     TEST_STATE.with(|slot| slot.borrow().unwrap().set((vec![card], vec![target])));
@@ -702,7 +706,7 @@ fn movement_and_property_updates_keep_the_same_root_node() {
     });
     target.data.sequence = 1;
     target.address.sequence = 1;
-    target.anchor.center_x += 100.0;
+    target.geometry.center_x += 100.0;
     TEST_STATE.with(|slot| slot.borrow().unwrap().set((vec![card], vec![target])));
     let moved_again = dom.render_immediate_to_vec();
     assert!(!moved_again.edits.iter().any(|edit| matches!(edit,
@@ -714,7 +718,7 @@ fn movement_and_property_updates_keep_the_same_root_node() {
     target.address.location = CardLocation::Deck;
     target.address.sequence = 0;
     target.data.sequence = 0;
-    target.appearance = CardAppearance::Pile(CardImage::CardBack);
+    target.render_mode = CardRenderMode::Pile(CardImage::CardBack);
     TEST_STATE.with(|slot| slot.borrow().unwrap().set((vec![card], vec![target])));
     let hidden = dom.render_immediate_to_vec();
     assert!(
@@ -747,11 +751,11 @@ fn movement_and_property_updates_keep_the_same_root_node() {
         "{:?}",
         hidden.edits
     );
-    let top = CardData {
+    let top = DuelCardData {
         card_code: 67890,
         ..Default::default()
     };
-    target.appearance = CardAppearance::Pile(CardImage::Thumbnail(top));
+    target.render_mode = CardRenderMode::Pile(CardImage::Thumbnail(top));
     TEST_STATE.with(|slot| slot.borrow().unwrap().set((vec![card], vec![target])));
     let thumbnail = dom.render_immediate_to_vec();
     assert!(
@@ -771,7 +775,7 @@ fn movement_and_property_updates_keep_the_same_root_node() {
     };
     target.address.location = CardLocation::MonsterZone;
     target.data.location = CardLocation::MonsterZone;
-    target.appearance = CardAppearance::Material;
+    target.render_mode = CardRenderMode::Material;
     TEST_STATE.with(|slot| slot.borrow().unwrap().set((vec![card], vec![target])));
     let material = dom.render_immediate_to_vec();
     assert!(
@@ -790,7 +794,7 @@ fn movement_and_property_updates_keep_the_same_root_node() {
 
 fn address(location: CardLocation) -> CardAddress {
     CardAddress {
-        controller: Player::Player,
+        controller: Player::Local,
         location,
         sequence: 0,
     }
@@ -830,7 +834,7 @@ fn moving_between_hand_and_pile_does_not_reinsert_existing_roots() {
     let (_, mut deck_target) = fixture(CardLocation::Deck, None);
     deck_target.id = deck.id;
     deck_target.data.card_code = deck.code;
-    deck_target.appearance = CardAppearance::Pile(CardImage::CardBack);
+    deck_target.render_mode = CardRenderMode::Pile(CardImage::CardBack);
     let mut dom = VirtualDom::new(app);
     let initial = dom.rebuild_to_vec();
     let root = card_root(&initial.edits, card.id);
@@ -851,7 +855,7 @@ fn moving_between_hand_and_pile_does_not_reinsert_existing_roots() {
     target.data.location = CardLocation::Deck;
     target.data.sequence = 1;
     target.stack_order = 1;
-    target.appearance = CardAppearance::Pile(CardImage::CardBack);
+    target.render_mode = CardRenderMode::Pile(CardImage::CardBack);
     TEST_STATE.with(|slot| {
         slot.borrow()
             .unwrap()

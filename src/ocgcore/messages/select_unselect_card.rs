@@ -1,4 +1,4 @@
-use crate::ocgcore::CardData;
+use crate::ocgcore::DuelCardData;
 use crate::ocgcore::constants::BattlePosition;
 use crate::ocgcore::constants::CardLocation;
 use crate::ocgcore::constants::Player;
@@ -12,12 +12,12 @@ pub struct SelectUnselectMessageData {
     pub cancelable: bool,
     pub min_count: u32,
     pub max_count: u32,
-    pub select_cards: Vec<CardData>,
-    pub unselect_cards: Vec<CardData>,
+    pub select_cards: Vec<DuelCardData>,
+    pub unselect_cards: Vec<DuelCardData>,
 }
 
 impl SelectUnselectMessageData {
-    pub fn response_index_for(&self, card: &CardData) -> Option<u32> {
+    pub fn response_index_for(&self, card: &DuelCardData) -> Option<u32> {
         if let Some(index) = self.unselect_cards.iter().position(|selectable_card| {
             selectable_card.controller == card.controller
                 && selectable_card.location == card.location
@@ -43,7 +43,7 @@ impl SelectUnselectMessageData {
         controller: Player,
         location: CardLocation,
         sequence: u32,
-    ) -> Option<CardData> {
+    ) -> Option<DuelCardData> {
         self.select_cards
             .iter()
             .chain(self.unselect_cards.iter())
@@ -84,7 +84,7 @@ impl TryFrom<&[u8]> for SelectUnselectMessageData {
             let sequence = read_u32(raw_bytes, &mut cursor, "sequence")?;
             let position = read_u32(raw_bytes, &mut cursor, "position")?;
 
-            select_cards.push(CardData {
+            select_cards.push(DuelCardData {
                 card_code,
                 controller: Player::try_from(controller)?,
                 location: CardLocation::try_from(location)?,
@@ -111,7 +111,7 @@ impl TryFrom<&[u8]> for SelectUnselectMessageData {
             let sequence = read_u32(raw_bytes, &mut cursor, "unselect_cards.sequence")?;
             let position = read_u32(raw_bytes, &mut cursor, "unselect_cards.position")?;
 
-            unselect_cards.push(CardData {
+            unselect_cards.push(DuelCardData {
                 card_code,
                 controller: Player::try_from(controller)?,
                 location: CardLocation::try_from(location)?,

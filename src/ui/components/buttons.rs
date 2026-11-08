@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 #[component]
-pub fn UIButton(
+pub fn IconButton(
     label: String,
     class: String,
     onclick: EventHandler<MouseEvent>,
@@ -18,7 +18,7 @@ pub fn UIButton(
 }
 
 #[component]
-pub fn OptionButton(
+pub fn TextButton(
     label: String,
     disabled: Option<bool>,
     onclick: EventHandler<MouseEvent>,
@@ -35,7 +35,7 @@ pub fn OptionButton(
 }
 
 #[component]
-pub fn ActionButton(
+pub fn LabeledIconButton(
     label: String,
     class: String,
     onclick: EventHandler<MouseEvent>,

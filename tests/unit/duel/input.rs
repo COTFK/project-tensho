@@ -1,10 +1,10 @@
 use super::*;
 use crate::ocgcore::constants::Player;
 
-fn card(index: Option<u8>) -> CardData {
-    CardData {
+fn card(index: Option<u8>) -> DuelCardData {
+    DuelCardData {
         card_code: 42,
-        controller: Player::Player,
+        controller: Player::Local,
         location: CardLocation::MonsterZone,
         sequence: 2,
         action_index: index,
@@ -15,35 +15,44 @@ fn card(index: Option<u8>) -> CardData {
 #[test]
 fn declines_preserve_response_encoding_and_cancelability() {
     for (input, response) in [
-        (PendingInput::YesNo("Activate?".into()), Some(Response::No)),
-        (PendingInput::EffectYesNo(card(None)), Some(Response::No)),
         (
-            PendingInput::Chain(SelectChainMessageData {
+            PendingInput::Confirmation("Activate?".into()),
+            Some(Response::No),
+        ),
+        (
+            PendingInput::EffectConfirmation(card(None)),
+            Some(Response::No),
+        ),
+        (
+            PendingInput::ChainResponse(SelectChainMessageData {
                 player: 0,
                 effects: vec![card(Some(7))],
             }),
             Some(Response::PassPriority),
         ),
         (
-            PendingInput::Chain(SelectChainMessageData {
+            PendingInput::ChainResponse(SelectChainMessageData {
                 player: 0,
                 effects: vec![card(None)],
             }),
             Some(Response::No),
         ),
         (
-            PendingInput::Chain(SelectChainMessageData {
+            PendingInput::ChainResponse(SelectChainMessageData {
                 player: 0,
                 effects: Vec::new(),
             }),
             None,
         ),
-        (PendingInput::Idle(IdleMessageData::default()), None),
+        (
+            PendingInput::ActionSelection(IdleMessageData::default()),
+            None,
+        ),
     ] {
         assert_eq!(input.decline_response(), response);
     }
     for is_cancelable in [false, true] {
-        let input = PendingInput::Tribute {
+        let input = PendingInput::TributeSelection {
             message: SelectTributeMessageData {
                 player: 0,
                 is_cancelable,
@@ -62,26 +71,26 @@ fn declines_preserve_response_encoding_and_cancelability() {
 
 #[test]
 fn special_summons_keep_their_global_response_order_and_full_address() {
-    let hand = CardData {
+    let hand = DuelCardData {
         location: CardLocation::Hand,
         ..card(Some(0))
     };
-    let extra = CardData {
+    let extra = DuelCardData {
         location: CardLocation::ExtraDeck,
         ..card(Some(1))
     };
-    let opponent = CardData {
+    let opponent = DuelCardData {
         controller: Player::Opponent,
         ..extra
     };
-    let input = PendingInput::Idle(IdleMessageData {
+    let input = PendingInput::ActionSelection(IdleMessageData {
         special_summons: vec![hand, opponent, extra],
         ..Default::default()
     });
     assert_eq!(
         input
-            .card_actions(CardAddress {
-                controller: Player::Player,
+            .card_action_options(CardAddress {
+                controller: Player::Local,
                 location: CardLocation::ExtraDeck,
                 sequence: 2,
             })
@@ -90,8 +99,8 @@ fn special_summons_keep_their_global_response_order_and_full_address() {
     );
     assert_eq!(
         input
-            .card_actions(CardAddress {
-                controller: Player::Player,
+            .card_action_options(CardAddress {
+                controller: Player::Local,
                 location: CardLocation::ExtraDeck,
                 sequence: 258,
             })
@@ -103,23 +112,23 @@ fn special_summons_keep_their_global_response_order_and_full_address() {
 #[test]
 fn effect_yes_no_exposes_only_its_prompted_card() {
     let card = card(None);
-    let input = PendingInput::EffectYesNo(card);
+    let input = PendingInput::EffectConfirmation(card);
     assert_eq!(input.prompted_effects(), &[card]);
     let address = CardAddress {
         controller: card.controller,
         location: card.location,
         sequence: u32::from(card.sequence),
     };
-    assert_eq!(input.card_actions(address).prompted, Some(card));
+    assert_eq!(input.card_action_options(address).prompted, Some(card));
     assert_eq!(
-        input.card_actions(CardAddress {
+        input.card_action_options(CardAddress {
             controller: Player::Opponent,
             ..address
         }),
-        CardActions::default()
+        CardActionOptions::default()
     );
     assert!(
-        PendingInput::Idle(IdleMessageData::default())
+        PendingInput::ActionSelection(IdleMessageData::default())
             .prompted_effects()
             .is_empty()
     );

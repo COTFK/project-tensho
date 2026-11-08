@@ -1,17 +1,17 @@
 use dioxus::prelude::*;
 
 use crate::define_ui_state;
-use crate::duel::cards::{CardAddress, CardId, CardPlacement, CardTracker};
-use crate::ocgcore::CardData;
+use crate::duel::cards::{CardAddress, CardInstanceId, CardPlacement, CardTracker};
+use crate::ocgcore::DuelCardData;
 use crate::ocgcore::constants::{CardLocation, Player};
 
-define_ui_state!(ViewState {
-    selected_card: Option<CardId>,
+define_ui_state!(DuelViewState {
+    selected_card: Option<CardInstanceId>,
     open_pile: Option<CardLocation>,
-    effects_to_select_from: Vec<CardData>,
+    effects_to_select_from: Vec<DuelCardData>,
 });
 
-impl ViewState {
+impl DuelViewState {
     pub(crate) fn select_card(&mut self, address: CardAddress, cards: Option<&CardTracker>) {
         let id = match cards {
             Some(cards) => match cards.card_at(address) {
@@ -41,7 +41,7 @@ impl ViewState {
             return;
         };
         if !cards.card_by_id(id).is_some_and(|card| {
-            matches!(card.placement, CardPlacement::Zone(address) if address.controller == Player::Player)
+            matches!(card.placement, CardPlacement::Zone(address) if address.controller == Player::Local)
         }) {
             self.selected_card.set(None);
         }

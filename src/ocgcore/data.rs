@@ -11,7 +11,7 @@ pub struct Zone {
 }
 
 #[derive(Hash, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
-pub struct CardData {
+pub struct DuelCardData {
     pub action_index: Option<u8>,
     pub card_code: u32,
     pub controller: Player,

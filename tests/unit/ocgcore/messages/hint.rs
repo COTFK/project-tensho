@@ -13,7 +13,7 @@ fn parses_draw_phase_example() {
     assert_eq!(
         CoreMessage::try_from(bytes.as_slice()).unwrap(),
         CoreMessage::Hint(HintMessageData {
-            player: Player::Player,
+            player: Player::Local,
             hint: Hint::Event(27),
         })
     );
@@ -91,7 +91,7 @@ fn parses_hint_following_phase_in_same_buffer() {
         [
             CoreMessage::NewPhase(_),
             CoreMessage::Hint(HintMessageData {
-                player: Player::Player,
+                player: Player::Local,
                 hint: Hint::Event(27),
             })
         ]

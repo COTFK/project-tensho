@@ -16,13 +16,13 @@ fn parses_sample_chaining() {
         CoreMessage::Chaining(ChainingMessageData {
             card_code: 44_455_560,
             location: CardLocationInfo {
-                controller: Some(Player::Player),
+                controller: Some(Player::Local),
                 location: CardLocationKind::Known(CardLocation::MonsterZone),
                 sequence: 2,
                 position: CardLocationPosition::Position(CardPositionFlags::FACE_UP_ATTACK),
             },
             triggering_location: ChainTriggerLocation {
-                controller: Some(Player::Player),
+                controller: Some(Player::Local),
                 location: CardLocationKind::Known(CardLocation::MonsterZone),
                 sequence: 2,
             },

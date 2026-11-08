@@ -1,8 +1,8 @@
 use super::events;
-use super::{EffectPileModal, ExtraDeckModal, PileCard};
+use super::{EffectPileModal, ExtraDeckModal, PileCardRowData};
 use crate::duel::cards::CardAddress;
-use crate::duel::input::CardAction;
-use crate::ocgcore::CardData;
+use crate::duel::input::CardIntent;
+use crate::ocgcore::DuelCardData;
 use crate::ocgcore::constants::{CardLocation, Player};
 use crate::ui::components::ModalSuppression;
 use dioxus::core::{AttributeValue, ElementId, Mutation};
@@ -12,15 +12,15 @@ use std::cell::RefCell;
 #[derive(Clone, Copy)]
 struct PileState {
     open: Signal<Option<CardLocation>>,
-    cards: Signal<Vec<PileCard>>,
-    available: Signal<Vec<CardData>>,
+    cards: Signal<Vec<PileCardRowData>>,
+    available: Signal<Vec<DuelCardData>>,
     suppress_actions: Signal<bool>,
     suppress_modal: Signal<bool>,
 }
 
 thread_local! {
     static STATE: RefCell<Option<PileState>> = const { RefCell::new(None) };
-    static ACTIONS: RefCell<Vec<CardAction>> = const { RefCell::new(Vec::new()) };
+    static ACTIONS: RefCell<Vec<CardIntent>> = const { RefCell::new(Vec::new()) };
 }
 
 fn app(location: CardLocation) -> Element {
@@ -28,10 +28,10 @@ fn app(location: CardLocation) -> Element {
         [42, 43]
             .into_iter()
             .enumerate()
-            .map(|(index, card_code)| PileCard {
-                data: CardData {
+            .map(|(index, card_code)| PileCardRowData {
+                data: DuelCardData {
                     card_code,
-                    controller: Player::Player,
+                    controller: Player::Local,
                     location,
                     sequence: index as u8,
                     ..Default::default()
@@ -232,7 +232,7 @@ fn pile_actions_keep_payloads_and_distinct_close_behavior() {
         events::dispatch(&dom, "click", elements.actions[0]);
         let acted = dom.render_immediate_to_vec();
         let address = CardAddress {
-            controller: Player::Player,
+            controller: Player::Local,
             location,
             sequence: 0,
         };
@@ -240,9 +240,9 @@ fn pile_actions_keep_payloads_and_distinct_close_behavior() {
             assert_eq!(
                 *actions.borrow(),
                 [if location == CardLocation::ExtraDeck {
-                    CardAction::SpecialSummon(address)
+                    CardIntent::SpecialSummon(address)
                 } else {
-                    CardAction::Activate(address)
+                    CardIntent::Activate(address)
                 }]
             );
         });
@@ -363,11 +363,11 @@ fn eligibility_checks_keep_each_piles_existing_matching_rules() {
         state.cards.write()[0].data.sequence = 7;
         state.cards.write()[0].data.controller = Player::Opponent;
         state.available.set(vec![
-            CardData {
+            DuelCardData {
                 location: CardLocation::Hand,
                 ..state.cards.peek()[0].data
             },
-            CardData {
+            DuelCardData {
                 sequence: 9,
                 ..state.cards.peek()[0].data
             },
@@ -383,13 +383,13 @@ fn eligibility_checks_keep_each_piles_existing_matching_rules() {
         )));
         dom.process_events();
         let mut available = vec![
-            CardData {
+            DuelCardData {
                 location: CardLocation::Hand,
                 ..Default::default()
             };
             256
         ];
-        available.push(CardData {
+        available.push(DuelCardData {
             location,
             sequence: if location == CardLocation::ExtraDeck {
                 7
@@ -413,9 +413,9 @@ fn eligibility_checks_keep_each_piles_existing_matching_rules() {
             assert_eq!(
                 *actions.borrow(),
                 [if location == CardLocation::ExtraDeck {
-                    CardAction::SpecialSummon(address)
+                    CardIntent::SpecialSummon(address)
                 } else {
-                    CardAction::Activate(address)
+                    CardIntent::Activate(address)
                 }]
             );
         });

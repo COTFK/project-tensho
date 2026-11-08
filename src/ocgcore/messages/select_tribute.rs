@@ -1,4 +1,4 @@
-use crate::ocgcore::CardData;
+use crate::ocgcore::DuelCardData;
 use crate::ocgcore::constants::CardLocation;
 use crate::ocgcore::constants::Player;
 
@@ -8,7 +8,7 @@ pub struct SelectTributeMessageData {
     pub is_cancelable: bool,
     pub min_select: u32,
     pub max_select: u32,
-    pub candidates: Vec<CardData>,
+    pub candidates: Vec<DuelCardData>,
 }
 
 impl TryFrom<&[u8]> for SelectTributeMessageData {
@@ -43,7 +43,7 @@ impl TryFrom<&[u8]> for SelectTributeMessageData {
             ]) as u8;
             let _release_param = bytes[offset + 10];
 
-            candidates.push(CardData {
+            candidates.push(DuelCardData {
                 card_code,
                 controller: Player::try_from(controller)?,
                 location: CardLocation::try_from(location)?,

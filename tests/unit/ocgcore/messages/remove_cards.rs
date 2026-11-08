@@ -30,7 +30,7 @@ fn decodes_empty_and_multiple_locations() {
         CoreMessage::RemoveCards(RemoveCardsMessageData {
             cards: vec![
                 CardLocationInfo {
-                    controller: Some(Player::Player),
+                    controller: Some(Player::Local),
                     location: CardLocationKind::Known(CardLocation::Graveyard),
                     sequence: 256,
                     position: CardLocationPosition::Position(CardPositionFlags::FACE_UP_ATTACK),

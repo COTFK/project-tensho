@@ -9,7 +9,7 @@ fn parses_sample_player_hint() {
     assert_eq!(
         CoreMessage::try_from(SAMPLE.as_slice()).unwrap(),
         CoreMessage::PlayerHint(PlayerHintMessageData {
-            player: Player::Player,
+            player: Player::Local,
             hint: PlayerHint::DescriptionAdd(0x0000_2ef5_1380_0002),
         })
     );
@@ -69,7 +69,7 @@ fn parses_player_hint_among_framed_messages() {
         parse_messages(&bytes).unwrap().as_slice(),
         [
             CoreMessage::PlayerHint(PlayerHintMessageData {
-                player: Player::Player,
+                player: Player::Local,
                 hint: PlayerHint::DescriptionAdd(_),
             }),
             CoreMessage::SpecialSummoned

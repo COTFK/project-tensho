@@ -1,4 +1,4 @@
-use super::{COURTIER_API_URL, courtier_card_id_batches, courtier_card_id_query};
+use super::{COURTIER_API_URL, courtier_card_code_batches, courtier_card_code_query};
 use anyhow::Context;
 use futures::future::try_join_all;
 use std::collections::HashMap;
@@ -8,7 +8,7 @@ use tracing::warn;
 
 pub type Scripts = Rc<HashMap<String, Vec<u8>>>;
 
-async fn fetch_system_scripts(client: &reqwest::Client) -> anyhow::Result<Vec<String>> {
+async fn fetch_system_script_names(client: &reqwest::Client) -> anyhow::Result<Vec<String>> {
     let url = format!("{COURTIER_API_URL}/v1/scripts/system/files");
 
     let names = client
@@ -23,7 +23,7 @@ async fn fetch_system_scripts(client: &reqwest::Client) -> anyhow::Result<Vec<St
     Ok(names)
 }
 
-async fn fetch_base_script(
+async fn fetch_system_script(
     client: &reqwest::Client,
     name: &str,
 ) -> anyhow::Result<(String, Vec<u8>)> {
@@ -42,14 +42,14 @@ async fn fetch_base_script(
 
 async fn fetch_card_scripts(
     client: &reqwest::Client,
-    card_ids: &[u32],
+    card_codes: &[u32],
 ) -> anyhow::Result<HashMap<String, Option<String>>> {
     let url = format!("{COURTIER_API_URL}/v1/scripts/cards");
     let mut scripts = HashMap::new();
-    for batch in courtier_card_id_batches(card_ids) {
+    for batch in courtier_card_code_batches(card_codes) {
         let response = client
             .get(&url)
-            .query(&courtier_card_id_query(batch))
+            .query(&courtier_card_code_query(batch))
             .send()
             .await?
             .error_for_status()
@@ -62,9 +62,9 @@ async fn fetch_card_scripts(
     Ok(scripts)
 }
 
-pub async fn cache_scripts(deck_card_ids: &[u32]) -> anyhow::Result<Scripts> {
+pub async fn cache_scripts(deck_card_codes: &[u32]) -> anyhow::Result<Scripts> {
     let client = reqwest::Client::new();
-    let unique_ids: Vec<u32> = deck_card_ids
+    let unique_codes: Vec<u32> = deck_card_codes
         .iter()
         .copied()
         .collect::<HashSet<_>>()
@@ -72,34 +72,34 @@ pub async fn cache_scripts(deck_card_ids: &[u32]) -> anyhow::Result<Scripts> {
         .collect();
 
     let (system_names, card_scripts) = futures::try_join!(
-        fetch_system_scripts(&client),
-        fetch_card_scripts(&client, &unique_ids),
+        fetch_system_script_names(&client),
+        fetch_card_scripts(&client, &unique_codes),
     )?;
     let base_scripts = try_join_all(
         system_names
             .iter()
-            .map(|name| fetch_base_script(&client, name)),
+            .map(|name| fetch_system_script(&client, name)),
     )
     .await?;
 
     let mut scripts: HashMap<String, Vec<u8>> = base_scripts.into_iter().collect();
-    insert_card_scripts(&mut scripts, &unique_ids, card_scripts)?;
+    insert_card_scripts(&mut scripts, &unique_codes, card_scripts)?;
 
     Ok(Rc::new(scripts))
 }
 
 fn insert_card_scripts(
     scripts: &mut HashMap<String, Vec<u8>>,
-    ids: &[u32],
+    codes: &[u32],
     mut card_scripts: HashMap<String, Option<String>>,
 ) -> anyhow::Result<()> {
-    for id in ids {
-        match card_scripts.remove(&format!("{id:08}")) {
+    for code in codes {
+        match card_scripts.remove(&format!("{code:08}")) {
             Some(Some(lua)) => {
-                scripts.insert(format!("c{id}.lua"), lua.into_bytes());
+                scripts.insert(format!("c{code}.lua"), lua.into_bytes());
             }
-            Some(None) => warn!("No card script available for {id:08}"),
-            None => anyhow::bail!("Courtier omitted card script entry for {id:08}"),
+            Some(None) => warn!("No card script available for {code:08}"),
+            None => anyhow::bail!("Courtier omitted card script entry for {code:08}"),
         }
     }
 

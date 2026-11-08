@@ -2,7 +2,7 @@
 #[repr(u8)]
 pub enum Player {
     #[default]
-    Player = 0,
+    Local = 0,
     Opponent = 1,
 }
 
@@ -11,7 +11,7 @@ impl TryFrom<u8> for Player {
 
     fn try_from(value: u8) -> anyhow::Result<Self> {
         match value {
-            0 => Ok(Self::Player),
+            0 => Ok(Self::Local),
             1 => Ok(Self::Opponent),
             _ => anyhow::bail!("Received invalid player value: {value}"),
         }

@@ -6,7 +6,7 @@ use ocgcore_ffi::enums::OCG_LogTypes;
 use ocgcore_ffi::types::OCG_CardData;
 use ocgcore_ffi::types::OCG_Duel;
 
-use super::core::DuelContext;
+use super::core::CoreCallbacks;
 
 pub type CardReaderFn = fn(code: u32) -> OCG_CardData;
 pub type ScriptReaderFn = Box<dyn Fn(&str) -> Option<Vec<u8>>>;
@@ -32,7 +32,7 @@ pub unsafe extern "C" fn log_handler_trampoline(
     if payload.is_null() || string.is_null() {
         return;
     }
-    let context = unsafe { &*(payload as *const DuelContext) };
+    let context = unsafe { &*(payload as *const CoreCallbacks) };
     let string = unsafe { CStr::from_ptr(string).to_str().unwrap() };
 
     (context.log_handler)(string.to_string(), log_type);
@@ -46,7 +46,7 @@ pub unsafe extern "C" fn card_reader_trampoline(
     if payload.is_null() || data.is_null() {
         return;
     }
-    let context = unsafe { &*(payload as *const DuelContext) };
+    let context = unsafe { &*(payload as *const CoreCallbacks) };
 
     let card_info = (context.card_reader)(code);
     unsafe { std::ptr::write(data, card_info) };
@@ -61,7 +61,7 @@ pub unsafe extern "C" fn script_reader_trampoline(
         return 0;
     }
 
-    let context = unsafe { &*(payload as *const DuelContext) };
+    let context = unsafe { &*(payload as *const CoreCallbacks) };
     let name_cstr = unsafe { CStr::from_ptr(name) };
     let name_str = match name_cstr.to_str() {
         Ok(s) => s,

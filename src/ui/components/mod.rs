@@ -3,9 +3,9 @@ mod card;
 mod modals;
 pub mod svg;
 
-pub use buttons::ActionButton;
-pub use buttons::OptionButton;
-pub use buttons::UIButton;
+pub use buttons::IconButton;
+pub use buttons::LabeledIconButton;
+pub use buttons::TextButton;
 pub use card::Card;
 pub use card::CardActionMenu;
 pub(crate) use card::CardImage;

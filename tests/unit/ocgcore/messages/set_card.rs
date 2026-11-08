@@ -14,7 +14,7 @@ fn parses_sample_set_card() {
         CoreMessage::SetCard(SetCardMessageData {
             card_code: 91_703_676,
             location: CardLocationInfo {
-                controller: Some(Player::Player),
+                controller: Some(Player::Local),
                 location: CardLocationKind::Known(CardLocation::SpellTrapZone),
                 sequence: 3,
                 position: CardLocationPosition::Position(

@@ -9,7 +9,7 @@ use crate::ocgcore::messages::{
 
 fn address(location: CardLocation, sequence: u32) -> CardAddress {
     CardAddress {
-        controller: Player::Player,
+        controller: Player::Local,
         location,
         sequence,
     }
@@ -68,7 +68,7 @@ fn position_changes_start_playback_without_changing_card_identity() {
     after
         .apply(&CoreMessage::PositionChange(PositionChangeMessageData {
             card_code: 1,
-            controller: Player::Player,
+            controller: Player::Local,
             location: CardLocation::MonsterZone,
             sequence: 0,
             previous_position: CardPositionFlags::FACE_UP_ATTACK,
@@ -105,21 +105,21 @@ fn gather_phase_spreads_before_finishing() {
     let mut playback = CardAnimationState::default();
     playback.begin_gather(vec![], CardTracker::default());
     let generation = playback.generation;
-    assert_eq!(playback.phase, AnimationPhase::HandShuffleGathering);
+    assert_eq!(playback.phase, CardAnimationPhase::HandShuffleGathering);
     playback.advance(
         generation.wrapping_add(1),
-        AnimationPhase::HandShuffleGathering,
+        CardAnimationPhase::HandShuffleGathering,
     );
-    playback.advance(generation, AnimationPhase::HandShuffleStacking);
-    assert_eq!(playback.phase, AnimationPhase::HandShuffleGathering);
-    playback.advance(generation, AnimationPhase::HandShuffleGathering);
-    assert_eq!(playback.phase, AnimationPhase::HandShuffleStacking);
-    playback.advance(generation, AnimationPhase::HandShuffleGathering);
-    assert_eq!(playback.phase, AnimationPhase::HandShuffleStacking);
-    playback.advance(generation, AnimationPhase::HandShuffleStacking);
-    assert_eq!(playback.phase, AnimationPhase::HandShuffleSpreading);
-    playback.advance(generation, AnimationPhase::HandShuffleSpreading);
-    assert_eq!(playback.phase, AnimationPhase::Idle);
+    playback.advance(generation, CardAnimationPhase::HandShuffleStacking);
+    assert_eq!(playback.phase, CardAnimationPhase::HandShuffleGathering);
+    playback.advance(generation, CardAnimationPhase::HandShuffleGathering);
+    assert_eq!(playback.phase, CardAnimationPhase::HandShuffleStacking);
+    playback.advance(generation, CardAnimationPhase::HandShuffleGathering);
+    assert_eq!(playback.phase, CardAnimationPhase::HandShuffleStacking);
+    playback.advance(generation, CardAnimationPhase::HandShuffleStacking);
+    assert_eq!(playback.phase, CardAnimationPhase::HandShuffleSpreading);
+    playback.advance(generation, CardAnimationPhase::HandShuffleSpreading);
+    assert_eq!(playback.phase, CardAnimationPhase::Idle);
     assert!(playback.source.is_none());
 }
 
@@ -128,36 +128,36 @@ fn movement_finishes_only_for_matching_phase_and_generation() {
     let mut playback = CardAnimationState::default();
     playback.begin(vec![], CardTracker::default());
     let generation = playback.generation;
-    assert_eq!(playback.phase, AnimationPhase::Moving);
-    playback.advance(generation, AnimationPhase::HandShuffleSpreading);
-    playback.advance(generation.wrapping_add(1), AnimationPhase::Moving);
-    assert_eq!(playback.phase, AnimationPhase::Moving);
-    playback.advance(generation, AnimationPhase::Moving);
-    assert_eq!(playback.phase, AnimationPhase::Idle);
+    assert_eq!(playback.phase, CardAnimationPhase::Moving);
+    playback.advance(generation, CardAnimationPhase::HandShuffleSpreading);
+    playback.advance(generation.wrapping_add(1), CardAnimationPhase::Moving);
+    assert_eq!(playback.phase, CardAnimationPhase::Moving);
+    playback.advance(generation, CardAnimationPhase::Moving);
+    assert_eq!(playback.phase, CardAnimationPhase::Idle);
     assert!(playback.source.is_none());
 }
 
 #[test]
 fn cancelling_any_shuffle_phase_invalidates_its_timer() {
     for phase in [
-        AnimationPhase::HandShuffleGathering,
-        AnimationPhase::HandShuffleStacking,
-        AnimationPhase::HandShuffleSpreading,
+        CardAnimationPhase::HandShuffleGathering,
+        CardAnimationPhase::HandShuffleStacking,
+        CardAnimationPhase::HandShuffleSpreading,
     ] {
         let mut playback = CardAnimationState::default();
         playback.begin_gather(vec![], CardTracker::default());
         let generation = playback.generation;
-        if phase != AnimationPhase::HandShuffleGathering {
-            playback.advance(generation, AnimationPhase::HandShuffleGathering);
+        if phase != CardAnimationPhase::HandShuffleGathering {
+            playback.advance(generation, CardAnimationPhase::HandShuffleGathering);
         }
-        if phase == AnimationPhase::HandShuffleSpreading {
-            playback.advance(generation, AnimationPhase::HandShuffleStacking);
+        if phase == CardAnimationPhase::HandShuffleSpreading {
+            playback.advance(generation, CardAnimationPhase::HandShuffleStacking);
         }
         assert_eq!(playback.phase, phase);
         playback.cancel();
         playback.begin_gather(vec![], CardTracker::default());
         playback.advance(generation, phase);
-        assert_eq!(playback.phase, AnimationPhase::HandShuffleGathering);
+        assert_eq!(playback.phase, CardAnimationPhase::HandShuffleGathering);
         assert!(playback.source.is_some());
     }
 }
@@ -172,7 +172,7 @@ fn hand_shuffle_is_detected_only_when_every_hand_card_is_replaced() {
     let mut shuffled = before.clone();
     shuffled
         .apply(&CoreMessage::ShuffleHand(ShuffleCardsMessageData {
-            player: Player::Player,
+            player: Player::Local,
             card_codes: vec![8, 7],
         }))
         .unwrap();
@@ -190,7 +190,7 @@ fn hand_shuffle_is_detected_only_when_every_hand_card_is_replaced() {
     let mut single_shuffled = single.clone();
     single_shuffled
         .apply(&CoreMessage::ShuffleHand(ShuffleCardsMessageData {
-            player: Player::Player,
+            player: Player::Local,
             card_codes: vec![7],
         }))
         .unwrap();
@@ -208,12 +208,12 @@ fn plans_shuffle_and_movement_from_the_same_batch() {
     let field = address(CardLocation::MonsterZone, 0);
     let field_id = before.insert(field, 9).unwrap();
     let shuffle = CoreMessage::ShuffleHand(ShuffleCardsMessageData {
-        player: Player::Player,
+        player: Player::Local,
         card_codes: vec![8, 7],
     });
     let position_change = CoreMessage::PositionChange(PositionChangeMessageData {
         card_code: 9,
-        controller: Player::Player,
+        controller: Player::Local,
         location: CardLocation::MonsterZone,
         sequence: 0,
         previous_position: CardPositionFlags::FACE_UP_ATTACK,
@@ -226,10 +226,10 @@ fn plans_shuffle_and_movement_from_the_same_batch() {
     let mut expected = vec![field_id];
     expected.extend(hand_ids);
     let plan = plan_animation(&[shuffle, position_change], &before, &after).unwrap();
-    assert_eq!(plan, CardAnimation::HandShuffle(expected.clone()));
+    assert_eq!(plan, CardAnimationPlan::HandShuffle(expected.clone()));
     let mut playback = CardAnimationState::default();
     plan.begin(&mut playback, before.clone());
-    assert_eq!(playback.phase, AnimationPhase::HandShuffleGathering);
+    assert_eq!(playback.phase, CardAnimationPhase::HandShuffleGathering);
     assert_eq!(playback.source, Some(before));
     assert!(expected.iter().all(|id| playback.moving.contains(id)));
 }
@@ -242,7 +242,7 @@ fn plans_only_valid_local_shuffles_and_other_visible_movements() {
     let field = address(CardLocation::MonsterZone, 0);
     let field_id = before.insert(field, 9).unwrap();
     let shuffle = CoreMessage::ShuffleHand(ShuffleCardsMessageData {
-        player: Player::Player,
+        player: Player::Local,
         card_codes: vec![8, 7],
     });
     let mut shuffled = before.clone();
@@ -257,7 +257,7 @@ fn plans_only_valid_local_shuffles_and_other_visible_movements() {
         None
     );
     let singleton_shuffle = CoreMessage::ShuffleHand(ShuffleCardsMessageData {
-        player: Player::Player,
+        player: Player::Local,
         card_codes: vec![7],
     });
     assert_eq!(
@@ -272,7 +272,7 @@ fn plans_only_valid_local_shuffles_and_other_visible_movements() {
 
     let change = CoreMessage::PositionChange(PositionChangeMessageData {
         card_code: 9,
-        controller: Player::Player,
+        controller: Player::Local,
         location: CardLocation::MonsterZone,
         sequence: 0,
         previous_position: CardPositionFlags::FACE_UP_ATTACK,
@@ -282,6 +282,6 @@ fn plans_only_valid_local_shuffles_and_other_visible_movements() {
     moved.apply(&change).unwrap();
     assert_eq!(
         plan_animation(&[shuffle, change], &before, &moved),
-        Some(CardAnimation::Movement(vec![field_id]))
+        Some(CardAnimationPlan::Movement(vec![field_id]))
     );
 }

@@ -1,20 +1,23 @@
 use dioxus::prelude::*;
 use std::collections::BTreeMap;
 
-use super::card_interaction::InteractiveCard;
-use super::card_layout::{CardAppearance, CardTarget};
+use super::card_interaction::CardWithActions;
+use super::card_layout::{CardLayoutTarget, CardRenderMode};
 use super::card_stats::CardStats;
 use super::chain_badges::ChainBadges;
-use crate::duel::cards::{Card as TrackedCard, CardId, CardPlacement};
+use crate::duel::cards::{CardInstanceId, CardPlacement, TrackedCard};
 use crate::duel::controller::ChainLink;
 use crate::ocgcore::constants::{BattlePosition, CardLocation, Player};
 use crate::ocgcore::location_info::CardPositionFlags;
 use crate::ui::components::CardImage;
 
-fn visible_card(card: TrackedCard, target: Option<CardTarget>) -> Option<(CardTarget, bool)> {
+fn visible_card_target(
+    card: TrackedCard,
+    target: Option<CardLayoutTarget>,
+) -> Option<(CardLayoutTarget, bool)> {
     let target = target?;
-    let address = match (card.placement, target.appearance) {
-        (CardPlacement::Zone(address), CardAppearance::Interactive)
+    let address = match (card.placement, target.render_mode) {
+        (CardPlacement::Zone(address), CardRenderMode::Interactive)
             if matches!(
                 address.location,
                 CardLocation::Hand | CardLocation::MonsterZone | CardLocation::SpellTrapZone
@@ -22,7 +25,7 @@ fn visible_card(card: TrackedCard, target: Option<CardTarget>) -> Option<(CardTa
         {
             address
         }
-        (CardPlacement::Zone(address), CardAppearance::Pile(_))
+        (CardPlacement::Zone(address), CardRenderMode::Pile(_))
             if matches!(
                 address.location,
                 CardLocation::Deck
@@ -33,18 +36,18 @@ fn visible_card(card: TrackedCard, target: Option<CardTarget>) -> Option<(CardTa
         {
             address
         }
-        (CardPlacement::Overlay { .. }, CardAppearance::Material) => target.address,
+        (CardPlacement::Overlay { .. }, CardRenderMode::Material) => target.address,
         _ => return None,
     };
-    if address.controller != Player::Player {
+    if address.controller != Player::Local {
         return None;
     }
-    if !target.anchor.center_x.is_finite()
-        || !target.anchor.center_y.is_finite()
-        || !target.anchor.width.is_finite()
-        || !target.anchor.height.is_finite()
-        || target.anchor.width <= 0.0
-        || target.anchor.height <= 0.0
+    if !target.geometry.center_x.is_finite()
+        || !target.geometry.center_y.is_finite()
+        || !target.geometry.width.is_finite()
+        || !target.geometry.height.is_finite()
+        || target.geometry.width <= 0.0
+        || target.geometry.height <= 0.0
         || !target.rotation.is_finite()
     {
         tracing::error!("Invalid card layer geometry for {:?}", card.id);
@@ -52,7 +55,7 @@ fn visible_card(card: TrackedCard, target: Option<CardTarget>) -> Option<(CardTa
     }
     let facedown = card.code == 0
         || (address.location != CardLocation::Hand
-            && target.appearance == CardAppearance::Interactive
+            && target.render_mode == CardRenderMode::Interactive
             && !card.position.is_some_and(|position| {
                 position.intersects(
                     CardPositionFlags::FACE_UP_ATTACK | CardPositionFlags::FACE_UP_DEFENSE,
@@ -63,10 +66,10 @@ fn visible_card(card: TrackedCard, target: Option<CardTarget>) -> Option<(CardTa
     Some((target, facedown))
 }
 
-pub(super) fn card_image(card: TrackedCard, target: Option<CardTarget>) -> Option<CardImage> {
-    let (target, facedown) = visible_card(card, target)?;
-    Some(match target.appearance {
-        CardAppearance::Pile(image) => image,
+pub(super) fn card_image(card: TrackedCard, target: Option<CardLayoutTarget>) -> Option<CardImage> {
+    let (target, facedown) = visible_card_target(card, target)?;
+    Some(match target.render_mode {
+        CardRenderMode::Pile(image) => image,
         _ if facedown
             || (target.address.location != CardLocation::Hand
                 && matches!(
@@ -84,8 +87,11 @@ pub(super) fn card_image(card: TrackedCard, target: Option<CardTarget>) -> Optio
     })
 }
 
-fn chain_indicators(cards: &[TrackedCard], links: &[ChainLink]) -> BTreeMap<CardId, Vec<u32>> {
-    let mut indicators = BTreeMap::<CardId, Vec<u32>>::new();
+fn chain_indicators(
+    cards: &[TrackedCard],
+    links: &[ChainLink],
+) -> BTreeMap<CardInstanceId, Vec<u32>> {
+    let mut indicators = BTreeMap::<CardInstanceId, Vec<u32>>::new();
     for link in links {
         let Some(card) = link
             .card
@@ -101,7 +107,7 @@ fn chain_indicators(cards: &[TrackedCard], links: &[ChainLink]) -> BTreeMap<Card
         let CardPlacement::Zone(address) = card.placement else {
             continue;
         };
-        if address.controller != Player::Player {
+        if address.controller != Player::Local {
             continue;
         }
         let target = match address.location {
@@ -131,11 +137,11 @@ fn chain_indicators(cards: &[TrackedCard], links: &[ChainLink]) -> BTreeMap<Card
 #[component]
 pub(super) fn PersistentCardLayer(
     cards: Vec<TrackedCard>,
-    targets: Vec<CardTarget>,
-    selected: Option<CardId>,
+    targets: Vec<CardLayoutTarget>,
+    selected: Option<CardInstanceId>,
     suppressed: bool,
     animating: bool,
-    moving: Vec<CardId>,
+    moving: Vec<CardInstanceId>,
     chain_links: Vec<ChainLink>,
 ) -> Element {
     let indicators = chain_indicators(&cards, &chain_links);
@@ -163,7 +169,7 @@ pub(super) fn PersistentCardLayer(
 #[component]
 fn LayerCard(
     card: TrackedCard,
-    target: Option<CardTarget>,
+    target: Option<CardLayoutTarget>,
     chain_links: Vec<u32>,
     selected: bool,
     suppressed: bool,
@@ -173,28 +179,28 @@ fn LayerCard(
     let visible = target.zip(card_image(card, target));
     let hand = matches!(card.placement, CardPlacement::Zone(address) if address.location == CardLocation::Hand);
     let style = visible.map(|(target, _)| {
-        let offset = match (card.placement, target.appearance) {
-            (CardPlacement::Zone(address), CardAppearance::Pile(_)) => (f64::from(address.sequence) + 1.0) * 0.01,
+        let offset = match (card.placement, target.render_mode) {
+            (CardPlacement::Zone(address), CardRenderMode::Pile(_)) => (f64::from(address.sequence) + 1.0) * 0.01,
             _ => 0.0,
         };
-        let (x_offset, y_offset) = if target.address.location == CardLocation::Banishment && matches!(target.appearance, CardAppearance::Pile(_)) {
+        let (x_offset, y_offset) = if target.address.location == CardLocation::Banishment && matches!(target.render_mode, CardRenderMode::Pile(_)) {
             (format!("- {offset}vh"), format!("- {offset}vw"))
         } else {
             (format!("+ {offset}vw"), format!("- {offset}vh"))
         };
-        let stack = match (card.placement, target.appearance) {
-            (CardPlacement::Zone(address), CardAppearance::Pile(_)) => i64::from(address.sequence) + 1,
-            (CardPlacement::Overlay { sequence, .. }, CardAppearance::Material) => i64::from(sequence) + 1,
-            (_, CardAppearance::Interactive) if hand => 1000 + i64::from(target.stack_order),
-            (_, CardAppearance::Interactive) => 500,
+        let stack = match (card.placement, target.render_mode) {
+            (CardPlacement::Zone(address), CardRenderMode::Pile(_)) => i64::from(address.sequence) + 1,
+            (CardPlacement::Overlay { sequence, .. }, CardRenderMode::Material) => i64::from(sequence) + 1,
+            (_, CardRenderMode::Interactive) if hand => 1000 + i64::from(target.stack_order),
+            (_, CardRenderMode::Interactive) => 500,
             _ => i64::from(target.stack_order),
         };
         format!(
             "--card-x: calc({}px {}); --card-y: calc({}px {}); --card-width: {}px; --card-height: {}px; --card-z: {};",
-            target.anchor.center_x - target.anchor.width / 2.0, x_offset,
-            target.anchor.center_y - target.anchor.height / 2.0, y_offset,
-            target.anchor.width, target.anchor.height,
-            if moving { 2000 + stack } else if selected && !hand && target.appearance == CardAppearance::Interactive { 4000 + stack } else { stack },
+            target.geometry.center_x - target.geometry.width / 2.0, x_offset,
+            target.geometry.center_y - target.geometry.height / 2.0, y_offset,
+            target.geometry.width, target.geometry.height,
+            if moving { 2000 + stack } else if selected && !hand && target.render_mode == CardRenderMode::Interactive { 4000 + stack } else { stack },
         )
     }).unwrap_or_default();
     rsx! {
@@ -211,11 +217,11 @@ fn LayerCard(
                     style: "--card-rotation: {target.rotation}deg;",
                     div {
                         class: "w-full h-full",
-                        class: if target.appearance == CardAppearance::Interactive { "pointer-events-auto" } else { "pointer-events-none" },
-                        InteractiveCard {
+                        class: if target.render_mode == CardRenderMode::Interactive { "pointer-events-auto" } else { "pointer-events-none" },
+                        CardWithActions {
                             card: target.data,
                             address: target.address,
-                            passive: target.appearance != CardAppearance::Interactive,
+                            passive: target.render_mode != CardRenderMode::Interactive,
                             animated: animating,
                             image,
                             selected,
@@ -223,7 +229,7 @@ fn LayerCard(
                         }
                     }
                     ChainBadges { links: chain_links, rotation: target.rotation }
-                    if !moving && target.appearance == CardAppearance::Interactive && matches!(target.address.location, CardLocation::MonsterZone | CardLocation::SpellTrapZone) {
+                    if !moving && target.render_mode == CardRenderMode::Interactive && matches!(target.address.location, CardLocation::MonsterZone | CardLocation::SpellTrapZone) {
                         div {
                             "data-card-stats": "{card.id}",
                             class: "absolute top-0 left-1/2 -translate-x-1/2 h-full w-[var(--card-height)] pointer-events-none",

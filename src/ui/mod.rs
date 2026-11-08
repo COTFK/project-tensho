@@ -7,6 +7,6 @@ pub(crate) mod playback;
 mod rotate_device;
 pub(crate) mod view_state;
 
-pub use duel::DuelWrapper;
+pub use duel::DuelHost;
 pub use loading::LoadingScreen;
 pub use rotate_device::RotateDeviceOverlay;

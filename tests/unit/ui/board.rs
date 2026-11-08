@@ -1,7 +1,7 @@
-use super::super::card_layout::{CardAppearance, PreviewSnapshot};
-use super::super::layout_anchors::{Anchor, CardAnchor};
+use super::super::card_layout::{CardLayoutSnapshot, CardRenderMode};
+use super::super::layout_anchors::{AnchorGeometry, LayoutAnchorId};
 use super::*;
-use crate::ocgcore::CardData;
+use crate::ocgcore::DuelCardData;
 use dioxus::html::geometry::{PixelsRect, PixelsSize, euclid::point2};
 use dioxus::html::{MountedResult, RenderedElementBacking};
 use std::any::Any;
@@ -12,7 +12,7 @@ use std::rc::Rc;
 
 struct TestElement(PixelsRect);
 
-fn set_data(cards: &mut CardTracker, address: CardAddress, data: CardData) {
+fn set_data(cards: &mut CardTracker, address: CardAddress, data: DuelCardData) {
     cards.update_queried_data(address, data).unwrap();
 }
 
@@ -26,14 +26,14 @@ impl RenderedElementBacking for TestElement {
     }
 }
 
-fn fixture() -> (PreviewSnapshot, LayoutAnchors) {
-    let mut snapshot = PreviewSnapshot {
+fn fixture() -> (CardLayoutSnapshot, LayoutAnchorRegistry) {
+    let mut snapshot = CardLayoutSnapshot {
         cards: CardTracker::default(),
         selected: None,
     };
-    let anchors = LayoutAnchors::default();
+    let anchors = LayoutAnchorRegistry::default();
     anchors.insert(
-        Anchor::HandBase,
+        LayoutAnchorId::HandBase,
         Rc::new(()),
         Rc::new(MountedData::new(TestElement(PixelsRect::new(
             point2(500.0, 400.0),
@@ -47,7 +47,7 @@ fn fixture() -> (PreviewSnapshot, LayoutAnchors) {
         CardLocation::Banishment,
     ] {
         anchors.insert(
-            Anchor::Pile(location),
+            LayoutAnchorId::Pile(location),
             Rc::new(()),
             Rc::new(MountedData::new(TestElement(PixelsRect::new(
                 point2(600.0, 400.0),
@@ -61,15 +61,15 @@ fn fixture() -> (PreviewSnapshot, LayoutAnchors) {
     ] {
         for sequence in 0..count {
             let address = CardAddress {
-                controller: Player::Player,
+                controller: Player::Local,
                 location,
                 sequence,
             };
             let code = 100 + sequence;
             snapshot.cards.insert(address, code).unwrap();
-            let data = CardData {
+            let data = DuelCardData {
                 card_code: code,
-                controller: Player::Player,
+                controller: Player::Local,
                 location,
                 sequence: u8::try_from(sequence).unwrap(),
                 ..Default::default()
@@ -80,7 +80,7 @@ fn fixture() -> (PreviewSnapshot, LayoutAnchors) {
                 PixelsSize::new(59.0, 86.0),
             );
             anchors.insert(
-                Anchor::Zone(location, sequence),
+                LayoutAnchorId::Zone(location, sequence),
                 Rc::new(()),
                 Rc::new(MountedData::new(TestElement(rect))),
             );
@@ -97,12 +97,12 @@ fn measures_all_normal_extra_and_spell_trap_zones() {
     assert_eq!(targets.len(), 13);
     for target in targets {
         assert_eq!(
-            target.anchor.center_x,
+            target.geometry.center_x,
             f64::from(target.data.sequence) * 100.0 + 29.5
         );
-        assert_eq!(target.anchor.center_y, 63.0);
+        assert_eq!(target.geometry.center_y, 63.0);
         assert_eq!(target.rotation, 0.0);
-        assert_eq!(target.appearance, CardAppearance::Interactive);
+        assert_eq!(target.render_mode, CardRenderMode::Interactive);
     }
 }
 
@@ -111,9 +111,9 @@ fn measurement_order_and_keyed_geometry_ignore_registration_order() {
     use std::cell::RefCell;
 
     struct RecordingElement {
-        anchor: Anchor,
+        anchor: LayoutAnchorId,
         rect: PixelsRect,
-        calls: Rc<RefCell<Vec<Anchor>>>,
+        calls: Rc<RefCell<Vec<LayoutAnchorId>>>,
     }
 
     impl RenderedElementBacking for RecordingElement {
@@ -133,18 +133,20 @@ fn measurement_order_and_keyed_geometry_ignore_registration_order() {
         (CardLocation::SpellTrapZone, 6),
     ]
     .into_iter()
-    .flat_map(|(location, count)| (0..count).map(move |index| Anchor::Zone(location, index)))
+    .flat_map(|(location, count)| {
+        (0..count).map(move |index| LayoutAnchorId::Zone(location, index))
+    })
     .chain([
-        Anchor::Pile(CardLocation::Deck),
-        Anchor::Pile(CardLocation::ExtraDeck),
-        Anchor::Pile(CardLocation::Graveyard),
-        Anchor::Pile(CardLocation::Banishment),
-        Anchor::HandBase,
+        LayoutAnchorId::Pile(CardLocation::Deck),
+        LayoutAnchorId::Pile(CardLocation::ExtraDeck),
+        LayoutAnchorId::Pile(CardLocation::Graveyard),
+        LayoutAnchorId::Pile(CardLocation::Banishment),
+        LayoutAnchorId::HandBase,
     ])
     .collect();
     assert_eq!(expected.len(), 18);
     let calls = Rc::new(RefCell::new(Vec::new()));
-    let anchors = LayoutAnchors::default();
+    let anchors = LayoutAnchorRegistry::default();
     for (index, &anchor) in expected.iter().enumerate().rev() {
         let index = index as f64;
         anchors.insert(
@@ -165,14 +167,14 @@ fn measurement_order_and_keyed_geometry_ignore_registration_order() {
     assert_eq!(geometry.anchors.len(), 17);
     for (index, anchor) in expected.iter().enumerate() {
         let index = index as f64;
-        let expected_rect = CardAnchor {
+        let expected_rect = AnchorGeometry {
             center_x: 100.0 * index + (59.0 + index) / 2.0,
             center_y: 20.0 + index + (86.0 + index) / 2.0,
             width: 59.0 + index,
             height: 86.0 + index,
         };
         assert_eq!(
-            if *anchor == Anchor::HandBase {
+            if *anchor == LayoutAnchorId::HandBase {
                 geometry.hand_base
             } else {
                 geometry.anchors[anchor]
@@ -205,7 +207,7 @@ fn retries_an_anchor_that_is_initially_zero_sized() {
 
     let (_, anchors) = fixture();
     anchors.insert(
-        Anchor::Zone(CardLocation::MonsterZone, 0),
+        LayoutAnchorId::Zone(CardLocation::MonsterZone, 0),
         Rc::new(()),
         Rc::new(MountedData::new(DelayedElement(Cell::new(0)))),
     );
@@ -214,11 +216,12 @@ fn retries_an_anchor_that_is_initially_zero_sized() {
 
 #[test]
 fn persistent_missing_anchors_are_reported() {
-    let error =
-        match futures::executor::block_on(measure_field_when_ready(&LayoutAnchors::default())) {
-            Ok(_) => panic!("missing anchors should fail"),
-            Err(error) => error,
-        };
+    let error = match futures::executor::block_on(measure_field_when_ready(
+        &LayoutAnchorRegistry::default(),
+    )) {
+        Ok(_) => panic!("missing anchors should fail"),
+        Err(error) => error,
+    };
     assert!(error.is::<AnchorNotReady>());
 }
 
@@ -321,24 +324,24 @@ fn artwork_failures_after_preloading_do_not_stop_a_ready_layout() {
 }
 
 #[test]
-fn layered_field_reports_errors_without_owning_duel_lifecycle() {
-    use crate::state::UIState;
-    use crate::ui::playback::{Playback, use_playback};
-    use crate::ui::view_state::ViewState;
+fn duel_board_reports_errors_without_owning_duel_lifecycle() {
+    use crate::state::DuelState;
+    use crate::ui::playback::{DuelPlayback, use_playback};
+    use crate::ui::view_state::DuelViewState;
     use std::cell::RefCell;
 
     thread_local! {
         static REPORTED: RefCell<Vec<LayoutStatus>> = const { RefCell::new(Vec::new()) };
-        static CONTEXT: RefCell<Option<(UIState, Playback)>> = const { RefCell::new(None) };
+        static CONTEXT: RefCell<Option<(DuelState, DuelPlayback)>> = const { RefCell::new(None) };
     }
 
     fn app() -> Element {
-        let mut state = use_context_provider(UIState::default);
-        let view = use_context_provider(ViewState::default);
+        let mut state = use_context_provider(DuelState::default);
+        let view = use_context_provider(DuelViewState::default);
         let mut playback = use_playback();
         let controller = use_signal(|| None::<crate::duel::controller::DuelController>);
         super::super::use_duel_contexts(state, view, playback, controller.into());
-        use_context_provider(LayoutAnchors::default);
+        use_context_provider(LayoutAnchorRegistry::default);
         use_context_provider(|| LayoutRevision(Signal::new(0)));
         use_hook(move || {
             state.failure.set(Some("existing failure".into()));
@@ -350,9 +353,9 @@ fn layered_field_reports_errors_without_owning_duel_lifecycle() {
         });
         CONTEXT.with(|slot| *slot.borrow_mut() = Some((state, playback)));
         let tracking = use_signal(|| Some(CardTracker::default()));
-        let selected = use_signal(|| None::<CardId>);
+        let selected = use_signal(|| None::<CardInstanceId>);
         rsx! {
-            LayeredField {
+            DuelBoard {
                 tracking,
                 selected,
                 animation: playback.animation,
@@ -490,11 +493,11 @@ fn preloaded_deck_images_remain_mounted_after_startup() {
 #[test]
 fn missing_anchors_are_errors() {
     let (mut input, _) = fixture();
-    assert!(futures::executor::block_on(measure_field(&LayoutAnchors::default())).is_err());
+    assert!(futures::executor::block_on(measure_field(&LayoutAnchorRegistry::default())).is_err());
     let (_, anchors) = fixture();
     let geometry = futures::executor::block_on(measure_field(&anchors)).unwrap();
     let address = CardAddress {
-        controller: Player::Player,
+        controller: Player::Local,
         location: CardLocation::SpellTrapZone,
         sequence: 5,
     };

@@ -1,5 +1,5 @@
 use super::*;
-use crate::duel::cards::{Card, CardAddress, CardId, CardPlacement, CardTracker};
+use crate::duel::cards::{CardAddress, CardInstanceId, CardPlacement, CardTracker, TrackedCard};
 use crate::ocgcore::CardType;
 use crate::ocgcore::Response;
 use crate::ocgcore::constants::{BattlePosition, CardLocation, Phase, Player, WinReason, Winner};
@@ -10,11 +10,11 @@ use ocgcore_ffi::enums::OCG_DuelStatus;
 use ocgcore_ffi::types::{OCG_CardData, OCG_NewCardInfo};
 
 trait Materials {
-    fn material_at(&self, host: CardId, sequence: u32) -> Option<&Card>;
+    fn material_at(&self, host: CardInstanceId, sequence: u32) -> Option<&TrackedCard>;
 }
 
 impl Materials for CardTracker {
-    fn material_at(&self, host: CardId, sequence: u32) -> Option<&Card> {
+    fn material_at(&self, host: CardInstanceId, sequence: u32) -> Option<&TrackedCard> {
         self.cards()
             .iter()
             .find(|card| card.placement == CardPlacement::Overlay { host, sequence })
@@ -98,9 +98,9 @@ fn tracks_native_deck_reversal_top_confirmations_and_draw() {
     let duel = core.create_duel(0).unwrap();
     let mut layer = CardTracker::default();
     for (player, location, count, base) in [
-        (Player::Player, CardLocation::Deck, 12, 100),
+        (Player::Local, CardLocation::Deck, 12, 100),
         (Player::Opponent, CardLocation::Deck, 12, 200),
-        (Player::Player, CardLocation::ExtraDeck, 3, 300),
+        (Player::Local, CardLocation::ExtraDeck, 3, 300),
     ] {
         for sequence in 0..count {
             let code = base + sequence;
@@ -182,7 +182,7 @@ fn tracks_native_deck_reversal_top_confirmations_and_draw() {
             assert!(top_offset);
             assert_eq!(confirmations, [true, true]);
             assert!(draw_after_reverse);
-            for player in [Player::Player, Player::Opponent] {
+            for player in [Player::Local, Player::Opponent] {
                 let query = ocgcore_ffi::types::OCG_QueryInfo {
                     flags: u32::MAX,
                     con: player as u8,
@@ -198,7 +198,7 @@ fn tracks_native_deck_reversal_top_confirmations_and_draw() {
                 let bytes =
                     unsafe { std::slice::from_raw_parts(ptr.cast::<u8>(), length as usize) };
                 let cards =
-                    crate::ocgcore::query::decode_location(bytes, player, CardLocation::Deck)
+                    crate::ocgcore::query::decode_card_queries(bytes, player, CardLocation::Deck)
                         .unwrap();
                 assert_eq!(
                         layer.cards().iter().filter(|card| matches!(
@@ -247,14 +247,14 @@ fn tracks_native_graveyard_deck_exchange_and_shuffle() {
     let duel = core.create_duel(0).unwrap();
     let mut layer = CardTracker::default();
     for (player, location, codes) in [
-        (Player::Player, CardLocation::Deck, vec![1; 12]),
+        (Player::Local, CardLocation::Deck, vec![1; 12]),
         (Player::Opponent, CardLocation::Deck, vec![2; 12]),
         (
-            Player::Player,
+            Player::Local,
             CardLocation::Graveyard,
             vec![10, 300, 10, 301, 11],
         ),
-        (Player::Player, CardLocation::ExtraDeck, vec![302]),
+        (Player::Local, CardLocation::ExtraDeck, vec![302]),
     ] {
         for (sequence, code) in codes.into_iter().enumerate() {
             let card = OCG_NewCardInfo {
@@ -306,7 +306,7 @@ fn tracks_native_graveyard_deck_exchange_and_shuffle() {
                     assert_eq!(data.extra_cards, [0b0000_1010]);
                     layer.apply(&message).unwrap();
                     let at = |location, sequence| CardAddress {
-                        controller: Player::Player,
+                        controller: Player::Local,
                         location,
                         sequence,
                     };
@@ -327,12 +327,12 @@ fn tracks_native_graveyard_deck_exchange_and_shuffle() {
                         .collect();
                     exchanged = true;
                 }
-                CoreMessage::ShuffleDeck(data) if exchanged && data.player == Player::Player => {
+                CoreMessage::ShuffleDeck(data) if exchanged && data.player == Player::Local => {
                     layer.apply(&message).unwrap();
                     for sequence in 0..3 {
                         let card = layer
                             .card_at(CardAddress {
-                                controller: Player::Player,
+                                controller: Player::Local,
                                 location: CardLocation::Deck,
                                 sequence,
                             })
@@ -354,10 +354,10 @@ fn tracks_native_graveyard_deck_exchange_and_shuffle() {
                 CardLocation::Graveyard,
                 CardLocation::ExtraDeck,
             ] {
-                let core_cards = duel.query_cards(Player::Player, location).unwrap();
+                let core_cards = duel.query_cards(Player::Local, location).unwrap();
                 let tracked: Vec<_> = layer.cards().iter().filter(|card| matches!(
                     card.placement,
-                    CardPlacement::Zone(address) if address.controller == Player::Player && address.location == location
+                    CardPlacement::Zone(address) if address.controller == Player::Local && address.location == location
                 )).collect();
                 assert_eq!(tracked.len(), core_cards.len());
                 if location != CardLocation::Deck {
@@ -365,7 +365,7 @@ fn tracks_native_graveyard_deck_exchange_and_shuffle() {
                         assert_eq!(
                             layer
                                 .card_at(CardAddress {
-                                    controller: Player::Player,
+                                    controller: Player::Local,
                                     location,
                                     sequence: sequence as u32
                                 })
@@ -440,7 +440,7 @@ fn native_exchange_single_survivor_retains_its_old_sequence() {
         layer
             .insert(
                 CardAddress {
-                    controller: Player::Player,
+                    controller: Player::Local,
                     location: CardLocation::Graveyard,
                     sequence: sequence as u32,
                 },
@@ -487,25 +487,25 @@ fn queries_native_core_cards_and_empty_zones() {
     let duel = core.create_duel(5).unwrap();
     for (code, sequence) in [(101, 1), (102, 4)] {
         duel.add_card(
-            Player::Player,
+            Player::Local,
             code,
-            Player::Player,
+            Player::Local,
             CardLocation::MonsterZone,
             sequence,
             POS_FACEUP_ATTACK,
         );
     }
     duel.add_card(
-        Player::Player,
+        Player::Local,
         103,
-        Player::Player,
+        Player::Local,
         CardLocation::Hand,
         0,
         POS_FACEUP_ATTACK,
     );
 
     let monsters = duel
-        .query_cards(Player::Player, CardLocation::MonsterZone)
+        .query_cards(Player::Local, CardLocation::MonsterZone)
         .unwrap();
     assert_eq!(monsters.len(), 7);
     for index in [0, 2, 3, 5, 6] {
@@ -514,7 +514,7 @@ fn queries_native_core_cards_and_empty_zones() {
     for (index, code) in [(1, 101), (4, 102)] {
         let card = monsters[index].unwrap();
         assert_eq!(card.card_code, code);
-        assert_eq!(card.controller, Player::Player);
+        assert_eq!(card.controller, Player::Local);
         assert_eq!(card.location, CardLocation::MonsterZone);
         assert_eq!(card.sequence, index as u8);
         assert_eq!(card.position, Some(BattlePosition::FaceUpAttack));
@@ -524,13 +524,11 @@ fn queries_native_core_cards_and_empty_zones() {
         assert_eq!(card.defense, Some(1000));
     }
     assert_eq!(
-        duel.query_cards(Player::Player, CardLocation::Graveyard)
+        duel.query_cards(Player::Local, CardLocation::Graveyard)
             .unwrap(),
         vec![]
     );
-    let hand = duel
-        .query_cards(Player::Player, CardLocation::Hand)
-        .unwrap();
+    let hand = duel.query_cards(Player::Local, CardLocation::Hand).unwrap();
     assert_eq!(hand.len(), 1);
     assert_eq!(hand[0].unwrap().sequence, 0);
     assert_eq!(hand[0].unwrap().card_code, 103);
@@ -539,7 +537,7 @@ fn queries_native_core_cards_and_empty_zones() {
 #[test]
 fn sandbox_continues_after_either_player_decks_out() {
     for (player_cards, opponent_cards, winner) in [
-        (5, 0, Winner::Player(Player::Player)),
+        (5, 0, Winner::Player(Player::Local)),
         (0, 5, Winner::Player(Player::Opponent)),
     ] {
         let messages = startup_messages(player_cards, opponent_cards);
@@ -573,7 +571,7 @@ fn startup_messages_include_phase_changes_before_idle() {
         .collect();
     assert_eq!(phases, [Phase::Draw, Phase::Standby, Phase::Main1]);
     assert!(messages.contains(&CoreMessage::Hint(HintMessageData {
-        player: Player::Player,
+        player: Player::Local,
         hint: Hint::Event(27),
     })));
     assert!(matches!(messages.last(), Some(CoreMessage::Idle(_))));
@@ -612,7 +610,7 @@ fn normal_summon_emits_move_summoning_and_summoned() {
         .map(|sequence| {
             layer
                 .card_at(CardAddress {
-                    controller: Player::Player,
+                    controller: Player::Local,
                     location: CardLocation::Deck,
                     sequence,
                 })
@@ -633,7 +631,7 @@ fn normal_summon_emits_move_summoning_and_summoned() {
                     Some(
                         layer
                             .card_at(CardAddress {
-                                controller: Player::Player,
+                                controller: Player::Local,
                                 location: CardLocation::Hand,
                                 sequence: data.previous.sequence,
                             })
@@ -648,7 +646,7 @@ fn normal_summon_emits_move_summoning_and_summoned() {
                     assert_eq!(
                         layer
                             .card_at(CardAddress {
-                                controller: Player::Player,
+                                controller: Player::Local,
                                 location: CardLocation::MonsterZone,
                                 sequence: data.current.sequence,
                             })
@@ -664,14 +662,14 @@ fn normal_summon_emits_move_summoning_and_summoned() {
                 CoreMessage::Idle(data) if summoned_code.is_none() => {
                     for location in [CardLocation::Deck, CardLocation::Hand] {
                         for (sequence, core_card) in duel
-                            .query_cards(Player::Player, location)
+                            .query_cards(Player::Local, location)
                             .unwrap()
                             .iter()
                             .enumerate()
                         {
                             let tracked = layer
                                 .card_at(CardAddress {
-                                    controller: Player::Player,
+                                    controller: Player::Local,
                                     location,
                                     sequence: sequence as u32,
                                 })
@@ -686,12 +684,12 @@ fn normal_summon_emits_move_summoning_and_summoned() {
                                 .cards()
                                 .iter()
                                 .filter(|card| matches!(card.placement, CardPlacement::Zone(address)
-                                    if address.controller == Player::Player && address.location == location))
+                                    if address.controller == Player::Local && address.location == location))
                                 .count(),
                             unsafe {
                                 ocgcore_ffi::OCG_DuelQueryCount(
                                     duel.handle(),
-                                    Player::Player as u8,
+                                    Player::Local as u8,
                                     location as u32,
                                 )
                             } as usize
@@ -737,20 +735,20 @@ fn normal_summon_emits_move_summoning_and_summoned() {
             assert_eq!(summoning, moved);
             let tracked = layer
                 .card_at(CardAddress {
-                    controller: Player::Player,
+                    controller: Player::Local,
                     location: CardLocation::MonsterZone,
                     sequence: moved.sequence,
                 })
                 .unwrap();
             let queried = duel
-                .query_cards(Player::Player, CardLocation::MonsterZone)
+                .query_cards(Player::Local, CardLocation::MonsterZone)
                 .unwrap();
             assert_eq!(
                 tracked.code,
                 queried[moved.sequence as usize].unwrap().card_code
             );
             for (sequence, core_card) in duel
-                .query_cards(Player::Player, CardLocation::Hand)
+                .query_cards(Player::Local, CardLocation::Hand)
                 .unwrap()
                 .iter()
                 .enumerate()
@@ -758,7 +756,7 @@ fn normal_summon_emits_move_summoning_and_summoned() {
                 assert_eq!(
                     layer
                         .card_at(CardAddress {
-                            controller: Player::Player,
+                            controller: Player::Local,
                             location: CardLocation::Hand,
                             sequence: sequence as u32,
                         })
@@ -779,7 +777,7 @@ fn tracks_native_overlay_moves_and_host_removal() {
     let core = test_core();
     let duel = core.create_duel(5).unwrap();
     let mut layer = CardTracker::default();
-    for (team, player) in [(0, Player::Player), (1, Player::Opponent)] {
+    for (team, player) in [(0, Player::Local), (1, Player::Opponent)] {
         for code in 1..=10 {
             let card = OCG_NewCardInfo {
                 team,
@@ -804,15 +802,15 @@ fn tracks_native_overlay_moves_and_host_removal() {
         }
     }
     let field = |sequence| CardAddress {
-        controller: Player::Player,
+        controller: Player::Local,
         location: CardLocation::MonsterZone,
         sequence,
     };
     for (code, sequence) in [(100, 0), (101, 1), (102, 2)] {
         duel.add_card(
-            Player::Player,
+            Player::Local,
             code,
-            Player::Player,
+            Player::Local,
             CardLocation::MonsterZone,
             sequence,
             POS_FACEUP_ATTACK,
@@ -870,7 +868,7 @@ fn tracks_native_overlay_moves_and_host_removal() {
                         assert_eq!(
                             layer
                                 .card_at(CardAddress {
-                                    controller: Player::Player,
+                                    controller: Player::Local,
                                     location: CardLocation::Graveyard,
                                     sequence: data.current.sequence,
                                 })
@@ -888,7 +886,7 @@ fn tracks_native_overlay_moves_and_host_removal() {
                         assert_eq!(layer.material_at(host, 1).unwrap().id, second);
                         let query = ocgcore_ffi::types::OCG_QueryInfo {
                             flags: ocgcore_ffi::constants::QUERY_OVERLAY_CARD,
-                            con: Player::Player as u8,
+                            con: Player::Local as u8,
                             loc: CardLocation::MonsterZone as u32,
                             seq: 3,
                             overlay_seq: 0,
@@ -931,13 +929,13 @@ fn tracks_native_overlay_moves_and_host_removal() {
             assert_eq!(detached, 2);
             assert!(host_moved);
             let grave = duel
-                .query_cards(Player::Player, CardLocation::Graveyard)
+                .query_cards(Player::Local, CardLocation::Graveyard)
                 .unwrap();
             for (sequence, core_card) in grave.iter().enumerate() {
                 assert_eq!(
                     layer
                         .card_at(CardAddress {
-                            controller: Player::Player,
+                            controller: Player::Local,
                             location: CardLocation::Graveyard,
                             sequence: sequence as u32,
                         })
@@ -960,12 +958,12 @@ fn tracks_native_set_card_shuffle_with_materials() {
     let core = test_core();
     let duel = core.create_duel(0).unwrap();
     let field = |sequence| CardAddress {
-        controller: Player::Player,
+        controller: Player::Local,
         location: CardLocation::MonsterZone,
         sequence,
     };
     let unaffected = CardAddress {
-        controller: Player::Player,
+        controller: Player::Local,
         location: CardLocation::SpellTrapZone,
         sequence: 0,
     };
@@ -973,9 +971,9 @@ fn tracks_native_set_card_shuffle_with_materials() {
     let mut ids = Vec::new();
     for (code, sequence) in [(100, 0), (101, 1), (102, 2), (103, 3), (104, 4), (105, 5)] {
         duel.add_card(
-            Player::Player,
+            Player::Local,
             code,
-            Player::Player,
+            Player::Local,
             CardLocation::MonsterZone,
             sequence,
             if sequence < 4 {
@@ -987,9 +985,9 @@ fn tracks_native_set_card_shuffle_with_materials() {
         ids.push(layer.insert(field(sequence), code).unwrap());
     }
     duel.add_card(
-        Player::Player,
+        Player::Local,
         106,
-        Player::Player,
+        Player::Local,
         CardLocation::SpellTrapZone,
         0,
         POS_FACEUP_ATTACK,
@@ -1036,7 +1034,7 @@ fn tracks_native_set_card_shuffle_with_materials() {
                     assert_eq!(data.previous.len(), 4);
                     assert_eq!(data.current.iter().flatten().count(), 2);
                     let queried = duel
-                        .query_cards(Player::Player, CardLocation::MonsterZone)
+                        .query_cards(Player::Local, CardLocation::MonsterZone)
                         .unwrap();
                     for (previous, current) in data.previous.iter().zip(&data.current) {
                         let source_id = ids[previous.sequence as usize];
@@ -1063,7 +1061,7 @@ fn tracks_native_set_card_shuffle_with_materials() {
                 }
                 CoreMessage::Move(data) if data.card_code == 104 && shuffled => {
                     let grave = CardAddress {
-                        controller: Player::Player,
+                        controller: Player::Local,
                         location: CardLocation::Graveyard,
                         sequence: data.current.sequence,
                     };
@@ -1103,16 +1101,16 @@ fn tracks_native_group_spell_sets_with_hidden_destinations() {
     .unwrap();
     let duel = core.create_duel(0).unwrap();
     let address = |location, sequence| CardAddress {
-        controller: Player::Player,
+        controller: Player::Local,
         location,
         sequence,
     };
     let mut layer = CardTracker::default();
     for (sequence, code) in [201, 202, 203].into_iter().enumerate() {
         duel.add_card(
-            Player::Player,
+            Player::Local,
             code,
-            Player::Player,
+            Player::Local,
             CardLocation::Hand,
             sequence as u32,
             ocgcore_ffi::constants::POS_FACEDOWN,
@@ -1122,9 +1120,9 @@ fn tracks_native_group_spell_sets_with_hidden_destinations() {
             .unwrap();
     }
     duel.add_card(
-        Player::Player,
+        Player::Local,
         100,
-        Player::Player,
+        Player::Local,
         CardLocation::MonsterZone,
         0,
         POS_FACEUP_ATTACK,
@@ -1190,7 +1188,7 @@ fn tracks_native_group_spell_sets_with_hidden_destinations() {
                         .collect();
                     layer.apply(&message).unwrap();
                     let queried = duel
-                        .query_cards(Player::Player, CardLocation::SpellTrapZone)
+                        .query_cards(Player::Local, CardLocation::SpellTrapZone)
                         .unwrap();
                     for info in &data.previous {
                         let card = layer
@@ -1241,7 +1239,7 @@ fn tracks_native_hidden_shuffles_and_subsequent_draw() {
     .unwrap();
     let duel = core.create_duel(0).unwrap();
     let address = |location, sequence| CardAddress {
-        controller: Player::Player,
+        controller: Player::Local,
         location,
         sequence,
     };
@@ -1259,9 +1257,9 @@ fn tracks_native_hidden_shuffles_and_subsequent_draw() {
                 ocgcore_ffi::constants::POS_FACEDOWN
             };
             duel.add_card(
-                Player::Player,
+                Player::Local,
                 code,
-                Player::Player,
+                Player::Local,
                 location,
                 sequence as u32,
                 position,
@@ -1303,13 +1301,13 @@ fn tracks_native_hidden_shuffles_and_subsequent_draw() {
         let status = duel.process();
         for message in duel.parse_messages() {
             let shuffled_location = match &message {
-                CoreMessage::ShuffleHand(data) if data.player == Player::Player => {
+                CoreMessage::ShuffleHand(data) if data.player == Player::Local => {
                     Some(CardLocation::Hand)
                 }
-                CoreMessage::ShuffleDeck(data) if data.player == Player::Player => {
+                CoreMessage::ShuffleDeck(data) if data.player == Player::Local => {
                     Some(CardLocation::Deck)
                 }
-                CoreMessage::ShuffleExtra(data) if data.player == Player::Player => {
+                CoreMessage::ShuffleExtra(data) if data.player == Player::Local => {
                     Some(CardLocation::ExtraDeck)
                 }
                 _ => None,
@@ -1320,12 +1318,12 @@ fn tracks_native_hidden_shuffles_and_subsequent_draw() {
                     .iter()
                     .filter(|card| {
                         matches!(card.placement, CardPlacement::Zone(a)
-                        if a.controller == Player::Player && a.location == location)
+                        if a.controller == Player::Local && a.location == location)
                     })
                     .map(|card| card.id)
                     .collect();
                 layer.apply(&message).unwrap();
-                let core_cards = duel.query_cards(Player::Player, location).unwrap();
+                let core_cards = duel.query_cards(Player::Local, location).unwrap();
                 assert_eq!(core_cards.len(), old_ids.len());
                 for (sequence, core_card) in core_cards.iter().enumerate() {
                     let tracked = layer.card_at(address(location, sequence as u32)).unwrap();
@@ -1374,7 +1372,7 @@ fn tracks_native_bulk_removal_and_later_material_move() {
     let core = test_core();
     let duel = core.create_duel(0).unwrap();
     let address = |location, sequence| CardAddress {
-        controller: Player::Player,
+        controller: Player::Local,
         location,
         sequence,
     };
@@ -1382,9 +1380,9 @@ fn tracks_native_bulk_removal_and_later_material_move() {
     let mut grave_ids = Vec::new();
     for (code, sequence) in [(1, 0), (2, 1), (3, 2)] {
         duel.add_card(
-            Player::Player,
+            Player::Local,
             code,
-            Player::Player,
+            Player::Local,
             CardLocation::Graveyard,
             sequence,
             POS_FACEUP_ATTACK,
@@ -1398,9 +1396,9 @@ fn tracks_native_bulk_removal_and_later_material_move() {
     let mut field_ids = Vec::new();
     for (code, sequence) in [(100, 0), (101, 1)] {
         duel.add_card(
-            Player::Player,
+            Player::Local,
             code,
-            Player::Player,
+            Player::Local,
             CardLocation::MonsterZone,
             sequence,
             POS_FACEUP_ATTACK,
@@ -1483,7 +1481,7 @@ fn tracks_native_bulk_removal_and_later_material_move() {
             assert!(material_moved);
             assert!(layer.material_at(field_ids[0], 0).is_none());
             let core_cards = duel
-                .query_cards(Player::Player, CardLocation::Graveyard)
+                .query_cards(Player::Local, CardLocation::Graveyard)
                 .unwrap();
             assert_eq!(core_cards.len(), 2);
             for (sequence, core_card) in core_cards.iter().enumerate() {
@@ -1510,9 +1508,9 @@ fn rejects_native_full_removal_chunk() {
     for sequence in 0..255 {
         let code = sequence + 1;
         duel.add_card(
-            Player::Player,
+            Player::Local,
             code,
-            Player::Player,
+            Player::Local,
             CardLocation::Graveyard,
             sequence,
             POS_FACEUP_ATTACK,
@@ -1520,7 +1518,7 @@ fn rejects_native_full_removal_chunk() {
         layer
             .insert(
                 CardAddress {
-                    controller: Player::Player,
+                    controller: Player::Local,
                     location: CardLocation::Graveyard,
                     sequence,
                 },
@@ -1566,16 +1564,16 @@ fn rejects_native_direct_overlay_removal() {
     let core = test_core();
     let duel = core.create_duel(0).unwrap();
     let field = |sequence| CardAddress {
-        controller: Player::Player,
+        controller: Player::Local,
         location: CardLocation::MonsterZone,
         sequence,
     };
     let mut layer = CardTracker::default();
     for (code, sequence) in [(100, 0), (101, 1)] {
         duel.add_card(
-            Player::Player,
+            Player::Local,
             code,
-            Player::Player,
+            Player::Local,
             CardLocation::MonsterZone,
             sequence,
             POS_FACEUP_ATTACK,
@@ -1620,7 +1618,7 @@ fn rejects_native_direct_overlay_removal() {
                     assert_eq!(layer.material_at(host, 0).unwrap().id, material);
                     let query = ocgcore_ffi::types::OCG_QueryInfo {
                         flags: ocgcore_ffi::constants::QUERY_OVERLAY_CARD,
-                        con: Player::Player as u8,
+                        con: Player::Local as u8,
                         loc: CardLocation::MonsterZone as u32,
                         seq: 0,
                         overlay_seq: 0,
@@ -1671,15 +1669,15 @@ fn tracks_native_material_after_token_host_disappears() {
     let duel = core.create_duel(0).unwrap();
     let mut layer = CardTracker::default();
     let field = |sequence| CardAddress {
-        controller: Player::Player,
+        controller: Player::Local,
         location: CardLocation::MonsterZone,
         sequence,
     };
     for (code, sequence) in [(100, 0), (101, 1)] {
         duel.add_card(
-            Player::Player,
+            Player::Local,
             code,
-            Player::Player,
+            Player::Local,
             CardLocation::MonsterZone,
             sequence,
             POS_FACEUP_ATTACK,
@@ -1726,7 +1724,7 @@ fn tracks_native_material_after_token_host_disappears() {
                     assert_eq!(
                         layer
                             .card_at(CardAddress {
-                                controller: Player::Player,
+                                controller: Player::Local,
                                 location: CardLocation::Graveyard,
                                 sequence: data.current.sequence,
                             })
@@ -1741,7 +1739,7 @@ fn tracks_native_material_after_token_host_disappears() {
         if matches!(status, OCG_DuelStatus::OCG_DUEL_STATUS_AWAITING) {
             assert!(material_detached);
             assert_eq!(
-                duel.query_cards(Player::Player, CardLocation::Graveyard)
+                duel.query_cards(Player::Local, CardLocation::Graveyard)
                     .unwrap()[0]
                     .unwrap()
                     .card_code,
@@ -1760,7 +1758,7 @@ fn tracks_native_swap_with_overlay_materials() {
     let core = test_core();
     let duel = core.create_duel(0).unwrap();
     let field = |sequence| CardAddress {
-        controller: Player::Player,
+        controller: Player::Local,
         location: CardLocation::MonsterZone,
         sequence,
     };
@@ -1768,9 +1766,9 @@ fn tracks_native_swap_with_overlay_materials() {
     let mut ids = Vec::new();
     for (code, sequence) in [(100, 0), (101, 1), (102, 2), (103, 3)] {
         duel.add_card(
-            Player::Player,
+            Player::Local,
             code,
-            Player::Player,
+            Player::Local,
             CardLocation::MonsterZone,
             sequence,
             POS_FACEUP_ATTACK,
@@ -1807,7 +1805,7 @@ fn tracks_native_swap_with_overlay_materials() {
             if matches!(message, CoreMessage::Swap(_)) {
                 swaps += 1;
                 let queried = duel
-                    .query_cards(Player::Player, CardLocation::MonsterZone)
+                    .query_cards(Player::Local, CardLocation::MonsterZone)
                     .unwrap();
                 for (sequence, id, code, material) in
                     [(0, ids[1], 101, ids[3]), (1, ids[0], 100, ids[2])]
@@ -1895,13 +1893,13 @@ fn tracks_native_control_swap() {
                 CoreMessage::Swap(_) => {
                     layer.apply(&message).unwrap();
                     swaps += 1;
-                    assert_eq!(layer.card_at(field(Player::Player, 1)).unwrap().id, ids[1]);
+                    assert_eq!(layer.card_at(field(Player::Local, 1)).unwrap().id, ids[1]);
                     assert_eq!(
                         layer.card_at(field(Player::Opponent, 3)).unwrap().id,
                         ids[0]
                     );
                     assert_eq!(
-                        duel.query_cards(Player::Player, CardLocation::MonsterZone)
+                        duel.query_cards(Player::Local, CardLocation::MonsterZone)
                             .unwrap()[1]
                             .unwrap()
                             .card_code,
@@ -1921,7 +1919,7 @@ fn tracks_native_control_swap() {
                     assert!(!ptr.is_null());
                     let bytes =
                         unsafe { std::slice::from_raw_parts(ptr.cast::<u8>(), length as usize) };
-                    let cards = crate::ocgcore::query::decode_location(
+                    let cards = crate::ocgcore::query::decode_card_queries(
                         bytes,
                         Player::Opponent,
                         CardLocation::MonsterZone,
@@ -1947,14 +1945,14 @@ fn tracks_native_position_changes_and_reveals() {
     let core = test_core();
     let duel = core.create_duel(0).unwrap();
     let field = CardAddress {
-        controller: Player::Player,
+        controller: Player::Local,
         location: CardLocation::MonsterZone,
         sequence: 0,
     };
     duel.add_card(
-        Player::Player,
+        Player::Local,
         100,
-        Player::Player,
+        Player::Local,
         CardLocation::MonsterZone,
         0,
         POS_FACEUP_ATTACK,
@@ -1990,7 +1988,7 @@ fn tracks_native_position_changes_and_reveals() {
                 assert_eq!(tracked.id, id);
                 assert_eq!(tracked.position, Some(data.current_position));
                 let queried = duel
-                    .query_cards(Player::Player, CardLocation::MonsterZone)
+                    .query_cards(Player::Local, CardLocation::MonsterZone)
                     .unwrap()[0]
                     .unwrap();
                 assert_eq!(
@@ -2030,14 +2028,14 @@ fn tracks_native_flip_summon() {
     let core = test_core();
     let duel = core.create_duel(0).unwrap();
     let field = CardAddress {
-        controller: Player::Player,
+        controller: Player::Local,
         location: CardLocation::MonsterZone,
         sequence: 0,
     };
     duel.add_card(
-        Player::Player,
+        Player::Local,
         100,
-        Player::Player,
+        Player::Local,
         CardLocation::MonsterZone,
         0,
         ocgcore_ffi::constants::POS_FACEDOWN_DEFENSE,
@@ -2072,7 +2070,7 @@ fn tracks_native_flip_summon() {
                 CoreMessage::FlipSummoned => {
                     assert!(flipping);
                     assert_eq!(
-                        duel.query_cards(Player::Player, CardLocation::MonsterZone)
+                        duel.query_cards(Player::Local, CardLocation::MonsterZone)
                             .unwrap()[0]
                             .unwrap()
                             .position,
