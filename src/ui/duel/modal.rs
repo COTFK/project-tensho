@@ -185,6 +185,7 @@ pub fn CardSelector() -> Element {
         PickerModal {
             title: title.unwrap_or("Select cards".to_string()),
             trigger: selectables.as_ref().is_some_and(|message| !message.cards.is_empty()),
+            retain_on_close: true,
             if let Some(message) = selectables {
                 div {
                     class: "flex flex-row min-w-[40vw] w-full max-w-[77vw] h-max gap-0.5 px-2 pb-2",
@@ -254,6 +255,7 @@ pub fn SortCardSelector() -> Element {
         PickerModal {
             title: "Sort cards",
             trigger: !cards.is_empty(),
+            retain_on_close: true,
             if !cards.is_empty() {
                 div {
                     class: "flex flex-row min-w-[40vw] w-full max-w-[77vw] h-max gap-0.5 px-2",
@@ -376,3 +378,7 @@ pub fn NumberSelector() -> Element {
         }
     )
 }
+
+#[cfg(test)]
+#[path = "../../../tests/unit/ui/card_modals.rs"]
+mod tests;

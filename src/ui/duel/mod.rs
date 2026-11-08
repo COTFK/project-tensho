@@ -25,6 +25,7 @@ use crate::state::run_game_loop;
 use crate::ui::LoadingScreen;
 use crate::ui::card_animation::{CardAnimationState, use_animation_completion};
 use crate::ui::chain::{ChainPlayback, use_chain_playback};
+use crate::ui::components::ModalSuppression;
 use crate::ui::components::UIButton;
 use crate::ui::components::svg::FullscreenIcon;
 use crate::ui::components::svg::ResetIcon;
@@ -105,6 +106,11 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>, deck_codes: Ve
     let startup_ready = use_signal(|| false);
     let mut playback = use_context_provider(|| Signal::new(CardAnimationState::default()));
     let mut chain = use_context_provider(|| Signal::new(ChainPlayback::default()));
+    let modal_suppressed = use_memo(move || {
+        (!startup_ready() && (state.failure)().is_none())
+            || state.interaction_blocked(Some(playback))
+    });
+    use_context_provider(|| ModalSuppression(modal_suppressed));
 
     use_animation_completion(playback);
     use_chain_playback(chain);
@@ -153,8 +159,8 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>, deck_codes: Ve
                 },
                 FullscreenIcon {}
             }
-            div {
-                class: if loading || state.interaction_blocked(Some(playback)) { "hidden" },
+            InteractionGate {
+                active: modal_suppressed(),
                 ModalContainer {}
             }
             InteractionGate {

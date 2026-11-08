@@ -10,4 +10,5 @@ pub use card::Card;
 pub use card::CardActionMenu;
 pub(crate) use card::CardImage;
 pub use modals::MessageModal;
+pub(crate) use modals::ModalSuppression;
 pub use modals::PickerModal;

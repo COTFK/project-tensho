@@ -79,6 +79,7 @@ pub fn EffectPileModal(location: CardLocation) -> Element {
         PickerModal {
             title,
             trigger: open_pile() == Some(location),
+            retain_on_close: true,
             div {
                 class: "flex flex-row min-w-[40vw] w-full max-w-[77vw] h-max gap-0.5 px-2",
                 class: "overflow-x-auto scroll-smooth scrollbar-thin",

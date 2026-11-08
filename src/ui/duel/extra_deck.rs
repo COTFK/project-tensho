@@ -66,6 +66,7 @@ pub fn ExtraDeckModal() -> Element {
         PickerModal {
             title: "Extra Deck",
             trigger: open_pile() == Some(CardLocation::ExtraDeck),
+            retain_on_close: true,
             div {
                 class: "flex flex-row min-w-[40vw] w-full max-w-[77vw] h-max gap-0.5 px-2",
                 class: "overflow-x-auto scroll-smooth scrollbar-thin",
