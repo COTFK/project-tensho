@@ -61,6 +61,12 @@ pub fn DuelWrapper(
         {
             rsx!(DuelScreen {
                 duel_resource: duel_resource,
+                deck_codes: setup
+                    .cards
+                    .cards()
+                    .iter()
+                    .map(|card| card.code)
+                    .collect::<Vec<_>>(),
             })
         }
         Some(Ok(_)) => rsx!(LoadingScreen {}),
@@ -92,7 +98,7 @@ fn install_duel(
 }
 
 #[component]
-fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>) -> Element {
+fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>, deck_codes: Vec<u32>) -> Element {
     let mut state = use_context::<UIState>();
     use_context_provider(layout_anchors::LayoutAnchors::default);
     let revision = use_context_provider(|| layout_anchors::LayoutRevision(Signal::new(0)));
@@ -153,13 +159,13 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>) -> Element {
             }
             InteractionGate {
                 active: state.interaction_blocked(Some(playback)),
-                LayeredField { startup_ready }
+                LayeredField { startup_ready, deck_codes }
             }
             if let Some(error) = &(state.failure)() {
                 div {
                     class: "fixed top-3 left-1/2 z-50 max-w-lg -translate-x-1/2 rounded bg-red-950 p-3 text-sm text-white shadow-lg",
                     role: "alert",
-                    "Card playback stopped: {error}. Restart the duel to continue."
+                    "Duel stopped: {error}. Restart the duel to continue."
                 }
             }
             if let Some(phase) = (state.current_phase)() {

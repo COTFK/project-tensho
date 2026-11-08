@@ -174,6 +174,87 @@ fn startup_waits_for_mounted_current_geometry_and_settled_duel() {
 }
 
 #[test]
+fn deck_artwork_includes_unique_faces_thumbnails_and_backs() {
+    let urls = deck_artwork_urls(&[42, 42, 100]);
+    assert_eq!(
+        urls,
+        BTreeSet::from([
+            card_image_url(42),
+            card_thumbnail_url(42),
+            card_image_url(100),
+            card_thumbnail_url(100),
+            CardImage::CardBack.url(),
+            CardImage::ExtraDeckBack.url(),
+        ])
+    );
+}
+
+#[test]
+fn artwork_readiness_waits_for_every_image_and_reports_failures() {
+    let urls = deck_artwork_urls(&[42, 100]);
+    let mut artwork = HashMap::new();
+    for url in &urls {
+        assert!(!artwork_status(&urls, &artwork).1);
+        artwork.insert(url.clone(), ArtworkStatus::Loaded);
+    }
+    assert_eq!(artwork_status(&urls, &artwork), (None, true));
+
+    let failed = card_image_url(100);
+    artwork.insert(failed.clone(), ArtworkStatus::Failed);
+    assert_eq!(artwork_status(&urls, &artwork), (Some(failed), false));
+}
+
+#[test]
+fn preloaded_deck_images_remain_mounted_after_startup() {
+    use dioxus::core::{AttributeValue, Mutation};
+    use std::cell::RefCell;
+
+    thread_local! {
+        static URLS: RefCell<Option<Signal<BTreeSet<String>>>> = const { RefCell::new(None) };
+    }
+
+    fn app() -> Element {
+        let urls = use_signal(|| {
+            let mut urls = deck_artwork_urls(&[42]);
+            urls.insert(card_image_url(100));
+            urls
+        });
+        URLS.with(|slot| *slot.borrow_mut() = Some(urls));
+        let artwork = use_signal(HashMap::<String, ArtworkStatus>::new);
+        rsx! { ArtworkPreloader { urls: urls(), artwork } }
+    }
+
+    let mut dom = VirtualDom::new(app);
+    let initial = dom.rebuild_to_vec();
+    let retained = deck_artwork_urls(&[42]);
+    let image_ids: Vec<_> = initial
+        .edits
+        .iter()
+        .filter_map(|edit| match edit {
+            Mutation::SetAttribute {
+                name: "src",
+                value: AttributeValue::Text(url),
+                id,
+                ..
+            } if retained.contains(url) => Some(*id),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(image_ids.len(), retained.len(), "{:?}", initial.edits);
+
+    URLS.with(|slot| slot.borrow().unwrap().set(retained));
+    let after_startup = dom.render_immediate_to_vec();
+    assert!(
+        !after_startup.edits.iter().any(|edit| matches!(edit,
+            Mutation::Remove { id } | Mutation::ReplaceWith { id, .. } if image_ids.contains(id)
+        )),
+        "{:?}",
+        after_startup.edits
+    );
+    URLS.with(|slot| *slot.borrow_mut() = None);
+}
+
+#[test]
 fn invalid_or_missing_tracking_never_produces_a_snapshot() {
     let (mut input, anchors) = fixture();
     assert!(snapshot(None, input.selected).is_none());

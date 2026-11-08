@@ -13,6 +13,7 @@ use crate::state::UIState;
 use crate::ui::card_animation::{AnimationPhase, CardAnimationState, wait_millis};
 use crate::ui::card_layer::{Card, CardAddress, CardId, CardLayer, CardPlacement};
 use crate::ui::components::CardImage;
+use crate::utility::{card_image_url, card_thumbnail_url};
 
 #[derive(Clone, PartialEq)]
 struct PreviewSnapshot {
@@ -41,6 +42,29 @@ struct PreviewGeometry {
 enum ArtworkStatus {
     Loaded,
     Failed,
+}
+
+fn deck_artwork_urls(codes: &[u32]) -> BTreeSet<String> {
+    let mut urls = BTreeSet::from([CardImage::CardBack.url(), CardImage::ExtraDeckBack.url()]);
+    for &code in codes {
+        urls.insert(card_image_url(code));
+        urls.insert(card_thumbnail_url(code));
+    }
+    urls
+}
+
+fn artwork_status(
+    urls: &BTreeSet<String>,
+    artwork: &HashMap<String, ArtworkStatus>,
+) -> (Option<String>, bool) {
+    let failed = urls
+        .iter()
+        .find(|url| artwork.get(*url) == Some(&ArtworkStatus::Failed))
+        .cloned();
+    let ready = urls
+        .iter()
+        .all(|url| artwork.get(url) == Some(&ArtworkStatus::Loaded));
+    (failed, ready)
 }
 
 fn hand_position(
@@ -461,13 +485,13 @@ fn targets(
 }
 
 #[component]
-pub(super) fn LayeredField(mut startup_ready: Signal<bool>) -> Element {
+pub(super) fn LayeredField(mut startup_ready: Signal<bool>, deck_codes: Vec<u32>) -> Element {
     let mut state = use_context::<UIState>();
     let tracking = state.cards;
     let anchors = use_context::<LayoutAnchors>();
     let revision = use_context::<LayoutRevision>();
     let mut layered_mounted = use_signal(|| false);
-    let mut artwork = use_signal(HashMap::<String, ArtworkStatus>::new);
+    let artwork = use_signal(HashMap::<String, ArtworkStatus>::new);
     let playback = try_consume_context::<Signal<CardAnimationState>>();
     let resource = use_resource(move || {
         let layout_revision = revision;
@@ -516,7 +540,8 @@ pub(super) fn LayeredField(mut startup_ready: Signal<bool>) -> Element {
         None
     };
     let targets_ready = resolved.as_ref().is_some_and(Result::is_ok);
-    let required_artwork: BTreeSet<String> = current
+    let mut required_artwork = deck_artwork_urls(&deck_codes);
+    let field_artwork: BTreeSet<String> = current
         .as_ref()
         .zip(resolved.as_ref().and_then(|result| result.as_ref().ok()))
         .map(|(snapshot, targets)| {
@@ -534,14 +559,11 @@ pub(super) fn LayeredField(mut startup_ready: Signal<bool>) -> Element {
                 .collect()
         })
         .unwrap_or_default();
+    if !startup_ready() {
+        required_artwork.extend(field_artwork);
+    }
     let artwork_state = artwork();
-    let artwork_failure = required_artwork
-        .iter()
-        .find(|url| artwork_state.get(*url) == Some(&ArtworkStatus::Failed))
-        .cloned();
-    let artwork_ready = required_artwork
-        .iter()
-        .all(|url| artwork_state.get(url) == Some(&ArtworkStatus::Loaded));
+    let (artwork_failure, artwork_ready) = artwork_status(&required_artwork, &artwork_state);
     use_effect(move || {
         let current_revision = (revision.0)();
         let measured = resource.read();
@@ -633,24 +655,33 @@ pub(super) fn LayeredField(mut startup_ready: Signal<bool>) -> Element {
             }
         }
         PersistentCardLayer { cards, targets: visible_targets }
-        if !startup_ready() {
-            for url in required_artwork {
-                {
-                    let loaded_url = url.clone();
-                    let failed_url = url.clone();
-                    rsx! {
-                        img {
-                            key: "{url}",
-                            class: "hidden",
-                            alt: "",
-                            src: "{url}",
-                            onload: move |_| {
-                                artwork.write().insert(loaded_url.clone(), ArtworkStatus::Loaded);
-                            },
-                            onerror: move |_| {
-                                artwork.write().insert(failed_url.clone(), ArtworkStatus::Failed);
-                            },
-                        }
+        ArtworkPreloader { urls: required_artwork, artwork }
+    }
+}
+
+#[component]
+fn ArtworkPreloader(
+    urls: BTreeSet<String>,
+    mut artwork: Signal<HashMap<String, ArtworkStatus>>,
+) -> Element {
+    rsx! {
+        for url in urls {
+            {
+                let loaded_url = url.clone();
+                let failed_url = url.clone();
+                rsx! {
+                    img {
+                        key: "{url}",
+                        class: "hidden",
+                        alt: "",
+                        loading: "eager",
+                        src: "{url}",
+                        onload: move |_| {
+                            artwork.write().insert(loaded_url.clone(), ArtworkStatus::Loaded);
+                        },
+                        onerror: move |_| {
+                            artwork.write().insert(failed_url.clone(), ArtworkStatus::Failed);
+                        },
                     }
                 }
             }
