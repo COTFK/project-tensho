@@ -2,33 +2,14 @@ use dioxus::prelude::*;
 use std::collections::BTreeMap;
 
 use super::card_interaction::InteractiveCard;
+use super::card_layout::{CardAppearance, CardTarget};
 use super::card_stats::CardStats;
 use super::chain_badges::ChainBadges;
-use super::layout_anchors::CardAnchor;
-use crate::duel::cards::{Card as TrackedCard, CardAddress, CardId, CardPlacement};
+use crate::duel::cards::{Card as TrackedCard, CardId, CardPlacement};
 use crate::duel::controller::ChainLink;
-use crate::ocgcore::CardData;
 use crate::ocgcore::constants::{BattlePosition, CardLocation, Player};
 use crate::ocgcore::location_info::CardPositionFlags;
 use crate::ui::components::CardImage;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum CardAppearance {
-    Interactive,
-    Pile(CardImage),
-    Material,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(super) struct CardTarget {
-    pub id: CardId,
-    pub address: CardAddress,
-    pub anchor: CardAnchor,
-    pub data: CardData,
-    pub rotation: f64,
-    pub stack_order: i32,
-    pub appearance: CardAppearance,
-}
 
 fn visible_card(card: TrackedCard, target: Option<CardTarget>) -> Option<(CardTarget, bool)> {
     let target = target?;

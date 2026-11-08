@@ -2,13 +2,6 @@ use dioxus::prelude::*;
 
 use super::layout_anchors::{Anchor, LayoutAnchor};
 
-pub(super) fn hand_transform(index: usize, hand_size: usize) -> (i32, i32) {
-    let center = hand_size as i32 - 1;
-    let distance = index as i32 * 2 - center;
-    let translate_y = (distance.abs() * distance.abs() * 4) / 16;
-    (distance, translate_y)
-}
-
 #[component]
 pub fn Hand(hand_size: usize) -> Element {
     rsx!(

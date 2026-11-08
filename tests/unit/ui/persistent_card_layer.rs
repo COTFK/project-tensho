@@ -1,6 +1,8 @@
+use super::super::layout_anchors::CardAnchor;
 use super::*;
 use crate::duel::cards::{CardAddress, CardTracker};
 use crate::duel::input::{CardAction, PendingInput};
+use crate::ocgcore::CardData;
 use crate::ui::card_animation::CardAnimationState;
 use crate::ui::chain::ChainPlayback;
 use dioxus::core::{AttributeValue, ElementId, Mutation};

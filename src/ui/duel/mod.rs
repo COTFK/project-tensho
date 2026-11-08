@@ -1,4 +1,5 @@
 mod card_interaction;
+mod card_layout;
 mod card_stats;
 mod chain_badges;
 mod constants;
