@@ -1,8 +1,9 @@
 use super::*;
+use crate::duel::test_messages::{location, movement, overlay, overlay_move};
+use crate::ocgcore::constants::BattlePosition;
 use crate::ocgcore::location_info::CardPositionFlags;
 use crate::ocgcore::messages::confirm_cards::ConfirmedCard;
 use crate::ocgcore::messages::draw::DrawCard;
-use crate::ocgcore::messages::move_card::MoveReason;
 use crate::ocgcore::messages::{
     ConfirmCardsMessageData, DeckTopMessageData, PositionChangeMessageData, RemoveCardsMessageData,
     SetCardMessageData, ShuffleCardsMessageData, ShuffleDeckMessageData, ShuffleSetCardMessageData,
@@ -27,46 +28,6 @@ fn address(controller: Player, location: CardLocation, sequence: u32) -> CardAdd
         location,
         sequence,
     }
-}
-
-fn location(address: Option<CardAddress>) -> CardLocationInfo {
-    CardLocationInfo {
-        controller: Some(address.map_or(Player::Player, |address| address.controller)),
-        location: address.map_or(CardLocationKind::None, |address| {
-            CardLocationKind::Known(address.location)
-        }),
-        sequence: address.map_or(0, |address| address.sequence),
-        position: CardLocationPosition::Position(CardPositionFlags::FACE_UP_ATTACK),
-    }
-}
-
-fn movement(from: Option<CardAddress>, to: Option<CardAddress>, code: u32) -> CoreMessage {
-    CoreMessage::Move(MoveMessageData {
-        card_code: code,
-        previous: location(from),
-        current: location(to),
-        reason: MoveReason::EFFECT,
-    })
-}
-
-fn overlay(host: Option<CardAddress>, sequence: u32) -> CardLocationInfo {
-    CardLocationInfo {
-        controller: host.map(|address| address.controller),
-        location: CardLocationKind::Overlay {
-            host: host.map(|address| address.location),
-        },
-        sequence: host.map_or(0, |address| address.sequence),
-        position: CardLocationPosition::OverlaySequence(sequence),
-    }
-}
-
-fn overlay_move(previous: CardLocationInfo, current: CardLocationInfo, code: u32) -> CoreMessage {
-    CoreMessage::Move(MoveMessageData {
-        card_code: code,
-        previous,
-        current,
-        reason: MoveReason::XYZ | MoveReason::MATERIAL,
-    })
 }
 
 fn draw(player: Player, codes: &[u32]) -> CoreMessage {
@@ -127,6 +88,135 @@ fn confirmed(address: CardAddress, code: u32) -> ConfirmedCard {
         location: CardLocationKind::Known(address.location),
         sequence: address.sequence,
     }
+}
+
+#[test]
+fn queried_data_preserves_identity_placement_position_and_other_cards() {
+    for controller in [Player::Player, Player::Opponent] {
+        for location in [
+            CardLocation::Deck,
+            CardLocation::Hand,
+            CardLocation::MonsterZone,
+            CardLocation::SpellTrapZone,
+            CardLocation::Graveyard,
+            CardLocation::Banishment,
+            CardLocation::ExtraDeck,
+        ] {
+            for queried_code in [0, 99] {
+                let mut layer = CardTracker::default();
+                let at = address(controller, location, 0);
+                let id = layer.insert(at, 42).unwrap();
+                let other = layer.insert(address(controller, location, 1), 43).unwrap();
+                layer
+                    .apply(&position_change(
+                        at,
+                        42,
+                        CardPositionFlags::FACE_DOWN_DEFENSE,
+                        CardPositionFlags::FACE_UP_DEFENSE,
+                    ))
+                    .unwrap();
+                let before = layer.clone();
+                let data = CardData {
+                    card_code: queried_code,
+                    controller,
+                    location,
+                    position: Some(BattlePosition::FaceDownDefense),
+                    attack: Some(999),
+                    ..Default::default()
+                };
+                layer.update_queried_data(at, data).unwrap();
+                let expected = Card {
+                    code: if location == CardLocation::Graveyard && queried_code != 0 {
+                        queried_code
+                    } else {
+                        42
+                    },
+                    data: Some(data),
+                    ..*before.card_by_id(id).unwrap()
+                };
+                assert_eq!(layer.card_by_id(id), Some(&expected));
+                assert_eq!(layer.card_by_id(other), before.card_by_id(other));
+                assert_eq!(layer.cards().len(), before.cards().len());
+                assert_eq!(layer.next_id, before.next_id);
+            }
+        }
+    }
+}
+
+#[test]
+fn queried_data_for_an_untracked_address_fails_without_mutation() {
+    let mut layer = CardTracker::default();
+    layer
+        .insert(address(Player::Player, CardLocation::MonsterZone, 0), 42)
+        .unwrap();
+    let before = layer.clone();
+    for at in [
+        address(Player::Player, CardLocation::MonsterZone, 1),
+        address(Player::Opponent, CardLocation::MonsterZone, 0),
+        address(Player::Player, CardLocation::Hand, 0),
+    ] {
+        let error = layer
+            .update_queried_data(
+                at,
+                CardData {
+                    card_code: 99,
+                    controller: at.controller,
+                    location: at.location,
+                    sequence: at.sequence as u8,
+                    ..Default::default()
+                },
+            )
+            .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            format!("No tracked card for queried data at {at:?}")
+        );
+        assert_eq!(layer, before);
+    }
+}
+
+#[test]
+fn queried_host_data_does_not_modify_overlay_materials() {
+    let mut layer = CardTracker::default();
+    let host_address = address(Player::Player, CardLocation::MonsterZone, 0);
+    let material_address = address(Player::Player, CardLocation::Hand, 0);
+    let host = layer.insert(host_address, 10).unwrap();
+    let material = layer.insert(material_address, 20).unwrap();
+    layer
+        .update_queried_data(
+            material_address,
+            CardData {
+                card_code: 20,
+                location: CardLocation::Hand,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    layer
+        .apply(&overlay_move(
+            location(Some(material_address)),
+            overlay(Some(host_address), 0),
+            20,
+        ))
+        .unwrap();
+    let previous_material = *layer.card_by_id(material).unwrap();
+    let data = CardData {
+        card_code: 99,
+        location: CardLocation::MonsterZone,
+        attack: Some(1000),
+        ..Default::default()
+    };
+    layer.update_queried_data(host_address, data).unwrap();
+    assert_eq!(layer.card_by_id(host).unwrap().code, 10);
+    assert_eq!(layer.card_by_id(host).unwrap().data, Some(data));
+    assert_eq!(layer.card_by_id(material), Some(&previous_material));
+    assert_eq!(
+        previous_material.placement,
+        CardPlacement::Overlay { host, sequence: 0 }
+    );
+    let before = layer.clone();
+    assert!(layer.update_queried_data(material_address, data).is_err());
+    assert_eq!(layer, before);
 }
 
 #[test]

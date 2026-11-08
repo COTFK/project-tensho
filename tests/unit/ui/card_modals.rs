@@ -66,17 +66,22 @@ fn pile_rows_keep_card_order_and_chain_links_without_playback_state() {
             43,
         )
         .unwrap();
-    for card in tracking.cards_mut() {
+    for card in tracking.cards().to_vec() {
         let CardPlacement::Zone(address) = card.placement else {
             unreachable!()
         };
-        card.data = Some(CardData {
-            card_code: card.code,
-            controller: address.controller,
-            location: address.location,
-            sequence: address.sequence as u8,
-            ..Default::default()
-        });
+        tracking
+            .update_queried_data(
+                address,
+                CardData {
+                    card_code: card.code,
+                    controller: address.controller,
+                    location: address.location,
+                    sequence: address.sequence as u8,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
     }
     let links = [
         ChainLink {

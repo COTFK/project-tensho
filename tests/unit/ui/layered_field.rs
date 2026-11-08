@@ -1,7 +1,6 @@
 use super::super::card_layout::{CardAppearance, PreviewSnapshot};
 use super::super::layout_anchors::{Anchor, CardAnchor};
 use super::*;
-use crate::duel::cards::CardPlacement;
 use crate::ocgcore::CardData;
 use dioxus::html::geometry::{PixelsRect, PixelsSize, euclid::point2};
 use dioxus::html::{MountedResult, RenderedElementBacking};
@@ -14,12 +13,7 @@ use std::rc::Rc;
 struct TestElement(PixelsRect);
 
 fn set_data(cards: &mut CardTracker, address: CardAddress, data: CardData) {
-    cards
-        .cards_mut()
-        .iter_mut()
-        .find(|card| card.placement == CardPlacement::Zone(address))
-        .unwrap()
-        .data = Some(data);
+    cards.update_queried_data(address, data).unwrap();
 }
 
 impl RenderedElementBacking for TestElement {

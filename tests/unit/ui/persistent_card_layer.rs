@@ -2,6 +2,7 @@ use super::super::layout_anchors::CardAnchor;
 use super::*;
 use crate::duel::cards::{CardAddress, CardTracker};
 use crate::duel::input::{CardAction, PendingInput};
+use crate::duel::test_messages::{location, movement, overlay, overlay_move};
 use crate::ocgcore::CardData;
 use crate::ui::card_animation::CardAnimationState;
 use crate::ui::chain::ChainPlayback;
@@ -148,14 +149,12 @@ fn chain_indicators_follow_cards_and_collect_buried_pile_links() {
     assert!(!indicators.contains_key(&bottom));
 
     layer
-        .cards_mut()
-        .iter_mut()
-        .find(|card| card.id == bottom)
-        .unwrap()
-        .placement = CardPlacement::Zone(CardAddress {
-        sequence: 0,
-        ..address(CardLocation::Hand)
-    });
+        .apply(&movement(
+            Some(address(CardLocation::Graveyard)),
+            Some(address(CardLocation::Hand)),
+            11,
+        ))
+        .unwrap();
     let moved = chain_indicators(layer.cards(), &links);
     assert_eq!(moved.get(&bottom), Some(&vec![1, 3]));
     assert_eq!(moved.get(&top), Some(&vec![4]));
@@ -169,11 +168,12 @@ fn chain_indicators_for_overlay_materials_use_the_host() {
         .unwrap();
     let material = layer.insert(address(CardLocation::Graveyard), 11).unwrap();
     layer
-        .cards_mut()
-        .iter_mut()
-        .find(|card| card.id == material)
-        .unwrap()
-        .placement = CardPlacement::Overlay { host, sequence: 0 };
+        .apply(&overlay_move(
+            location(Some(address(CardLocation::Graveyard))),
+            overlay(Some(address(CardLocation::MonsterZone)), 0),
+            11,
+        ))
+        .unwrap();
     assert_eq!(
         chain_indicators(
             layer.cards(),

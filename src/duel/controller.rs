@@ -293,21 +293,24 @@ fn refresh_data(layer: &mut CardTracker, duel: &Duel) -> anyhow::Result<()> {
         let core_cards = duel
             .query_cards(player, location)
             .with_context(|| format!("Cannot query {player:?} {location}"))?;
-        for card in layer.cards_mut() {
-            let CardPlacement::Zone(address) = card.placement else {
-                continue;
-            };
-            if address.controller != player || address.location != location {
-                continue;
-            }
+        let addresses: Vec<_> = layer
+            .cards()
+            .iter()
+            .filter_map(|card| match card.placement {
+                CardPlacement::Zone(address)
+                    if address.controller == player && address.location == location =>
+                {
+                    Some(address)
+                }
+                _ => None,
+            })
+            .collect();
+        for address in addresses {
             let data = core_cards
                 .get(address.sequence as usize)
                 .and_then(|card| *card)
                 .with_context(|| format!("No queried card at {address:?}"))?;
-            if location == CardLocation::Graveyard && data.card_code != 0 {
-                card.code = data.card_code;
-            }
-            card.data = Some(data);
+            layer.update_queried_data(address, data)?;
         }
     }
     Ok(())

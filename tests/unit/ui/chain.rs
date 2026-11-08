@@ -1,6 +1,7 @@
 use super::*;
-use crate::duel::cards::{CardAddress, CardId, CardPlacement, CardTracker};
+use crate::duel::cards::{CardAddress, CardId, CardTracker};
 use crate::duel::controller::resolve_chain_event;
+use crate::duel::test_messages::{location, overlay, overlay_move};
 use crate::ocgcore::constants::{CardLocation, Player};
 use crate::ocgcore::location_info::{
     CardLocationInfo, CardLocationKind, CardLocationPosition, CardPositionFlags,
@@ -175,18 +176,19 @@ fn duel_failure_cancels_both_playbacks_and_invalidates_their_completions() {
 #[test]
 fn identifies_overlay_material_as_the_chain_source() {
     let mut cards = CardTracker::default();
-    let host = cards
+    cards
         .insert(address(CardLocation::MonsterZone, 0), 1)
         .unwrap();
     let material = cards
         .insert(address(CardLocation::Graveyard, 0), 2)
         .unwrap();
     cards
-        .cards_mut()
-        .iter_mut()
-        .find(|card| card.id == material)
-        .unwrap()
-        .placement = CardPlacement::Overlay { host, sequence: 0 };
+        .apply(&overlay_move(
+            location(Some(address(CardLocation::Graveyard, 0))),
+            overlay(Some(address(CardLocation::MonsterZone, 0)), 0),
+            2,
+        ))
+        .unwrap();
     let mut message = chaining(1, address(CardLocation::MonsterZone, 0));
     let CoreMessage::Chaining(data) = &mut message else {
         unreachable!()

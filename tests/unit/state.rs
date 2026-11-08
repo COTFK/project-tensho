@@ -1210,6 +1210,8 @@ fn reports_missing_data_for_tracked_cards() {
 #[test]
 #[cfg(not(target_arch = "wasm32"))]
 fn refreshes_only_tracked_cards_and_queries_stats_only_on_field() {
+    use crate::duel::test_messages::{location, overlay, overlay_move};
+
     let core = test_core();
     let duel = core.create_duel(0).unwrap();
     for location in [CardLocation::Deck, CardLocation::MonsterZone] {
@@ -1222,6 +1224,44 @@ fn refreshes_only_tracked_cards_and_queries_stats_only_on_field() {
         sequence: 0,
     };
     layer.insert(address, 99).unwrap();
+    let opponent_address = CardAddress {
+        controller: Player::Opponent,
+        ..address
+    };
+    duel.add_card(
+        Player::Opponent,
+        20,
+        Player::Opponent,
+        CardLocation::MonsterZone,
+        0,
+        0,
+    );
+    let opponent = layer.insert(opponent_address, 88).unwrap();
+    let previous_opponent = *layer.card_by_id(opponent).unwrap();
+    let material_address = CardAddress {
+        location: CardLocation::Hand,
+        ..address
+    };
+    duel.add_card(Player::Player, 30, Player::Player, CardLocation::Hand, 0, 0);
+    let material = layer.insert(material_address, 30).unwrap();
+    layer
+        .update_queried_data(
+            material_address,
+            CardData {
+                card_code: 30,
+                location: CardLocation::Hand,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    layer
+        .apply(&overlay_move(
+            location(Some(material_address)),
+            overlay(Some(address), 0),
+            30,
+        ))
+        .unwrap();
+    let previous_material = *layer.card_by_id(material).unwrap();
     DuelController::new(duel.clone())
         .refresh_data(&mut layer)
         .unwrap();
@@ -1229,6 +1269,18 @@ fn refreshes_only_tracked_cards_and_queries_stats_only_on_field() {
     assert_eq!(field.code, 99);
     assert_eq!(field.data.unwrap().card_code, 10);
     assert_eq!(field.data.unwrap().attack, Some(1000));
+    assert_eq!(layer.cards().len(), 3);
+    assert!(layer.card_at(material_address).is_none());
+    assert!(
+        layer
+            .card_at(CardAddress {
+                location: CardLocation::Deck,
+                ..address
+            })
+            .is_none()
+    );
+    assert_eq!(layer.card_by_id(opponent), Some(&previous_opponent));
+    assert_eq!(layer.card_by_id(material), Some(&previous_material));
     assert_eq!(
         duel.query_cards(Player::Player, CardLocation::Deck)
             .unwrap()[0]

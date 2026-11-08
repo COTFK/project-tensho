@@ -106,8 +106,21 @@ impl CardTracker {
         Ok(self.cards.iter().find(|card| card.placement == placement))
     }
 
-    pub fn cards_mut(&mut self) -> &mut [Card] {
-        &mut self.cards
+    pub fn update_queried_data(
+        &mut self,
+        address: CardAddress,
+        data: CardData,
+    ) -> anyhow::Result<()> {
+        let card = self
+            .cards
+            .iter_mut()
+            .find(|card| card.placement == CardPlacement::Zone(address))
+            .with_context(|| format!("No tracked card for queried data at {address:?}"))?;
+        if address.location == CardLocation::Graveyard {
+            Self::update_code(card, data.card_code);
+        }
+        card.data = Some(data);
+        Ok(())
     }
 
     pub fn zone_data(&self, location: CardLocation) -> Option<Vec<Option<CardData>>> {

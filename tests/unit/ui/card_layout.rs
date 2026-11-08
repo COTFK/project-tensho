@@ -1,12 +1,7 @@
 use super::*;
 
 fn set_data(cards: &mut CardTracker, address: CardAddress, data: CardData) {
-    cards
-        .cards_mut()
-        .iter_mut()
-        .find(|card| card.placement == CardPlacement::Zone(address))
-        .unwrap()
-        .data = Some(data);
+    cards.update_queried_data(address, data).unwrap();
 }
 
 fn refresh_data(snapshot: &mut PreviewSnapshot) {
