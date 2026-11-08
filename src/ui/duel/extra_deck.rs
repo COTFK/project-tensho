@@ -1,3 +1,4 @@
+use crate::duel::input::PendingInput;
 use dioxus::prelude::*;
 
 use super::chain_badges::ChainBadges;
@@ -21,7 +22,10 @@ use crate::ui::view_state::ViewState;
 pub fn ExtraDeck() -> Element {
     let state = use_context::<UIState>();
     let mut view = use_context::<ViewState>();
-    let available_special_summons = (state.special_summons)();
+    let available_special_summons = match (state.pending_input)() {
+        Some(PendingInput::Idle(actions)) => actions.special_summons,
+        _ => Vec::new(),
+    };
 
     let has_summons = available_special_summons
         .iter()
@@ -60,7 +64,10 @@ pub fn ExtraDeckModal() -> Element {
     let extra_deck = state.zone_data(CardLocation::ExtraDeck).unwrap_or_default();
     let tracking = (state.cards)();
     let chain = try_consume_context::<Signal<ChainPlayback>>().map(|chain| chain());
-    let available_special_summons = (state.special_summons)();
+    let available_special_summons = match (state.pending_input)() {
+        Some(PendingInput::Idle(actions)) => actions.special_summons,
+        _ => Vec::new(),
+    };
     let mut open_pile = view.open_pile;
 
     let mut selected_card = use_signal(|| None);

@@ -4,23 +4,16 @@ use rand::seq::SliceRandom;
 use std::future::pending;
 
 use crate::define_ui_state;
+use crate::duel::input::PendingInput;
 use crate::ocgcore::CardData;
 use crate::ocgcore::Duel;
 use crate::ocgcore::OCGCore;
 use crate::ocgcore::Response;
-use crate::ocgcore::Zone;
-use crate::ocgcore::constants::BattlePosition;
 use crate::ocgcore::constants::CardLocation;
 use crate::ocgcore::constants::Phase;
 use crate::ocgcore::constants::Player;
 use crate::ocgcore::log_core_message;
-use crate::ocgcore::messages::AnnounceNumberMessageData;
 use crate::ocgcore::messages::CoreMessage;
-use crate::ocgcore::messages::SelectCardMessageData;
-use crate::ocgcore::messages::SelectOptionMessageData;
-use crate::ocgcore::messages::SelectTributeMessageData;
-use crate::ocgcore::messages::SelectUnselectMessageData;
-use crate::ocgcore::messages::SortCardMessageData;
 use crate::settings::CustomHand;
 use crate::ui::card_animation::{CardAnimationState, plan_animation};
 use crate::ui::card_layer::{CardAddress, CardLayer, CardPlacement};
@@ -64,34 +57,17 @@ pub(crate) fn select_card(address: CardAddress) {
 define_ui_state!(UIState {
     cards: Option<CardLayer>,
     current_phase: Option<Phase>,
-    normal_summons: Vec<CardData>,
-    special_summons: Vec<CardData>,
-    monster_sets: Vec<CardData>,
-    spell_trap_sets: Vec<CardData>,
-    activatable_effects: Vec<CardData>,
-    waiting_on_input: bool,
+    pending_input: Option<PendingInput>,
     duel_finished: bool,
     restarting: bool,
     failure: Option<String>,
-    card_prompting_to_activate: Vec<CardData>,
-    selectables: Option<SelectCardMessageData>,
-    sort_cards_to_select_from: Option<SortCardMessageData>,
-    yes_no_question: Option<String>,
-    available_zones: Vec<Zone>,
-    positions_to_select: Vec<BattlePosition>,
-    cards_to_select_from: Option<SelectUnselectMessageData>,
-    tributes: Option<SelectTributeMessageData>,
-    selected_tributes: Vec<u8>,
-    options_to_prompt: Option<SelectOptionMessageData>,
-    numbers_to_select_from: Option<AnnounceNumberMessageData>,
 });
 
 pub fn run_game_loop() {
     let state = consume_context::<UIState>();
     let playback = try_consume_context::<Signal<CardAnimationState>>();
     let tracking = state.cards;
-    if state.interaction_blocked(playback) || (state.duel_finished)() || (state.waiting_on_input)()
-    {
+    if state.interaction_blocked(playback) || (state.duel_finished)() || state.waiting_on_input() {
         return;
     }
     let duel = consume_context::<Signal<Option<Duel>>>();
@@ -152,29 +128,17 @@ pub fn handle_right_click(evt: MouseEvent) {
         return;
     }
 
-    // Allow to decline chains & activations
-    if !(state.card_prompting_to_activate)().is_empty() {
-        if (state.card_prompting_to_activate)()
-            .iter()
-            .any(|card| card.action_index.is_some())
-        {
-            send_response(Response::PassPriority)
-        } else {
-            send_response(Response::No);
-        }
-    }
-
-    // Decline Yes/No questions
-    if (state.yes_no_question)().is_some() {
-        send_response(Response::No);
+    let response = state
+        .pending_input
+        .peek()
+        .as_ref()
+        .and_then(PendingInput::decline_response);
+    if let Some(response) = response {
+        send_response(response);
     }
 
     let mut view = consume_context::<ViewState>();
     view.open_pile.set(None);
-
-    if (state.tributes)().is_some_and(|message| message.is_cancelable) {
-        send_response(Response::PassPriority);
-    }
 }
 
 pub async fn cache_cards() -> anyhow::Result<Scripts> {
@@ -296,7 +260,7 @@ pub fn send_response(response: Response) {
         tracing::warn!("Ignoring response during card animation");
         return;
     }
-    if !*state.waiting_on_input.peek() {
+    if state.pending_input.peek().is_none() {
         tracing::warn!("Ignoring response without a pending prompt");
         return;
     }
@@ -309,6 +273,10 @@ pub fn send_response(response: Response) {
 }
 
 impl UIState {
+    pub(crate) fn waiting_on_input(&self) -> bool {
+        self.pending_input.read().is_some()
+    }
+
     pub(crate) fn interaction_blocked(&self, playback: Option<Signal<CardAnimationState>>) -> bool {
         (self.restarting)()
             || (self.failure)().is_some()
@@ -377,23 +345,7 @@ impl UIState {
     }
 
     pub fn clear_pending_input(&mut self) {
-        self.normal_summons.set(Vec::new());
-        self.special_summons.set(Vec::new());
-        self.monster_sets.set(Vec::new());
-        self.spell_trap_sets.set(Vec::new());
-        self.activatable_effects.set(Vec::new());
-        self.waiting_on_input.set(false);
-        self.card_prompting_to_activate.set(Vec::new());
-        self.selectables.set(None);
-        self.sort_cards_to_select_from.set(None);
-        self.yes_no_question.set(None);
-        self.available_zones.set(Vec::new());
-        self.positions_to_select.set(Vec::new());
-        self.cards_to_select_from.set(None);
-        self.tributes.set(None);
-        self.selected_tributes.set(Vec::new());
-        self.options_to_prompt.set(None);
-        self.numbers_to_select_from.set(None);
+        self.pending_input.set(None);
     }
 }
 
@@ -433,16 +385,12 @@ fn handle_core_messages(messages: &[CoreMessage]) -> bool {
                 state.current_phase.set(Some(message.phase));
             }
             CoreMessage::Idle(actions) => {
-                state.normal_summons.set(actions.normal_summons);
-                state.special_summons.set(actions.special_summons);
-                state.monster_sets.set(actions.monster_sets);
-                state.spell_trap_sets.set(actions.spell_trap_sets);
-                state.activatable_effects.set(actions.activatable_effects);
-                state.waiting_on_input.set(true);
+                state.pending_input.set(Some(PendingInput::Idle(actions)));
             }
             CoreMessage::SelectPlace(message) => {
-                state.available_zones.set(message.zones);
-                state.waiting_on_input.set(true);
+                state
+                    .pending_input
+                    .set(Some(PendingInput::Place(message.zones)));
             }
             CoreMessage::SelectChain(message) => {
                 if message.effects.is_empty() {
@@ -452,59 +400,62 @@ fn handle_core_messages(messages: &[CoreMessage]) -> bool {
                     continue;
                 }
 
-                state.card_prompting_to_activate.set(message.effects);
-                state.waiting_on_input.set(true);
+                state.pending_input.set(Some(PendingInput::Chain(message)));
             }
             CoreMessage::SelectEffectYN(message) => {
-                state.card_prompting_to_activate.with_mut(|v| {
-                    v.push(CardData {
+                state
+                    .pending_input
+                    .set(Some(PendingInput::EffectYesNo(CardData {
                         card_code: message.0.card_code,
                         controller: message.0.controller,
                         location: message.0.location,
                         sequence: message.0.sequence,
                         ..Default::default()
-                    })
-                });
-                state.waiting_on_input.set(true);
+                    })));
             }
             CoreMessage::SelectCard(received_selectables) => {
-                state.selectables.set(Some(received_selectables));
-                state.waiting_on_input.set(true);
+                state
+                    .pending_input
+                    .set(Some(PendingInput::Cards(received_selectables)));
             }
             CoreMessage::SelectYesNo(message) => {
                 let label = get_card_label(message.card_code).unwrap();
-                state.yes_no_question.set(Some(
+                state.pending_input.set(Some(PendingInput::YesNo(
                     label
                         .optional_strings
                         .get(&message.string_index)
                         .unwrap_or(&String::from("undefined label"))
                         .to_owned(),
-                ));
-                state.waiting_on_input.set(true);
+                )));
             }
             CoreMessage::SelectPosition(message) => {
-                state.positions_to_select.set(message.positions);
-                state.waiting_on_input.set(true);
+                state
+                    .pending_input
+                    .set(Some(PendingInput::Position(message.positions)));
             }
             CoreMessage::SelectUnselectCard(message) => {
-                state.cards_to_select_from.set(Some(message));
-                state.waiting_on_input.set(true);
+                state
+                    .pending_input
+                    .set(Some(PendingInput::Unselect(message)));
             }
             CoreMessage::SelectTribute(message) => {
-                state.tributes.set(Some(message));
-                state.waiting_on_input.set(true);
+                state.pending_input.set(Some(PendingInput::Tribute {
+                    message,
+                    selected: Vec::new(),
+                }));
             }
             CoreMessage::SelectOption(message) => {
-                state.options_to_prompt.set(Some(message));
-                state.waiting_on_input.set(true);
+                state
+                    .pending_input
+                    .set(Some(PendingInput::Options(message)));
             }
             CoreMessage::AnnounceNumber(message) => {
-                state.numbers_to_select_from.set(Some(message));
-                state.waiting_on_input.set(true);
+                state
+                    .pending_input
+                    .set(Some(PendingInput::Numbers(message)));
             }
             CoreMessage::SortCard(message) => {
-                state.sort_cards_to_select_from.set(Some(message));
-                state.waiting_on_input.set(true);
+                state.pending_input.set(Some(PendingInput::Sort(message)));
             }
             _ => {}
         }
@@ -532,7 +483,7 @@ fn handle_core_messages(messages: &[CoreMessage]) -> bool {
     {
         chain.write().start();
     }
-    (state.waiting_on_input)()
+    state.waiting_on_input()
 }
 
 fn refresh_data(layer: &mut CardLayer, duel: &Duel) -> anyhow::Result<()> {

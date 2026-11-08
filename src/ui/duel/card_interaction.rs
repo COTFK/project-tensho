@@ -1,114 +1,22 @@
 use dioxus::prelude::*;
 
+use crate::duel::input::{CardActions, PendingInput};
 use crate::ocgcore::CardData;
 use crate::ocgcore::Response;
 use crate::ocgcore::constants::{BattlePosition, CardLocation};
-use crate::ocgcore::messages::{SelectTributeMessageData, SelectUnselectMessageData};
 use crate::state::{UIState, select_card, send_response};
 use crate::ui::card_layer::CardAddress;
 use crate::ui::components::svg::{BoltShieldIcon, LightningTrioIcon, SummonIcon};
 use crate::ui::components::{ActionButton, Card, CardActionMenu, CardImage};
 use crate::ui::view_state::ViewState;
 
-struct PromptCards<'a> {
-    normal_summons: &'a [CardData],
-    monster_sets: &'a [CardData],
-    spell_trap_sets: &'a [CardData],
-    activatable_effects: &'a [CardData],
-    prompted_effects: &'a [CardData],
-    selections: Option<&'a SelectUnselectMessageData>,
-    tributes: Option<&'a SelectTributeMessageData>,
-    selected_tributes: &'a [u8],
-}
-
-#[derive(Debug, Default, PartialEq, Eq)]
-struct CardActions {
-    summon: Option<u8>,
-    monster_set: Option<u8>,
-    spell_trap_set: Option<u8>,
-    effects: Vec<CardData>,
-    prompted: Option<CardData>,
-    selection: Option<u32>,
-    selectable: bool,
-    selected: bool,
-    tribute: Option<u8>,
-    tribute_selectable: bool,
-    tribute_selected: bool,
-    tribute_max: usize,
-}
-
-impl PromptCards<'_> {
-    fn for_address(&self, address: CardAddress) -> CardActions {
-        let matches = |card: &&CardData| {
-            card.controller == address.controller
-                && card.location == address.location
-                && u32::from(card.sequence) == address.sequence
-        };
-        let last_index = |cards: &[CardData]| {
-            cards
-                .iter()
-                .filter(matches)
-                .last()
-                .and_then(|card| card.action_index)
-        };
-        let selectable = self.selections.and_then(|message| {
-            message.select_card_for(address.controller, address.location, address.sequence)
-        });
-        let tribute = self
-            .tributes
-            .and_then(|message| message.candidates.iter().find(matches).copied());
-        let tribute_index = tribute.and_then(|card| card.action_index);
-        CardActions {
-            summon: last_index(self.normal_summons),
-            monster_set: last_index(self.monster_sets),
-            spell_trap_set: last_index(self.spell_trap_sets),
-            effects: self
-                .activatable_effects
-                .iter()
-                .filter(matches)
-                .copied()
-                .collect(),
-            prompted: if address.location == CardLocation::Hand {
-                self.prompted_effects.iter().filter(matches).last().copied()
-            } else {
-                self.prompted_effects.iter().find(matches).copied()
-            },
-            selection: self
-                .selections
-                .and_then(|message| selectable.and_then(|card| message.response_index_for(&card))),
-            selectable: selectable.is_some(),
-            selected: selectable.is_some_and(|card| card.is_selected),
-            tribute: tribute_index,
-            tribute_selectable: tribute.is_some(),
-            tribute_selected: tribute_index
-                .is_some_and(|index| self.selected_tributes.contains(&index)),
-            tribute_max: self
-                .tributes
-                .map_or(0, |message| message.max_select as usize),
-        }
-    }
-}
-
 fn prompt_actions(state: &UIState, address: CardAddress) -> CardActions {
-    let normal_summons = (state.normal_summons)();
-    let monster_sets = (state.monster_sets)();
-    let spell_trap_sets = (state.spell_trap_sets)();
-    let activatable_effects = (state.activatable_effects)();
-    let prompted_effects = (state.card_prompting_to_activate)();
-    let selections = (state.cards_to_select_from)();
-    let tributes = (state.tributes)();
-    let selected_tributes = (state.selected_tributes)();
-    PromptCards {
-        normal_summons: &normal_summons,
-        monster_sets: &monster_sets,
-        spell_trap_sets: &spell_trap_sets,
-        activatable_effects: &activatable_effects,
-        prompted_effects: &prompted_effects,
-        selections: selections.as_ref(),
-        tributes: tributes.as_ref(),
-        selected_tributes: &selected_tributes,
-    }
-    .for_address(address)
+    state
+        .pending_input
+        .read()
+        .as_ref()
+        .map(|input| input.card_actions(address))
+        .unwrap_or_default()
 }
 
 fn current_menu_actions(
@@ -269,7 +177,11 @@ pub(super) fn InteractiveCard(
                     let actions = prompt_actions(&state, address);
                     if !hand {
                         if let Some(index) = actions.tribute {
-                            state.selected_tributes.with_mut(|selected| {
+                            state.pending_input.with_mut(|input| {
+                                let Some(PendingInput::Tribute { selected, .. }) = input else {
+                                    tracing::warn!("Tribute selection is no longer available at {address:?}");
+                                    return;
+                                };
                                 if let Some(position) = selected.iter().position(|selected| *selected == index) {
                                     selected.remove(position);
                                 } else if selected.len() < actions.tribute_max {

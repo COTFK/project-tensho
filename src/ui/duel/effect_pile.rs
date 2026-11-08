@@ -1,3 +1,4 @@
+use crate::duel::input::PendingInput;
 use dioxus::prelude::*;
 
 use super::chain_badges::ChainBadges;
@@ -25,10 +26,12 @@ pub fn EffectPile(location: CardLocation) -> Element {
     let has_cards = state
         .zone_data(location)
         .is_some_and(|cards| !cards.is_empty());
-    let has_trigger_effects = state
-        .card_prompting_to_activate
-        .iter()
-        .any(|card| card.location == location);
+    let has_trigger_effects = state.pending_input.read().as_ref().is_some_and(|input| {
+        input
+            .prompted_effects()
+            .iter()
+            .any(|card| card.location == location)
+    });
 
     // Disable if effect selection modal is active
     let suppress_actions = !view.effects_to_select_from.is_empty();
@@ -68,7 +71,11 @@ pub fn EffectPileModal(location: CardLocation) -> Element {
     let cards = state.zone_data(location).unwrap_or_default();
     let tracking = (state.cards)();
     let chain = try_consume_context::<Signal<ChainPlayback>>().map(|chain| chain());
-    let cards_prompting_to_activate = state.card_prompting_to_activate;
+    let pending = (state.pending_input)();
+    let cards_prompting_to_activate = pending
+        .as_ref()
+        .map(PendingInput::prompted_effects)
+        .unwrap_or_default();
     let mut open_pile = view.open_pile;
     let title = if location == CardLocation::Banishment {
         "Banishment"
@@ -88,7 +95,7 @@ pub fn EffectPileModal(location: CardLocation) -> Element {
                 class: "overflow-x-auto scroll-smooth scrollbar-thin",
                 for (index, card) in cards.iter().enumerate() {
                     {
-                        let prompted_card = cards_prompting_to_activate()
+                        let prompted_card = cards_prompting_to_activate
                             .iter()
                             .find(|card| card.location == location && card.sequence == index as u8)
                             .copied();

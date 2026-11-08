@@ -1,3 +1,4 @@
+use crate::duel::input::PendingInput;
 use dioxus::prelude::*;
 
 use super::effect_pile::EffectPileModal;
@@ -36,7 +37,11 @@ pub fn ModalContainer() -> Element {
 #[component]
 fn PromptActivationModal() -> Element {
     let state = use_context::<UIState>();
-    let prompts = (state.card_prompting_to_activate)();
+    let pending = (state.pending_input)();
+    let prompts = pending
+        .as_ref()
+        .map(PendingInput::prompted_effects)
+        .unwrap_or_default();
     let has_action_index = prompts.iter().any(|card| card.action_index.is_some());
 
     rsx!(
@@ -64,7 +69,10 @@ fn PromptActivationModal() -> Element {
 #[component]
 fn YesNoQuestionModal() -> Element {
     let state = use_context::<UIState>();
-    let question = (state.yes_no_question)();
+    let question = match (state.pending_input)() {
+        Some(PendingInput::YesNo(question)) => Some(question),
+        _ => None,
+    };
 
     rsx!(
         MessageModal {
@@ -90,9 +98,12 @@ fn YesNoQuestionModal() -> Element {
 #[component]
 fn CardChoiceModal() -> Element {
     let state = use_context::<UIState>();
-    let cards_to_select_from = (state.cards_to_select_from)();
-    let tributes = (state.tributes)();
-    let selected_tributes = (state.selected_tributes)();
+    let pending = (state.pending_input)();
+    let (cards_to_select_from, tributes, selected_tributes) = match pending {
+        Some(PendingInput::Unselect(message)) => (Some(message), None, Vec::new()),
+        Some(PendingInput::Tribute { message, selected }) => (None, Some(message), selected),
+        _ => (None, None, Vec::new()),
+    };
     let selected_tributes_len = selected_tributes.len();
     let tribute_selection_is_valid = tributes.as_ref().is_some_and(|message| {
         selected_tributes_len >= message.min_select as usize
@@ -144,7 +155,10 @@ fn CardChoiceModal() -> Element {
 #[component]
 fn PositionSelectorModal() -> Element {
     let state = use_context::<UIState>();
-    let positions = (state.positions_to_select)();
+    let positions = match (state.pending_input)() {
+        Some(PendingInput::Position(positions)) => positions,
+        _ => Vec::new(),
+    };
 
     rsx!(
         MessageModal {
@@ -164,7 +178,10 @@ fn PositionSelectorModal() -> Element {
 #[component]
 pub fn CardSelector() -> Element {
     let state = use_context::<UIState>();
-    let selectables = (state.selectables)();
+    let selectables = match (state.pending_input)() {
+        Some(PendingInput::Cards(message)) => Some(message),
+        _ => None,
+    };
     let mut selected_cards = use_signal(Vec::new);
 
     let selected_count = selected_cards().len();
@@ -241,7 +258,10 @@ pub fn CardSelector() -> Element {
 #[component]
 pub fn SortCardSelector() -> Element {
     let state = use_context::<UIState>();
-    let sort_cards = (state.sort_cards_to_select_from)();
+    let sort_cards = match (state.pending_input)() {
+        Some(PendingInput::Sort(message)) => Some(message),
+        _ => None,
+    };
     let cards = sort_cards
         .as_ref()
         .map(|message| message.cards.clone())
@@ -337,7 +357,10 @@ pub fn EffectSelector() -> Element {
 #[component]
 pub fn OptionSelector() -> Element {
     let state = use_context::<UIState>();
-    let options_message = (state.options_to_prompt)();
+    let options_message = match (state.pending_input)() {
+        Some(PendingInput::Options(message)) => Some(message),
+        _ => None,
+    };
 
     rsx!(
         PickerModal {
@@ -361,7 +384,10 @@ pub fn OptionSelector() -> Element {
 #[component]
 pub fn NumberSelector() -> Element {
     let state = use_context::<UIState>();
-    let numbers = (state.numbers_to_select_from)();
+    let numbers = match (state.pending_input)() {
+        Some(PendingInput::Numbers(message)) => Some(message),
+        _ => None,
+    };
 
     rsx!(
         PickerModal {

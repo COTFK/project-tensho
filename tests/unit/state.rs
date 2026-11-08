@@ -1,4 +1,5 @@
 use super::*;
+use crate::ocgcore::messages::SelectTributeMessageData;
 use ocgcore_ffi::constants::MSG_TAG_SWAP;
 use std::cell::Cell;
 
@@ -31,22 +32,27 @@ fn pending_input_and_view_resets_are_independent() {
             view.selected_card.set(Some(id));
             view.effects_to_select_from.set(vec![effect]);
             assert_eq!(*view.open_pile.peek(), Some(location));
-            state.yes_no_question.set(Some("Activate?".into()));
-            state.waiting_on_input.set(true);
+            state
+                .pending_input
+                .set(Some(PendingInput::YesNo("Activate?".into())));
             state.clear_pending_input();
-            assert!(state.yes_no_question.peek().is_none());
-            assert!(!*state.waiting_on_input.peek());
+            assert!(state.pending_input.peek().is_none());
+            assert!(!state.waiting_on_input());
             assert_eq!(*view.open_pile.peek(), Some(location));
             assert_eq!(*view.selected_card.peek(), Some(id));
             assert_eq!(*view.effects_to_select_from.peek(), vec![effect]);
-            state.yes_no_question.set(Some("Activate?".into()));
-            state.waiting_on_input.set(true);
+            state
+                .pending_input
+                .set(Some(PendingInput::YesNo("Activate?".into())));
             view.reset();
             assert_eq!(*view.open_pile.peek(), None);
             assert!(view.selected_card.peek().is_none());
             assert!(view.effects_to_select_from.peek().is_empty());
-            assert_eq!(state.yes_no_question.peek().as_deref(), Some("Activate?"));
-            assert!(*state.waiting_on_input.peek());
+            assert_eq!(
+                *state.pending_input.peek(),
+                Some(PendingInput::YesNo("Activate?".into()))
+            );
+            assert!(state.waiting_on_input());
         }
         rsx! {}
     }
@@ -81,9 +87,11 @@ fn view_reset_preserves_tracking_and_shared_tribute_progress() {
             candidates: vec![candidate],
         };
         state.cards.set(Some(cards.clone()));
-        state.tributes.set(Some(tribute.clone()));
-        state.selected_tributes.set(vec![0]);
-        state.waiting_on_input.set(true);
+        let input = PendingInput::Tribute {
+            message: tribute,
+            selected: vec![0],
+        };
+        state.pending_input.set(Some(input.clone()));
         state.current_phase.set(Some(Phase::Main1));
         view.selected_card.set(Some(id));
         view.open_pile.set(Some(CardLocation::Graveyard));
@@ -95,9 +103,8 @@ fn view_reset_preserves_tracking_and_shared_tribute_progress() {
         assert!(view.open_pile.peek().is_none());
         assert!(view.effects_to_select_from.peek().is_empty());
         assert_eq!(*state.cards.peek(), Some(cards));
-        assert_eq!(*state.tributes.peek(), Some(tribute));
-        assert_eq!(*state.selected_tributes.peek(), vec![0]);
-        assert!(*state.waiting_on_input.peek());
+        assert_eq!(*state.pending_input.peek(), Some(input));
+        assert!(state.waiting_on_input());
         assert_eq!(*state.current_phase.peek(), Some(Phase::Main1));
         rsx! {}
     }
@@ -494,17 +501,186 @@ fn failed_tracking_blocks_layered_actions_until_restart() {
         use_context_provider(|| Signal::new(Some(duel)));
         let _playback = use_context_provider(|| Signal::new(CardAnimationState::default()));
         state.tracking_failed(&mut view, "injected divergence".into(), Some(_playback));
-        state.waiting_on_input.set(true);
+        state
+            .pending_input
+            .set(Some(PendingInput::YesNo("Activate?".into())));
         run_game_loop();
         assert_eq!(state.failure.peek().as_deref(), Some("injected divergence"));
         send_response(Response::No);
-        assert!(*state.waiting_on_input.peek());
+        assert!(state.waiting_on_input());
         COMPLETED.with(|completed| completed.set(true));
         rsx! {}
     }
     let mut dom = VirtualDom::new(app);
     dom.rebuild_in_place();
     assert!(COMPLETED.with(|completed| completed.get()));
+}
+
+#[test]
+#[cfg(not(target_arch = "wasm32"))]
+fn request_messages_replace_actions_and_selection_progress() {
+    use crate::ocgcore::Zone;
+    use crate::ocgcore::constants::BattlePosition;
+    use crate::ocgcore::messages::{
+        AnnounceNumberMessageData, IdleMessageData, SelectCardMessageData, SelectChainMessageData,
+        SelectEffectYNMessageData, SelectOptionMessageData, SelectPlaceMessageData,
+        SelectPositionMessageData, SelectUnselectMessageData, SortCardMessageData,
+    };
+
+    fn app() -> Element {
+        let core = test_core();
+        let duel = core.create_duel(0).unwrap();
+        let mut state = use_context_provider(UIState::default);
+        let mut view = use_context_provider(ViewState::default);
+        use_context_provider(|| Signal::new(Some(duel)));
+        state.cards.set(Some(CardLayer::default()));
+        let card = CardData {
+            card_code: 42,
+            action_index: Some(7),
+            ..Default::default()
+        };
+        let idle = IdleMessageData {
+            normal_summons: vec![card],
+            special_summons: vec![card],
+            monster_sets: vec![card],
+            spell_trap_sets: vec![card],
+            activatable_effects: vec![card],
+            ..Default::default()
+        };
+        let tribute = SelectTributeMessageData {
+            player: 0,
+            is_cancelable: true,
+            min_select: 1,
+            max_select: 2,
+            candidates: vec![card],
+        };
+        let chain = SelectChainMessageData {
+            player: 0,
+            effects: vec![card],
+        };
+        let cards = SelectCardMessageData {
+            min_select: 1,
+            max_select: 1,
+            cards: vec![card],
+        };
+        let zones = vec![Zone {
+            location: CardLocation::MonsterZone,
+            sequence: 3,
+        }];
+        let positions = vec![BattlePosition::FaceUpAttack, BattlePosition::FaceUpDefense];
+        let unselect = SelectUnselectMessageData {
+            playerid: 0,
+            finishable: true,
+            cancelable: true,
+            min_count: 1,
+            max_count: 2,
+            select_cards: vec![card],
+            unselect_cards: vec![],
+        };
+        let options = SelectOptionMessageData {
+            player: 0,
+            options: vec![],
+        };
+        let numbers = AnnounceNumberMessageData {
+            player: 0,
+            numbers: vec![2, 4],
+        };
+        let sort = SortCardMessageData {
+            player: 0,
+            cards: vec![card],
+        };
+        for (message, expected) in [
+            (CoreMessage::Idle(idle.clone()), PendingInput::Idle(idle)),
+            (
+                CoreMessage::SelectTribute(tribute.clone()),
+                PendingInput::Tribute {
+                    message: tribute.clone(),
+                    selected: vec![],
+                },
+            ),
+            (
+                CoreMessage::SelectChain(chain.clone()),
+                PendingInput::Chain(chain),
+            ),
+            (
+                CoreMessage::SelectEffectYN(SelectEffectYNMessageData(CardData {
+                    action_index: None,
+                    ..card
+                })),
+                PendingInput::EffectYesNo(CardData {
+                    action_index: None,
+                    ..card
+                }),
+            ),
+            (
+                CoreMessage::SelectCard(cards.clone()),
+                PendingInput::Cards(cards),
+            ),
+            (
+                CoreMessage::SelectPlace(SelectPlaceMessageData {
+                    player: 0,
+                    count: 1,
+                    zones: zones.clone(),
+                }),
+                PendingInput::Place(zones),
+            ),
+            (
+                CoreMessage::SelectPosition(SelectPositionMessageData {
+                    player: 0,
+                    card_code: 42,
+                    positions: positions.clone(),
+                }),
+                PendingInput::Position(positions),
+            ),
+            (
+                CoreMessage::SelectUnselectCard(unselect.clone()),
+                PendingInput::Unselect(unselect),
+            ),
+            (
+                CoreMessage::SelectOption(options.clone()),
+                PendingInput::Options(options),
+            ),
+            (
+                CoreMessage::AnnounceNumber(numbers.clone()),
+                PendingInput::Numbers(numbers),
+            ),
+            (
+                CoreMessage::SortCard(sort.clone()),
+                PendingInput::Sort(sort),
+            ),
+        ] {
+            state.pending_input.set(Some(PendingInput::Tribute {
+                message: tribute.clone(),
+                selected: vec![7],
+            }));
+            view.open_pile.set(Some(CardLocation::Graveyard));
+            assert!(handle_core_messages(&[message.clone()]), "{message:?}");
+            assert_eq!(*state.pending_input.peek(), Some(expected), "{message:?}");
+            assert!(state.waiting_on_input());
+            assert_eq!(*view.open_pile.peek(), Some(CardLocation::Graveyard));
+            state.clear_pending_input();
+            assert!(!state.waiting_on_input());
+            assert!(state.pending_input.peek().is_none());
+        }
+
+        state
+            .pending_input
+            .set(Some(PendingInput::Idle(IdleMessageData::default())));
+        view.effects_to_select_from.set(vec![card]);
+        assert!(!handle_core_messages(&[CoreMessage::SelectChain(
+            SelectChainMessageData {
+                player: 0,
+                effects: vec![]
+            }
+        )]));
+        assert!(state.pending_input.peek().is_none());
+        assert!(!state.waiting_on_input());
+        assert!(view.open_pile.peek().is_none());
+        assert!(view.effects_to_select_from.peek().is_empty());
+        rsx! {}
+    }
+    let mut dom = VirtualDom::new(app);
+    dom.rebuild_in_place();
 }
 
 #[test]
@@ -531,8 +707,11 @@ fn consuming_a_response_clears_input_and_view_but_preserves_duel_state() {
         use_context_provider(|| Signal::new(Some(duel)));
         state.cards.set(Some(cards));
         run_game_loop();
-        assert!(*state.waiting_on_input.peek());
-        let summon = state.normal_summons.peek()[0];
+        assert!(state.waiting_on_input());
+        let summon = match state.pending_input.peek().as_ref().unwrap() {
+            PendingInput::Idle(actions) => actions.normal_summons[0],
+            input => panic!("Expected idle actions, got {input:?}"),
+        };
         view.selected_card.set(Some(id));
         view.open_pile.set(Some(CardLocation::ExtraDeck));
         view.effects_to_select_from.set(vec![summon]);
@@ -543,12 +722,8 @@ fn consuming_a_response_clears_input_and_view_but_preserves_duel_state() {
             index: summon.action_index.unwrap(),
         });
 
-        assert!(!*state.waiting_on_input.peek());
-        assert!(state.normal_summons.peek().is_empty());
-        assert!(state.special_summons.peek().is_empty());
-        assert!(state.monster_sets.peek().is_empty());
-        assert!(state.spell_trap_sets.peek().is_empty());
-        assert!(state.activatable_effects.peek().is_empty());
+        assert!(!state.waiting_on_input());
+        assert!(state.pending_input.peek().is_none());
         assert!(view.selected_card.peek().is_none());
         assert!(view.open_pile.peek().is_none());
         assert!(view.effects_to_select_from.peek().is_empty());
@@ -581,14 +756,16 @@ fn responses_are_blocked_during_playback_and_after_a_prompt_is_consumed() {
         let mut view = use_context_provider(ViewState::default);
         use_context_provider(|| Signal::new(Some(duel)));
         let mut playback = use_context_provider(|| Signal::new(CardAnimationState::default()));
-        state.waiting_on_input.set(true);
+        state
+            .pending_input
+            .set(Some(PendingInput::YesNo("Activate?".into())));
         playback.write().begin(vec![], CardLayer::default());
         send_response(Response::No);
-        assert!(*state.waiting_on_input.peek());
+        assert!(state.waiting_on_input());
         let generation = playback.peek().generation;
         playback.write().finish(generation);
         send_response(Response::No);
-        assert!(!*state.waiting_on_input.peek());
+        assert!(!state.waiting_on_input());
         let address = CardAddress {
             controller: Player::Player,
             location: CardLocation::Hand,
@@ -669,7 +846,7 @@ fn layered_loop_pauses_on_a_real_draw_and_resumes_to_the_prompt() {
             if playback.peek().is_active() {
                 let generation = playback.peek().generation;
                 playback.write().finish(generation);
-            } else if *state.waiting_on_input.peek() {
+            } else if state.waiting_on_input() {
                 assert!(tracking.peek().is_some());
                 COMPLETED.with(|completed| completed.set(true));
                 return rsx! {};
@@ -761,7 +938,7 @@ fn layered_loop_starts_gathering_for_a_real_hand_shuffle() {
             if playback.peek().is_active() {
                 let generation = playback.peek().generation;
                 playback.write().finish(generation);
-            } else if *state.waiting_on_input.peek() || *state.duel_finished.peek() {
+            } else if state.waiting_on_input() || *state.duel_finished.peek() {
                 break;
             }
         }
@@ -884,7 +1061,7 @@ fn handles_real_duel_messages_until_input() {
             }
             assert_ne!(status, OCG_DuelStatus::OCG_DUEL_STATUS_END);
         }
-        assert!((state.waiting_on_input)());
+        assert!(state.waiting_on_input());
         assert!(tracking.read().is_some());
         assert_eq!(phases, [Phase::Draw, Phase::Standby, Phase::Main1]);
         rsx! {}

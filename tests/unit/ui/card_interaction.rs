@@ -1,5 +1,8 @@
 use super::*;
 use crate::ocgcore::constants::Player;
+use crate::ocgcore::messages::{
+    IdleMessageData, SelectChainMessageData, SelectTributeMessageData, SelectUnselectMessageData,
+};
 
 fn address(controller: Player, location: CardLocation, sequence: u32) -> CardAddress {
     CardAddress {
@@ -22,17 +25,7 @@ fn card(controller: Player, location: CardLocation, sequence: u8, index: u8) -> 
 
 #[test]
 fn empty_prompts_offer_no_actions() {
-    let actions = PromptCards {
-        normal_summons: &[],
-        monster_sets: &[],
-        spell_trap_sets: &[],
-        activatable_effects: &[],
-        prompted_effects: &[],
-        selections: None,
-        tributes: None,
-        selected_tributes: &[],
-    }
-    .for_address(CardAddress {
+    let actions = PendingInput::Idle(IdleMessageData::default()).card_actions(CardAddress {
         controller: Player::Player,
         location: CardLocation::Hand,
         sequence: 0,
@@ -48,34 +41,35 @@ fn resolves_prompt_actions_by_full_address_and_preserves_indices() {
     let other_sequence = card(Player::Player, hand, 2, 9);
     let last = card(Player::Player, hand, 1, 10);
     let effects = [own, other_controller, other_sequence, last];
-    let actions = PromptCards {
-        normal_summons: &effects,
-        monster_sets: &[own],
-        spell_trap_sets: &[last],
-        activatable_effects: &effects,
-        prompted_effects: &effects,
-        selections: None,
-        tributes: None,
-        selected_tributes: &[],
-    }
-    .for_address(address(Player::Player, hand, 1));
+    let actions = PendingInput::Idle(IdleMessageData {
+        normal_summons: effects.to_vec(),
+        monster_sets: vec![own],
+        spell_trap_sets: vec![last],
+        activatable_effects: effects.to_vec(),
+        ..Default::default()
+    })
+    .card_actions(address(Player::Player, hand, 1));
     assert_eq!(actions.summon, Some(10));
     assert_eq!(actions.monster_set, Some(7));
     assert_eq!(actions.spell_trap_set, Some(10));
     assert_eq!(actions.effects, [own, last]);
-    assert_eq!(actions.prompted, Some(last));
+    assert!(actions.prompted.is_none());
+    let chain = PendingInput::Chain(SelectChainMessageData {
+        player: 0,
+        effects: effects.to_vec(),
+    });
     assert_eq!(
-        PromptCards {
-            normal_summons: &effects,
-            monster_sets: &[],
-            spell_trap_sets: &[],
-            activatable_effects: &[],
-            prompted_effects: &[],
-            selections: None,
-            tributes: None,
-            selected_tributes: &[],
-        }
-        .for_address(address(Player::Player, hand, 257))
+        chain
+            .card_actions(address(Player::Player, hand, 1))
+            .prompted,
+        Some(last)
+    );
+    assert_eq!(
+        PendingInput::Idle(IdleMessageData {
+            normal_summons: effects.to_vec(),
+            ..Default::default()
+        })
+        .card_actions(address(Player::Player, hand, 257))
         .summon,
         None
     );
@@ -104,27 +98,34 @@ fn resolves_selection_and_tribute_by_controller_and_response_order() {
         max_select: 2,
         candidates: vec![opponent, own],
     };
-    let prompts = PromptCards {
-        normal_summons: &[],
-        monster_sets: &[],
-        spell_trap_sets: &[],
-        activatable_effects: &[],
-        prompted_effects: &[own, selected],
-        selections: Some(&selection),
-        tributes: Some(&tribute),
-        selected_tributes: &[3],
-    };
-    let actions = prompts.for_address(address(Player::Player, field, 0));
+    let prompts = PendingInput::Unselect(selection);
+    let actions = prompts.card_actions(address(Player::Player, field, 0));
     assert_eq!(actions.selection, Some(1));
     assert!(actions.selectable && actions.selected);
+    let opponent_actions = prompts.card_actions(address(Player::Opponent, field, 0));
+    assert_eq!(opponent_actions.selection, Some(0));
+    assert!(!opponent_actions.selected);
+    let prompts = PendingInput::Tribute {
+        message: tribute,
+        selected: vec![3],
+    };
+    let actions = prompts.card_actions(address(Player::Player, field, 0));
     assert_eq!(actions.tribute, Some(3));
     assert!(actions.tribute_selectable && actions.tribute_selected);
     assert_eq!(actions.tribute_max, 2);
-    assert_eq!(actions.prompted, Some(own));
-    let opponent_actions = prompts.for_address(address(Player::Opponent, field, 0));
-    assert_eq!(opponent_actions.selection, Some(0));
+    let opponent_actions = prompts.card_actions(address(Player::Opponent, field, 0));
     assert_eq!(opponent_actions.tribute, Some(4));
-    assert!(!opponent_actions.selected && !opponent_actions.tribute_selected);
+    assert!(!opponent_actions.tribute_selected);
+    let prompts = PendingInput::Chain(SelectChainMessageData {
+        player: 0,
+        effects: vec![own, selected],
+    });
+    assert_eq!(
+        prompts
+            .card_actions(address(Player::Player, field, 0))
+            .prompted,
+        Some(own)
+    );
 }
 
 #[test]
@@ -140,15 +141,21 @@ fn menu_actions_are_suppressed_and_resolved_from_current_prompt() {
         state.cards.set(Some(layer));
         select_card(hand);
         state
-            .normal_summons
-            .set(vec![card(Player::Player, CardLocation::Hand, 0, 7)]);
+            .pending_input
+            .set(Some(PendingInput::Idle(IdleMessageData {
+                normal_summons: vec![card(Player::Player, CardLocation::Hand, 0, 7)],
+                ..Default::default()
+            })));
         assert_eq!(
             current_menu_actions(&state, &view, hand).unwrap().summon,
             Some(7)
         );
         state
-            .normal_summons
-            .set(vec![card(Player::Player, CardLocation::Hand, 0, 9)]);
+            .pending_input
+            .set(Some(PendingInput::Idle(IdleMessageData {
+                normal_summons: vec![card(Player::Player, CardLocation::Hand, 0, 9)],
+                ..Default::default()
+            })));
         assert_eq!(
             current_menu_actions(&state, &view, hand).unwrap().summon,
             Some(9)

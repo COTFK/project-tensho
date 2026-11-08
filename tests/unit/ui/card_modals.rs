@@ -1,4 +1,5 @@
 use super::*;
+use crate::duel::input::PendingInput;
 use crate::ocgcore::CardData;
 use crate::ocgcore::messages::{SelectCardMessageData, SortCardMessageData};
 use crate::ui::card_animation::CardAnimationState;
@@ -30,58 +31,61 @@ fn app() -> Element {
 
 #[test]
 fn selection_and_sorting_lists_survive_cleared_prompts_while_closing() {
-    let mut dom = VirtualDom::new(app);
-    dom.rebuild_in_place();
-    dom.process_events();
-    let card = CardData {
-        card_code: 42,
-        ..Default::default()
-    };
-    STATE.with(|slot| {
-        let mut state = slot.borrow().unwrap();
-        state.selectables.set(Some(SelectCardMessageData {
-            min_select: 1,
-            max_select: 1,
-            cards: vec![card],
-        }));
-        state
-            .sort_cards_to_select_from
-            .set(Some(SortCardMessageData {
-                player: 0,
-                cards: vec![card],
+    for sorting in [false, true] {
+        let mut dom = VirtualDom::new(app);
+        dom.rebuild_in_place();
+        dom.process_events();
+        let card = CardData {
+            card_code: 42,
+            ..Default::default()
+        };
+        STATE.with(|slot| {
+            let mut state = slot.borrow().unwrap();
+            state.pending_input.set(Some(if sorting {
+                PendingInput::Sort(SortCardMessageData {
+                    player: 0,
+                    cards: vec![card],
+                })
+            } else {
+                PendingInput::Cards(SelectCardMessageData {
+                    min_select: 1,
+                    max_select: 1,
+                    cards: vec![card],
+                })
             }));
-    });
-    let opened = dom.render_immediate_to_vec();
-    assert_eq!(
-        opened
-            .edits
-            .iter()
-            .filter(|edit| matches!(edit,
-                Mutation::SetAttribute { name: "src", value: AttributeValue::Text(url), .. }
-                    if *url == crate::utility::card_image_url(42)
-            ))
-            .count(),
-        2,
-        "{:?}",
-        opened.edits
-    );
-    dom.process_events();
+        });
+        let opened = dom.render_immediate_to_vec();
+        assert_eq!(
+            opened
+                .edits
+                .iter()
+                .filter(|edit| matches!(edit,
+                    Mutation::SetAttribute { name: "src", value: AttributeValue::Text(url), .. }
+                        if *url == crate::utility::card_image_url(42)
+                ))
+                .count(),
+            1,
+            "{:?}",
+            opened.edits
+        );
+        dom.process_events();
 
-    STATE.with(|slot| {
-        let mut state = slot.borrow().unwrap();
-        state.clear_pending_input();
-    });
-    let closing = dom.render_immediate_to_vec();
-    assert!(
-        !closing
-            .edits
-            .iter()
-            .any(|edit| matches!(edit, Mutation::Remove { .. } | Mutation::ReplaceWith { .. })),
-        "{:?}",
-        closing.edits
-    );
-    STATE.with(|slot| *slot.borrow_mut() = None);
-    PLAYBACK.with(|slot| *slot.borrow_mut() = None);
+        STATE.with(|slot| {
+            let mut state = slot.borrow().unwrap();
+            state.clear_pending_input();
+        });
+        let closing = dom.render_immediate_to_vec();
+        assert!(
+            !closing
+                .edits
+                .iter()
+                .any(|edit| matches!(edit, Mutation::Remove { .. } | Mutation::ReplaceWith { .. })),
+            "{:?}",
+            closing.edits
+        );
+        STATE.with(|slot| *slot.borrow_mut() = None);
+        PLAYBACK.with(|slot| *slot.borrow_mut() = None);
+    }
 }
 
 #[test]
@@ -99,24 +103,18 @@ fn playback_suppression_preserves_pending_requests_and_picker_selections() {
             .to_vec();
         let state = STATE.with(|slot| {
             let mut state = slot.borrow().unwrap();
-            state.waiting_on_input.set(true);
-            if sorting {
-                state
-                    .sort_cards_to_select_from
-                    .set(Some(SortCardMessageData { player: 0, cards }));
+            state.pending_input.set(Some(if sorting {
+                PendingInput::Sort(SortCardMessageData { player: 0, cards })
             } else {
-                state.selectables.set(Some(SelectCardMessageData {
+                PendingInput::Cards(SelectCardMessageData {
                     min_select: 2,
                     max_select: 2,
                     cards,
-                }));
-            }
+                })
+            }));
             state
         });
-        let request = (
-            state.selectables.peek().clone(),
-            state.sort_cards_to_select_from.peek().clone(),
-        );
+        let request = state.pending_input.peek().clone();
         let opened = dom.render_immediate_to_vec();
         let done = opened
             .edits
@@ -178,14 +176,8 @@ fn playback_suppression_preserves_pending_requests_and_picker_selections() {
             "{:?}",
             suppressed.edits
         );
-        assert!(*state.waiting_on_input.peek());
-        assert_eq!(
-            (
-                state.selectables.peek().clone(),
-                state.sort_cards_to_select_from.peek().clone()
-            ),
-            request
-        );
+        assert!(state.waiting_on_input());
+        assert_eq!(*state.pending_input.peek(), request);
         dom.process_events();
 
         let generation = playback.peek().generation;
@@ -210,14 +202,8 @@ fn playback_suppression_preserves_pending_requests_and_picker_selections() {
             Mutation::SetAttribute { name: "disabled", value: AttributeValue::Bool(false), id, .. }
                 if *id == done
         )), "{:?}", completed.edits);
-        assert!(*state.waiting_on_input.peek());
-        assert_eq!(
-            (
-                state.selectables.peek().clone(),
-                state.sort_cards_to_select_from.peek().clone()
-            ),
-            request
-        );
+        assert!(state.waiting_on_input());
+        assert_eq!(*state.pending_input.peek(), request);
         STATE.with(|slot| *slot.borrow_mut() = None);
         PLAYBACK.with(|slot| *slot.borrow_mut() = None);
     }

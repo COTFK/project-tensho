@@ -1,4 +1,5 @@
 use super::*;
+use crate::duel::input::PendingInput;
 use crate::ocgcore::CardData;
 use crate::ui::card_layer::CardLayer;
 
@@ -81,8 +82,9 @@ fn restart_button_cancels_playback_and_clears_pending_input_and_view() {
         card_code: 1,
         ..Default::default()
     }]);
-    state.waiting_on_input.set(true);
-    state.yes_no_question.set(Some("Activate?".into()));
+    state
+        .pending_input
+        .set(Some(PendingInput::YesNo("Activate?".into())));
     animation.write().begin(vec![card], cards.clone());
     let message = CoreMessage::try_from(
         [
@@ -100,8 +102,8 @@ fn restart_button_cancels_playback_and_clears_pending_input_and_view() {
     events::dispatch(&dom, "click", restart);
 
     assert!(*state.restarting.peek());
-    assert!(!*state.waiting_on_input.peek());
-    assert!(state.yes_no_question.peek().is_none());
+    assert!(!state.waiting_on_input());
+    assert!(state.pending_input.peek().is_none());
     assert!(state.cards.peek().is_none());
     assert!(view.selected_card.peek().is_none());
     assert!(view.open_pile.peek().is_none());
@@ -207,12 +209,14 @@ fn replaces_tracking_and_ui_state_when_a_duel_restarts() {
             card_code: 1,
             ..Default::default()
         }]);
-        state.waiting_on_input.set(true);
+        state
+            .pending_input
+            .set(Some(PendingInput::YesNo("Activate?".into())));
         state.restarting.set(true);
         state.failure.set(Some("test failure".into()));
         tracking.set(None);
         install_duel(&mut state, &mut view, &mut duel, Some(initial));
-        assert!((state.waiting_on_input)());
+        assert!(state.waiting_on_input());
         assert!(tracking.read().is_none());
         assert_eq!(*view.selected_card.peek(), Some(selected));
         assert!(view.open_pile.peek().is_some());
@@ -222,7 +226,7 @@ fn replaces_tracking_and_ui_state_when_a_duel_restarts() {
             cards: CardLayer::from_decks(&[3], &[]).unwrap(),
         };
         install_duel(&mut state, &mut view, &mut duel, Some(replacement));
-        assert!(!(state.waiting_on_input)());
+        assert!(!state.waiting_on_input());
         assert!(!(state.restarting)());
         assert!((state.failure)().is_none());
         assert!(view.selected_card.peek().is_none());

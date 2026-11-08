@@ -1,3 +1,4 @@
+use crate::duel::input::PendingInput;
 use dioxus::prelude::*;
 
 use super::constants::ZONE_SIZE;
@@ -40,9 +41,8 @@ pub fn Field() -> Element {
 #[component]
 fn Zone(index: u8, location: CardLocation) -> Element {
     let state = use_context::<UIState>();
-    let placeable_on = (state.available_zones)()
-        .iter()
-        .any(|zone| zone.location == location && zone.sequence == index);
+    let placeable_on = matches!((state.pending_input)(), Some(PendingInput::Place(zones))
+        if zones.iter().any(|zone| zone.location == location && zone.sequence == index));
     rsx!(
         div {
             id: "{location}-{index}",

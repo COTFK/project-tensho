@@ -571,7 +571,7 @@ pub(super) fn LayeredField(mut startup_ready: Signal<bool>, deck_codes: Vec<u32>
         let measured = resource.read();
         let mounted = layered_mounted();
         let ready = startup_ready();
-        let waiting = (state.waiting_on_input)();
+        let waiting = state.waiting_on_input();
         let finished = (state.duel_finished)();
         let _ = artwork();
         let _ = tracking();

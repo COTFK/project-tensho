@@ -1,3 +1,4 @@
+mod duel;
 mod ocgcore;
 mod settings;
 mod state;
