@@ -95,6 +95,69 @@ fn plays_batched_chain_in_activation_and_resolution_order() {
 }
 
 #[test]
+fn duel_failure_cancels_both_playbacks_and_invalidates_their_completions() {
+    use crate::state::UIState;
+    use crate::ui::card_animation::{AnimationPhase, CardAnimationState};
+
+    fn app() -> Element {
+        let mut state = use_context_provider(UIState::default);
+        let mut animation = use_context_provider(|| Signal::new(CardAnimationState::default()));
+        let mut chain = use_context_provider(|| Signal::new(ChainPlayback::default()));
+        let mut cards = CardLayer::default();
+        let card = cards.insert(address(CardLocation::Hand, 0), 1).unwrap();
+        animation.write().begin(vec![card], cards.clone());
+        for number in [1, 2] {
+            chain
+                .write()
+                .record(&chaining(number, address(CardLocation::Hand, 0)), &cards);
+        }
+        chain.write().start();
+        let animation_generation = animation.peek().generation;
+        let chain_generation = chain.peek().generation;
+        assert!(animation.peek().is_active());
+        assert!(chain.peek().active);
+        assert!(chain.peek().has_pending_frames());
+
+        state.fail("injected failure".into(), Some(animation));
+
+        assert_eq!(state.failure.peek().as_deref(), Some("injected failure"));
+        assert!(state.interaction_blocked(Some(animation)));
+        assert!(!animation.peek().is_active());
+        assert!(animation.peek().moving.is_empty());
+        assert!(animation.peek().source.is_none());
+        assert!(!chain.peek().active);
+        assert!(chain.peek().displayed.is_empty());
+        assert!(!chain.peek().has_pending_frames());
+        animation
+            .write()
+            .advance(animation_generation, AnimationPhase::Moving);
+        chain.write().advance(chain_generation);
+        chain.write().start();
+        assert!(!animation.peek().is_active());
+        assert!(!chain.peek().active);
+        assert!(state.interaction_blocked(Some(animation)));
+
+        state.reset();
+        animation.write().begin(vec![card], cards.clone());
+        chain
+            .write()
+            .record(&chaining(3, address(CardLocation::Hand, 0)), &cards);
+        chain.write().start();
+        animation
+            .write()
+            .advance(animation_generation, AnimationPhase::Moving);
+        chain.write().advance(chain_generation);
+        assert!(animation.peek().is_active());
+        assert!(chain.peek().active);
+        assert_eq!(chain.peek().links_for_card(card), vec![3]);
+        assert!(state.interaction_blocked(Some(animation)));
+        rsx! {}
+    }
+    let mut dom = VirtualDom::new(app);
+    dom.rebuild_in_place();
+}
+
+#[test]
 fn identifies_overlay_material_as_the_chain_source() {
     let mut cards = CardLayer::default();
     let host = cards

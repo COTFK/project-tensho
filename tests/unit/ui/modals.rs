@@ -2,6 +2,9 @@ use super::*;
 use dioxus::core::{AttributeValue, Mutation};
 use std::cell::RefCell;
 
+#[path = "events.rs"]
+mod events;
+
 thread_local! {
     static TRIGGER: RefCell<Option<Signal<bool>>> = const { RefCell::new(None) };
     static SUPPRESSED: RefCell<Option<Signal<bool>>> = const { RefCell::new(None) };
@@ -125,79 +128,13 @@ fn image_id(edits: &[Mutation], code: &str) -> dioxus::core::ElementId {
         .unwrap_or_else(|| panic!("Missing image {code}: {edits:?}"))
 }
 
-struct TestTransition;
-
-impl dioxus::html::HasTransitionData for TestTransition {
-    fn property_name(&self) -> String {
-        "translate".into()
-    }
-    fn pseudo_element(&self) -> String {
-        String::new()
-    }
-    fn elapsed_time(&self) -> f32 {
-        0.3
-    }
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-}
-
-struct TestEventConverter;
-
-macro_rules! unused_event_converters {
-    ($($method:ident => $data:ident),* $(,)?) => {
-        $(
-            fn $method(&self, _: &dioxus::html::PlatformEventData) -> dioxus::html::$data {
-                panic!("Unexpected event conversion: {}", stringify!($method))
-            }
-        )*
-    };
-}
-
-impl dioxus::html::HtmlEventConverter for TestEventConverter {
-    fn convert_transition_data(
-        &self,
-        _: &dioxus::html::PlatformEventData,
-    ) -> dioxus::html::TransitionData {
-        dioxus::html::TransitionData::new(TestTransition)
-    }
-
-    unused_event_converters! {
-        convert_animation_data => AnimationData,
-        convert_cancel_data => CancelData,
-        convert_clipboard_data => ClipboardData,
-        convert_composition_data => CompositionData,
-        convert_drag_data => DragData,
-        convert_focus_data => FocusData,
-        convert_form_data => FormData,
-        convert_image_data => ImageData,
-        convert_keyboard_data => KeyboardData,
-        convert_media_data => MediaData,
-        convert_mounted_data => MountedData,
-        convert_mouse_data => MouseData,
-        convert_pointer_data => PointerData,
-        convert_resize_data => ResizeData,
-        convert_scroll_data => ScrollData,
-        convert_selection_data => SelectionData,
-        convert_toggle_data => ToggleData,
-        convert_touch_data => TouchData,
-        convert_visible_data => VisibleData,
-        convert_wheel_data => WheelData,
-    }
-}
-
 fn transition_end(dom: &VirtualDom, id: dioxus::core::ElementId) {
-    let data = dioxus::html::PlatformEventData::new(Box::new(()));
-    dom.runtime().handle_event(
-        "transitionend",
-        dioxus::core::Event::new(std::rc::Rc::new(data), true).into_any(),
-        id,
-    );
+    events::dispatch(dom, "transitionend", id);
 }
 
 #[test]
 fn card_list_is_retained_until_its_own_transition_ends() {
-    dioxus::html::set_event_converter(Box::new(TestEventConverter));
+    events::install();
     let mut dom = VirtualDom::new(card_picker_app);
     let initial = dom.rebuild_to_vec();
     let modal_id = modal_classes(&initial.edits, true)[0];

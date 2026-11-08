@@ -423,6 +423,61 @@ fn failed_tracking_blocks_layered_actions_until_restart() {
 
 #[test]
 #[cfg(not(target_arch = "wasm32"))]
+fn consuming_a_response_clears_input_and_view_but_preserves_duel_state() {
+    fn app() -> Element {
+        let core = test_core();
+        let duel = core.create_duel(0).unwrap();
+        duel.add_card(Player::Player, 10, Player::Player, CardLocation::Hand, 0, 0);
+        let mut cards = CardLayer::default();
+        let id = cards
+            .insert(
+                CardAddress {
+                    controller: Player::Player,
+                    location: CardLocation::Hand,
+                    sequence: 0,
+                },
+                10,
+            )
+            .unwrap();
+        duel.start();
+        let mut state = use_context_provider(UIState::default);
+        use_context_provider(|| Signal::new(Some(duel)));
+        state.cards.set(Some(cards));
+        run_game_loop();
+        assert!(*state.waiting_on_input.peek());
+        let summon = state.normal_summons.peek()[0];
+        state.selected_card.set(Some(id));
+        state.open_pile.set(Some(CardLocation::ExtraDeck));
+        state.effects_to_select_from.set(vec![summon]);
+        let cards = state.cards.peek().clone();
+        let phase = *state.current_phase.peek();
+
+        send_response(Response::NormalSummon {
+            index: summon.action_index.unwrap(),
+        });
+
+        assert!(!*state.waiting_on_input.peek());
+        assert!(state.normal_summons.peek().is_empty());
+        assert!(state.special_summons.peek().is_empty());
+        assert!(state.monster_sets.peek().is_empty());
+        assert!(state.spell_trap_sets.peek().is_empty());
+        assert!(state.activatable_effects.peek().is_empty());
+        assert!(state.selected_card.peek().is_none());
+        assert!(state.open_pile.peek().is_none());
+        assert!(state.effects_to_select_from.peek().is_empty());
+        assert_eq!(*state.cards.peek(), cards);
+        assert_eq!(*state.current_phase.peek(), phase);
+        assert_eq!(phase, Some(Phase::Main1));
+        assert!(state.failure.peek().is_none());
+        assert!(!*state.duel_finished.peek());
+        rsx! {}
+    }
+    let mut dom = VirtualDom::new(app);
+    dom.rebuild_in_place();
+}
+
+#[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn responses_are_blocked_during_playback_and_after_a_prompt_is_consumed() {
     thread_local! {
         static COMPLETED: Cell<bool> = const { Cell::new(false) };

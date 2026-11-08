@@ -1,6 +1,119 @@
 use super::*;
 use crate::ui::card_layer::CardLayer;
 
+#[path = "events.rs"]
+mod events;
+
+#[test]
+fn restart_button_cancels_playback_and_clears_pending_input_and_view() {
+    use crate::ocgcore::constants::{CardLocation, Player};
+    use crate::ocgcore::messages::CoreMessage;
+    use crate::ui::card_animation::AnimationPhase;
+    use crate::ui::card_layer::CardAddress;
+    use dioxus::core::{AttributeValue, Mutation};
+    use std::cell::RefCell;
+
+    thread_local! {
+        static STATE: RefCell<Option<UIState>> = const { RefCell::new(None) };
+        static ANIMATION: RefCell<Option<Signal<CardAnimationState>>> = const { RefCell::new(None) };
+        static CHAIN: RefCell<Option<Signal<ChainPlayback>>> = const { RefCell::new(None) };
+    }
+
+    fn app() -> Element {
+        use_context_provider(|| {
+            let mut state = UIState::default();
+            state.restarting.set(true);
+            state
+        });
+        let duel_resource = use_resource(std::future::pending::<anyhow::Result<DuelSetup>>);
+        let screen = DuelScreen(DuelScreenProps {
+            duel_resource,
+            deck_codes: vec![],
+        });
+        STATE.with(|slot| *slot.borrow_mut() = Some(consume_context::<UIState>()));
+        ANIMATION.with(|slot| {
+            *slot.borrow_mut() = Some(consume_context::<Signal<CardAnimationState>>())
+        });
+        CHAIN.with(|slot| *slot.borrow_mut() = Some(consume_context::<Signal<ChainPlayback>>()));
+        screen
+    }
+
+    events::install();
+    let mut dom = VirtualDom::new(app);
+    let initial = dom.rebuild_to_vec();
+    let restart = initial
+        .edits
+        .iter()
+        .find_map(|edit| match edit {
+            Mutation::SetAttribute {
+                name: "aria-label",
+                value: AttributeValue::Text(label),
+                id,
+                ..
+            } if *label == "Restart game" => Some(*id),
+            _ => None,
+        })
+        .expect("Restart button should be mounted");
+    dom.process_events();
+    let mut state = STATE.with(|slot| slot.borrow().unwrap());
+    let mut animation = ANIMATION.with(|slot| slot.borrow().unwrap());
+    let mut chain = CHAIN.with(|slot| slot.borrow().unwrap());
+    let mut cards = CardLayer::default();
+    let card = cards
+        .insert(
+            CardAddress {
+                controller: Player::Player,
+                location: CardLocation::MonsterZone,
+                sequence: 0,
+            },
+            1,
+        )
+        .unwrap();
+    state.cards.set(Some(cards.clone()));
+    state.selected_card.set(Some(card));
+    state.open_pile.set(Some(CardLocation::Graveyard));
+    state.waiting_on_input.set(true);
+    state.yes_no_question.set(Some("Activate?".into()));
+    animation.write().begin(vec![card], cards.clone());
+    let message = CoreMessage::try_from(
+        [
+            33, 0, 0, 0, 70, 1, 0, 0, 0, 0, 4, 0, 0, 0, 0, 1, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 1, 0, 0, 0,
+        ]
+        .as_slice(),
+    )
+    .unwrap();
+    chain.write().record(&message, &cards);
+    chain.write().start();
+    let generation = animation.peek().generation;
+    assert!(chain.peek().active);
+
+    events::dispatch(&dom, "click", restart);
+
+    assert!(*state.restarting.peek());
+    assert!(!*state.waiting_on_input.peek());
+    assert!(state.yes_no_question.peek().is_none());
+    assert!(state.cards.peek().is_none());
+    assert!(state.selected_card.peek().is_none());
+    assert!(state.open_pile.peek().is_none());
+    assert!(!animation.peek().is_active());
+    assert!(animation.peek().moving.is_empty());
+    assert!(animation.peek().source.is_none());
+    assert!(!chain.peek().active);
+    assert!(chain.peek().displayed.is_empty());
+    assert!(!chain.peek().has_pending_frames());
+    animation
+        .write()
+        .advance(generation, AnimationPhase::Moving);
+    chain.write().start();
+    assert!(!animation.peek().is_active());
+    assert!(!chain.peek().active);
+    assert!(state.interaction_blocked(Some(animation)));
+    STATE.with(|slot| *slot.borrow_mut() = None);
+    ANIMATION.with(|slot| *slot.borrow_mut() = None);
+    CHAIN.with(|slot| *slot.borrow_mut() = None);
+}
+
 #[test]
 fn interaction_gate_removes_inert_when_playback_finishes() {
     use dioxus::core::{AttributeValue, Mutation};
