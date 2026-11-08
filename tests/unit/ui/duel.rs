@@ -190,14 +190,14 @@ fn replaces_tracking_and_ui_state_when_a_duel_restarts() {
             |_, _| {},
         ))
         .unwrap();
-        let first = core.create_duel(0).unwrap();
-        let second = core.create_duel(0).unwrap();
+        let first = DuelController::new(core.create_duel(0).unwrap());
+        let second = DuelController::new(core.create_duel(0).unwrap());
         let mut state = use_context_provider(UIState::default);
         let mut view = use_context_provider(ViewState::default);
-        let mut duel = use_context_provider(|| Signal::new(None::<Duel>));
+        let mut duel = use_context_provider(|| Signal::new(None::<DuelController>));
         let mut tracking = state.cards;
         let initial = DuelSetup {
-            duel: first.clone(),
+            controller: first.clone(),
             cards: CardTracker::from_decks(&[1, 2], &[]).unwrap(),
         };
         install_duel(&mut state, &mut view, &mut duel, Some(initial.clone()));
@@ -222,7 +222,7 @@ fn replaces_tracking_and_ui_state_when_a_duel_restarts() {
         assert!(view.open_pile.peek().is_some());
         assert!(!view.effects_to_select_from.peek().is_empty());
         let replacement = DuelSetup {
-            duel: second.clone(),
+            controller: second.clone(),
             cards: CardTracker::from_decks(&[3], &[]).unwrap(),
         };
         install_duel(&mut state, &mut view, &mut duel, Some(replacement));

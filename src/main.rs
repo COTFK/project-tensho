@@ -7,8 +7,8 @@ mod utility;
 
 use dioxus::prelude::*;
 
-use crate::state::cache_cards;
-use crate::state::load_core;
+use crate::duel::controller::cache_cards;
+use crate::duel::controller::load_core;
 use crate::ui::DuelWrapper;
 use crate::ui::LoadingScreen;
 use crate::ui::RotateDeviceOverlay;

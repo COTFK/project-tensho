@@ -15,9 +15,8 @@ mod persistent_card_layer;
 use dioxus::prelude::*;
 use web_sys::window;
 
-use crate::ocgcore::Duel;
+use crate::duel::controller::{DuelController, DuelSetup};
 use crate::ocgcore::OCGCore;
-use crate::state::DuelSetup;
 use crate::state::UIState;
 use crate::state::handle_right_click;
 use crate::state::load_duel;
@@ -40,7 +39,7 @@ pub fn DuelWrapper(
 ) -> Element {
     let mut state = use_context_provider(UIState::default);
     let mut view = use_context_provider(ViewState::default);
-    let mut duel_context = use_context_provider(|| Signal::new(None::<Duel>));
+    let mut duel_context = use_context_provider(|| Signal::new(None::<DuelController>));
 
     let duel_resource = use_resource(move || {
         let custom_hand = custom_hand.clone();
@@ -60,7 +59,7 @@ pub fn DuelWrapper(
         Some(Ok(setup))
             if duel_context()
                 .as_ref()
-                .is_some_and(|duel| duel.ptr_eq(&setup.duel)) =>
+                .is_some_and(|duel| duel.ptr_eq(&setup.controller)) =>
         {
             rsx!(DuelScreen {
                 duel_resource: duel_resource,
@@ -81,11 +80,11 @@ pub fn DuelWrapper(
 fn install_duel(
     state: &mut UIState,
     view: &mut ViewState,
-    duel_context: &mut Signal<Option<Duel>>,
+    duel_context: &mut Signal<Option<DuelController>>,
     setup: Option<DuelSetup>,
 ) {
     let unchanged = match (&*duel_context.peek(), &setup) {
-        (Some(current), Some(next)) => current.ptr_eq(&next.duel),
+        (Some(current), Some(next)) => current.ptr_eq(&next.controller),
         (None, None) => true,
         _ => false,
     };
@@ -95,7 +94,7 @@ fn install_duel(
     state.reset();
     view.reset();
     let (duel, cards) = match setup {
-        Some(setup) => (Some(setup.duel), Some(setup.cards)),
+        Some(setup) => (Some(setup.controller), Some(setup.cards)),
         None => (None, None),
     };
     state.cards.set(cards);

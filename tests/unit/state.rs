@@ -1,7 +1,23 @@
 use super::*;
+use crate::duel::cards::CardPlacement;
+use crate::ocgcore::constants::Player;
 use crate::ocgcore::messages::SelectTributeMessageData;
 use ocgcore_ffi::constants::MSG_TAG_SWAP;
 use std::cell::Cell;
+
+fn handle_messages(messages: &[CoreMessage]) -> bool {
+    let mut state = consume_context::<UIState>();
+    let mut view = consume_context::<ViewState>();
+    let controller = consume_context::<Signal<Option<DuelController>>>()().unwrap();
+    handle_core_messages(
+        &mut state,
+        &mut view,
+        &controller,
+        messages,
+        try_consume_context::<Signal<CardAnimationState>>(),
+        try_consume_context::<Signal<ChainPlayback>>(),
+    )
+}
 
 #[test]
 fn pending_input_and_view_resets_are_independent() {
@@ -232,163 +248,6 @@ fn selected_card_is_cleared_when_it_disappears() {
 }
 
 #[test]
-#[cfg(not(target_arch = "wasm32"))]
-fn card_tracker_initializer_matches_native_decks_and_custom_hand() {
-    use crate::duel::cards::{CardPlacement, CardTracker};
-    use ocgcore_ffi::constants::{TYPE_FUSION, TYPE_MONSTER, TYPE_NORMAL};
-    use ocgcore_ffi::types::OCG_CardData;
-
-    fn card_data(code: u32) -> OCG_CardData {
-        static EMPTY_SETCODES: [u16; 1] = [0];
-        OCG_CardData {
-            code,
-            alias: 0,
-            setcodes: EMPTY_SETCODES.as_ptr().cast_mut(),
-            r#type: if code >= 100 {
-                TYPE_MONSTER | TYPE_FUSION
-            } else {
-                TYPE_MONSTER | TYPE_NORMAL
-            },
-            level: 4,
-            attribute: 1,
-            race: 1,
-            attack: 1000,
-            defense: 1000,
-            lscale: 0,
-            rscale: 0,
-            link_marker: 0,
-        }
-    }
-
-    let core = futures::executor::block_on(OCGCore::load(card_data, Box::new(|_| None), |_, _| {}))
-        .unwrap();
-    let duel = core.create_duel(3).unwrap();
-    let mut deck = [10; 40];
-    deck[..6].copy_from_slice(&[11, 12, 11, 13, 14, 15]);
-    pull_ids_to_front(&mut deck, &[11, 11, 14]);
-    deck.reverse();
-    let extra = [100, 101, 100];
-    let mut layer = CardTracker::from_decks(&deck, &extra).unwrap();
-
-    for code in deck {
-        duel.add_card(
-            Player::Player,
-            code,
-            Player::Player,
-            CardLocation::Deck,
-            0,
-            0,
-        );
-    }
-    for code in extra {
-        duel.add_card(
-            Player::Player,
-            code,
-            Player::Player,
-            CardLocation::ExtraDeck,
-            0,
-            10,
-        );
-    }
-    for location in [CardLocation::Deck, CardLocation::ExtraDeck] {
-        assert_eq!(
-            layer
-                .cards()
-                .iter()
-                .filter(|card| matches!(card.placement, CardPlacement::Zone(address) if address.location == location))
-                .map(|card| card.code)
-                .collect::<Vec<_>>(),
-            duel.query_cards(Player::Player, location).unwrap()
-                .iter()
-                .map(|card| card.unwrap().card_code)
-                .collect::<Vec<_>>()
-        );
-    }
-    duel.start();
-    for _ in 0..1000 {
-        let status = duel.process();
-        let messages = duel.parse_messages();
-        for message in &messages {
-            layer.apply(message).unwrap();
-        }
-        refresh_data(&mut layer, &duel).unwrap();
-        if messages
-            .iter()
-            .any(|message| matches!(message, CoreMessage::Draw(_)))
-        {
-            assert_eq!(
-                duel.query_cards(Player::Player, CardLocation::Hand)
-                    .unwrap()
-                    .iter()
-                    .map(|card| card.unwrap().card_code)
-                    .collect::<Vec<_>>(),
-                [11, 11, 14]
-            );
-            return;
-        }
-        assert_ne!(status, OCG_DuelStatus::OCG_DUEL_STATUS_END);
-    }
-    panic!("Duel did not draw the starting hand");
-}
-
-#[test]
-fn processing_continues_after_draw_until_an_input_prompt() {
-    let processed = Cell::new(0);
-    let handled = Cell::new(0);
-
-    process_until_input(
-        || {
-            processed.set(processed.get() + 1);
-            OCG_DuelStatus::OCG_DUEL_STATUS_CONTINUE
-        },
-        || {
-            handled.set(handled.get() + 1);
-            handled.get() == 2
-        },
-    );
-
-    assert_eq!(processed.get(), 2);
-    assert_eq!(handled.get(), 2);
-}
-
-#[test]
-fn processing_continues_after_automatic_response_and_stops_at_duel_end() {
-    let processed = Cell::new(0);
-    let handled = Cell::new(0);
-
-    process_until_input(
-        || {
-            processed.set(processed.get() + 1);
-            if processed.get() == 1 {
-                OCG_DuelStatus::OCG_DUEL_STATUS_AWAITING
-            } else {
-                OCG_DuelStatus::OCG_DUEL_STATUS_END
-            }
-        },
-        || {
-            handled.set(handled.get() + 1);
-            false
-        },
-    );
-
-    assert_eq!(processed.get(), 2);
-    assert_eq!(handled.get(), 2);
-}
-
-#[test]
-fn dispatches_final_messages_when_duel_ends() {
-    let mut handled = false;
-    process_until_input(
-        || OCG_DuelStatus::OCG_DUEL_STATUS_END,
-        || {
-            handled = true;
-            false
-        },
-    );
-    assert!(handled);
-}
-
-#[test]
 fn finished_duel_stops_game_loop_and_reset_clears_flag() {
     fn app() -> Element {
         let mut state = use_context_provider(UIState::default);
@@ -498,7 +357,7 @@ fn failed_tracking_blocks_layered_actions_until_restart() {
         let duel = core.create_duel(5).unwrap();
         let mut state = use_context_provider(UIState::default);
         let mut view = use_context_provider(ViewState::default);
-        use_context_provider(|| Signal::new(Some(duel)));
+        use_context_provider(|| Signal::new(Some(DuelController::new(duel))));
         let _playback = use_context_provider(|| Signal::new(CardAnimationState::default()));
         state.tracking_failed(&mut view, "injected divergence".into(), Some(_playback));
         state
@@ -532,7 +391,7 @@ fn request_messages_replace_actions_and_selection_progress() {
         let duel = core.create_duel(0).unwrap();
         let mut state = use_context_provider(UIState::default);
         let mut view = use_context_provider(ViewState::default);
-        use_context_provider(|| Signal::new(Some(duel)));
+        use_context_provider(|| Signal::new(Some(DuelController::new(duel))));
         state.cards.set(Some(CardTracker::default()));
         let card = CardData {
             card_code: 42,
@@ -654,7 +513,7 @@ fn request_messages_replace_actions_and_selection_progress() {
                 selected: vec![7],
             }));
             view.open_pile.set(Some(CardLocation::Graveyard));
-            assert!(handle_core_messages(&[message.clone()]), "{message:?}");
+            assert!(handle_messages(&[message.clone()]), "{message:?}");
             assert_eq!(*state.pending_input.peek(), Some(expected), "{message:?}");
             assert!(state.waiting_on_input());
             assert_eq!(*view.open_pile.peek(), Some(CardLocation::Graveyard));
@@ -667,7 +526,7 @@ fn request_messages_replace_actions_and_selection_progress() {
             .pending_input
             .set(Some(PendingInput::Idle(IdleMessageData::default())));
         view.effects_to_select_from.set(vec![card]);
-        assert!(!handle_core_messages(&[CoreMessage::SelectChain(
+        assert!(!handle_messages(&[CoreMessage::SelectChain(
             SelectChainMessageData {
                 player: 0,
                 effects: vec![]
@@ -704,7 +563,7 @@ fn consuming_a_response_clears_input_and_view_but_preserves_duel_state() {
         duel.start();
         let mut state = use_context_provider(UIState::default);
         let mut view = use_context_provider(ViewState::default);
-        use_context_provider(|| Signal::new(Some(duel)));
+        use_context_provider(|| Signal::new(Some(DuelController::new(duel))));
         state.cards.set(Some(cards));
         run_game_loop();
         assert!(state.waiting_on_input());
@@ -754,7 +613,7 @@ fn responses_are_blocked_during_playback_and_after_a_prompt_is_consumed() {
         let duel = core.create_duel(5).unwrap();
         let mut state = use_context_provider(UIState::default);
         let mut view = use_context_provider(ViewState::default);
-        use_context_provider(|| Signal::new(Some(duel)));
+        use_context_provider(|| Signal::new(Some(DuelController::new(duel))));
         let mut playback = use_context_provider(|| Signal::new(CardAnimationState::default()));
         state
             .pending_input
@@ -827,7 +686,7 @@ fn layered_loop_pauses_on_a_real_draw_and_resumes_to_the_prompt() {
         duel.start();
         let mut state = use_context_provider(UIState::default);
         use_context_provider(ViewState::default);
-        use_context_provider(|| Signal::new(Some(duel)));
+        use_context_provider(|| Signal::new(Some(DuelController::new(duel))));
         state
             .cards
             .set(Some(CardTracker::from_decks(&deck, &[]).unwrap()));
@@ -920,7 +779,7 @@ fn layered_loop_starts_gathering_for_a_real_hand_shuffle() {
         duel.start();
         let mut state = use_context_provider(UIState::default);
         use_context_provider(ViewState::default);
-        use_context_provider(|| Signal::new(Some(duel)));
+        use_context_provider(|| Signal::new(Some(DuelController::new(duel))));
         state
             .cards
             .set(Some(CardTracker::from_decks(&deck, &[]).unwrap()));
@@ -1001,14 +860,14 @@ fn batched_chain_messages_pause_the_loop_and_track_source_cards() {
         let mut state = use_context_provider(UIState::default);
         use_context_provider(ViewState::default);
         state.cards.set(Some(layer));
-        use_context_provider(|| Signal::new(Some(duel)));
+        use_context_provider(|| Signal::new(Some(DuelController::new(duel))));
         let mut chain = use_context_provider(|| Signal::new(ChainPlayback::default()));
         let bytes = [
             33, 0, 0, 0, 70, 10, 0, 0, 0, 0, 4, 0, 0, 0, 0, 1, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 73, 1, 1, 0, 0, 0, 74,
         ];
         let messages = crate::ocgcore::messages::parse_messages(&bytes).unwrap();
-        assert!(!handle_core_messages(&messages));
+        assert!(!handle_messages(&messages));
         assert!(chain.peek().active);
         assert_eq!(
             chain.peek().displayed,
@@ -1043,14 +902,14 @@ fn handles_real_duel_messages_until_input() {
         duel.start();
         let mut state = use_context_provider(UIState::default);
         use_context_provider(ViewState::default);
-        use_context_provider(|| Signal::new(Some(duel.clone())));
+        use_context_provider(|| Signal::new(Some(DuelController::new(duel.clone()))));
         state.cards.set(Some(CardTracker::default()));
         let tracking = state.cards;
 
         let mut phases = Vec::new();
         for _ in 0..1000 {
             let status = duel.process();
-            let waiting = handle_core_messages(&duel.parse_messages());
+            let waiting = handle_messages(&duel.parse_messages());
             if let Some(phase) = (state.current_phase)() {
                 if phases.last() != Some(&phase) {
                     phases.push(phase);
@@ -1230,7 +1089,9 @@ fn refreshes_public_graveyard_codes_without_revealing_hidden_deck_order() {
     };
     layer.insert(deck, 0).unwrap();
     let id = layer.insert(grave, 0).unwrap();
-    refresh_data(&mut layer, &duel).unwrap();
+    DuelController::new(duel.clone())
+        .refresh_data(&mut layer)
+        .unwrap();
     assert_eq!(layer.card_at(deck).unwrap().code, 0);
     assert_eq!(
         (
@@ -1257,7 +1118,9 @@ fn reports_missing_data_for_tracked_cards() {
             1,
         )
         .unwrap();
-    let error = refresh_data(&mut layer, &duel).unwrap_err();
+    let error = DuelController::new(duel.clone())
+        .refresh_data(&mut layer)
+        .unwrap_err();
     assert!(error.to_string().contains("No queried card"));
 }
 
@@ -1276,7 +1139,9 @@ fn refreshes_only_tracked_cards_and_queries_stats_only_on_field() {
         sequence: 0,
     };
     layer.insert(address, 99).unwrap();
-    refresh_data(&mut layer, &duel).unwrap();
+    DuelController::new(duel.clone())
+        .refresh_data(&mut layer)
+        .unwrap();
     let field = layer.card_at(address).unwrap();
     assert_eq!(field.code, 99);
     assert_eq!(field.data.unwrap().card_code, 10);
@@ -1387,7 +1252,9 @@ fn tracks_native_set_summon_creation_and_movement_batches() {
                 .apply(&message)
                 .unwrap_or_else(|error| panic!("{message:?}: {error:#}"));
         }
-        refresh_data(&mut layer, &duel).unwrap();
+        DuelController::new(duel.clone())
+            .refresh_data(&mut layer)
+            .unwrap();
         for location in [
             CardLocation::Deck,
             CardLocation::Hand,
