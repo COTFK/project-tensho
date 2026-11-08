@@ -40,11 +40,6 @@ impl TryFrom<CardAddress> for Anchor {
     }
 }
 
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
-pub(super) enum AnchorPart {
-    Card,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) struct CardAnchor {
     pub center_x: f64,
@@ -65,103 +60,89 @@ impl std::fmt::Display for AnchorNotReady {
 impl std::error::Error for AnchorNotReady {}
 
 impl CardAnchor {
-    fn from_rects(center: PixelsRect, size: PixelsRect) -> anyhow::Result<Self> {
-        if center.size.width == 0.0
-            || center.size.height == 0.0
-            || size.size.width == 0.0
-            || size.size.height == 0.0
-        {
+    fn from_rect(rect: PixelsRect) -> anyhow::Result<Self> {
+        if rect.size.width == 0.0 || rect.size.height == 0.0 {
             return Err(AnchorNotReady("Card anchor has no size yet").into());
         }
         ensure!(
-            center.size.width.is_finite()
-                && center.size.height.is_finite()
-                && center.origin.x.is_finite()
-                && center.origin.y.is_finite()
-                && center.size.width > 0.0
-                && center.size.height > 0.0
-                && size.size.width.is_finite()
-                && size.size.height.is_finite()
-                && size.size.width > 0.0
-                && size.size.height > 0.0,
+            rect.size.width.is_finite()
+                && rect.size.height.is_finite()
+                && rect.origin.x.is_finite()
+                && rect.origin.y.is_finite()
+                && rect.size.width > 0.0
+                && rect.size.height > 0.0,
             "Invalid or hidden card anchor"
         );
         Ok(Self {
-            center_x: center.origin.x + center.size.width / 2.0,
-            center_y: center.origin.y + center.size.height / 2.0,
-            width: size.size.width,
-            height: size.size.height,
+            center_x: rect.origin.x + rect.size.width / 2.0,
+            center_y: rect.origin.y + rect.size.height / 2.0,
+            width: rect.size.width,
+            height: rect.size.height,
         })
     }
 }
 
-type AnchorKey = (Anchor, AnchorPart);
 type AnchorEntry = (Rc<()>, Rc<MountedData>);
 
 #[derive(Clone, Default)]
-pub(super) struct LayoutAnchors(Rc<RefCell<HashMap<AnchorKey, AnchorEntry>>>);
+pub(super) struct LayoutAnchors(Rc<RefCell<HashMap<Anchor, AnchorEntry>>>);
 
 impl LayoutAnchors {
-    pub(super) fn insert(&self, key: AnchorKey, owner: Rc<()>, element: Rc<MountedData>) {
-        self.0.borrow_mut().insert(key, (owner, element));
+    pub(super) fn insert(&self, anchor: Anchor, owner: Rc<()>, element: Rc<MountedData>) {
+        self.0.borrow_mut().insert(anchor, (owner, element));
     }
 
-    fn remove(&self, key: AnchorKey, owner: &Rc<()>) {
+    fn remove(&self, anchor: Anchor, owner: &Rc<()>) {
         let mut anchors = self.0.borrow_mut();
         if anchors
-            .get(&key)
+            .get(&anchor)
             .is_some_and(|entry| Rc::ptr_eq(&entry.0, owner))
         {
-            anchors.remove(&key);
+            anchors.remove(&anchor);
         }
     }
 
     pub async fn measure(&self, address: CardAddress) -> anyhow::Result<CardAnchor> {
-        let anchor = Anchor::try_from(address)?;
-        let key = (anchor, AnchorPart::Card);
+        self.measure_anchor(Anchor::try_from(address)?).await
+    }
+
+    pub async fn measure_hand_base(&self) -> anyhow::Result<CardAnchor> {
+        self.measure_anchor(Anchor::HandBase).await
+    }
+
+    async fn measure_anchor(&self, anchor: Anchor) -> anyhow::Result<CardAnchor> {
+        let (missing, measuring, changed) = match anchor {
+            Anchor::HandBase => (
+                "Hand anchor not mounted",
+                "Measuring hand anchor",
+                "Hand anchor changed while measuring",
+            ),
+            _ => (
+                "Card anchor not mounted",
+                "Measuring card anchor",
+                "Card anchor changed while measuring",
+            ),
+        };
         let element = {
             let anchors = self.0.borrow();
             anchors
-                .get(&key)
-                .context(AnchorNotReady("Card anchor not mounted"))?
+                .get(&anchor)
+                .context(AnchorNotReady(missing))?
                 .1
                 .clone()
         };
         let rect = element
             .get_client_rect()
             .await
-            .map_err(|error| anyhow::anyhow!("Measuring card anchor: {error}"))?;
+            .map_err(|error| anyhow::anyhow!("{measuring}: {error}"))?;
         let anchors = self.0.borrow();
         ensure!(
             anchors
-                .get(&key)
+                .get(&anchor)
                 .is_some_and(|entry| Rc::ptr_eq(&entry.1, &element)),
-            "Card anchor changed while measuring"
+            changed
         );
-        CardAnchor::from_rects(rect, rect)
-    }
-
-    pub async fn measure_hand_base(&self) -> anyhow::Result<CardAnchor> {
-        let key = (Anchor::HandBase, AnchorPart::Card);
-        let element = self
-            .0
-            .borrow()
-            .get(&key)
-            .context(AnchorNotReady("Hand anchor not mounted"))?
-            .1
-            .clone();
-        let rect = element
-            .get_client_rect()
-            .await
-            .map_err(|error| anyhow::anyhow!("Measuring hand anchor: {error}"))?;
-        ensure!(
-            self.0
-                .borrow()
-                .get(&key)
-                .is_some_and(|entry| Rc::ptr_eq(&entry.1, &element)),
-            "Hand anchor changed while measuring"
-        );
-        CardAnchor::from_rects(rect, rect)
+        CardAnchor::from_rect(rect)
     }
 }
 
@@ -176,15 +157,14 @@ impl LayoutRevision {
 }
 
 #[component]
-pub(super) fn LayoutAnchor(anchor: Anchor, part: AnchorPart, class: &'static str) -> Element {
+pub(super) fn LayoutAnchor(anchor: Anchor, class: &'static str) -> Element {
     let anchors = use_context::<LayoutAnchors>();
     let revision = use_context::<LayoutRevision>();
     let owner = use_hook(|| Rc::new(()));
-    let key = (anchor, part);
     use_drop({
         let anchors = anchors.clone();
         let owner = owner.clone();
-        move || anchors.remove(key, &owner)
+        move || anchors.remove(anchor, &owner)
     });
     rsx! {
         div {
@@ -193,7 +173,7 @@ pub(super) fn LayoutAnchor(anchor: Anchor, part: AnchorPart, class: &'static str
             div {
                 class: "w-full h-full",
                 onmounted: move |event| {
-                    anchors.insert(key, owner.clone(), event.data());
+                    anchors.insert(anchor, owner.clone(), event.data());
                     revision.invalidate();
                 },
                 onresize: move |_| revision.invalidate(),

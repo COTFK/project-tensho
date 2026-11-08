@@ -1,4 +1,4 @@
-use super::super::layout_anchors::{Anchor, AnchorPart};
+use super::super::layout_anchors::Anchor;
 use super::*;
 use dioxus::html::geometry::{PixelsRect, PixelsSize, euclid::point2};
 use dioxus::html::{MountedResult, RenderedElementBacking};
@@ -49,7 +49,7 @@ fn fixture() -> (PreviewSnapshot, LayoutAnchors) {
     };
     let anchors = LayoutAnchors::default();
     anchors.insert(
-        (Anchor::HandBase, AnchorPart::Card),
+        Anchor::HandBase,
         Rc::new(()),
         Rc::new(MountedData::new(TestElement(PixelsRect::new(
             point2(500.0, 400.0),
@@ -63,7 +63,7 @@ fn fixture() -> (PreviewSnapshot, LayoutAnchors) {
         CardLocation::Banishment,
     ] {
         anchors.insert(
-            (Anchor::Pile(location), AnchorPart::Card),
+            Anchor::Pile(location),
             Rc::new(()),
             Rc::new(MountedData::new(TestElement(PixelsRect::new(
                 point2(600.0, 400.0),
@@ -96,7 +96,7 @@ fn fixture() -> (PreviewSnapshot, LayoutAnchors) {
                 PixelsSize::new(59.0, 86.0),
             );
             anchors.insert(
-                (Anchor::Zone(location, sequence), AnchorPart::Card),
+                Anchor::Zone(location, sequence),
                 Rc::new(()),
                 Rc::new(MountedData::new(TestElement(rect))),
             );
@@ -145,7 +145,7 @@ fn retries_an_anchor_that_is_initially_zero_sized() {
 
     let (_, anchors) = fixture();
     anchors.insert(
-        (Anchor::Zone(CardLocation::MonsterZone, 0), AnchorPart::Card),
+        Anchor::Zone(CardLocation::MonsterZone, 0),
         Rc::new(()),
         Rc::new(MountedData::new(DelayedElement(Cell::new(0)))),
     );

@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use super::layout_anchors::{Anchor, AnchorPart, LayoutAnchor};
+use super::layout_anchors::{Anchor, LayoutAnchor};
 
 pub(super) fn hand_transform(index: usize, hand_size: usize) -> (i32, i32) {
     let center = hand_size as i32 - 1;
@@ -17,7 +17,6 @@ pub fn Hand(hand_size: usize) -> Element {
             class: if hand_size == 0 { "min-h-[14.576271vw]" },
             LayoutAnchor {
                 anchor: Anchor::HandBase,
-                part: AnchorPart::Card,
                 class: "absolute left-1/2 top-0 w-[10vw] aspect-[59/86] -translate-x-1/2 pointer-events-none",
             }
             for index in 0..hand_size {

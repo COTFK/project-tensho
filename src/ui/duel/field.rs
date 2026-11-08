@@ -4,7 +4,7 @@ use dioxus::prelude::*;
 use super::constants::ZONE_SIZE;
 use super::effect_pile::EffectPile;
 use super::extra_deck::ExtraDeck;
-use super::layout_anchors::{Anchor, AnchorPart, LayoutAnchor, LayoutRevision};
+use super::layout_anchors::{Anchor, LayoutAnchor, LayoutRevision};
 use super::main_deck::MainDeck;
 use crate::duel::cards::CardTracker;
 use crate::ocgcore::CardData;
@@ -97,7 +97,6 @@ fn Zone(index: u8, location: CardLocation) -> Element {
             },
             LayoutAnchor {
                 anchor: Anchor::Zone(location, u32::from(index)),
-                part: AnchorPart::Card,
                 class: "absolute h-full aspect-[59/86] p-[clamp(1px,0.3vw,5px)] pointer-events-none",
             }
         }
@@ -112,7 +111,6 @@ fn PileAnchor(location: CardLocation) -> Element {
                 class: "absolute inset-[clamp(2px,0.6vw,8px)] flex items-center justify-center pointer-events-none",
                 LayoutAnchor {
                     anchor: Anchor::Pile(location),
-                    part: AnchorPart::Card,
                     class: "h-full aspect-[59/86]",
                 }
             }
@@ -123,7 +121,6 @@ fn PileAnchor(location: CardLocation) -> Element {
                 class: "absolute inset-[clamp(2px,0.6vw,8px)] flex items-center justify-center",
                 LayoutAnchor {
                     anchor: Anchor::Pile(location),
-                    part: AnchorPart::Card,
                     class: "w-full aspect-[59/86]",
                 }
                 }
