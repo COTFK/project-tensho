@@ -105,6 +105,151 @@ fn startup_artwork_matches_visible_card_images() {
     );
 }
 
+fn image_app((card, target): (TrackedCard, CardTarget)) -> Element {
+    use_card_inputs();
+    rsx! {
+        PersistentCardLayer {
+            cards: vec![card],
+            targets: vec![target],
+            selected: None,
+            suppressed: false,
+            animating: false,
+            moving: vec![],
+            chain_links: vec![],
+        }
+    }
+}
+
+fn assert_image_policy_and_rendering(card: TrackedCard, target: CardTarget, image: CardImage) {
+    assert_eq!(card_image(card, Some(target)), Some(image));
+    let mut dom = VirtualDom::new_with_props(image_app, (card, target));
+    let rendered = dom.rebuild_to_vec();
+    let urls = rendered
+        .edits
+        .iter()
+        .filter_map(|edit| match edit {
+            Mutation::SetAttribute {
+                name: "src",
+                value: AttributeValue::Text(value),
+                ..
+            } => Some(value.as_str()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(urls, [image.url()], "{card:?}, {target:?}");
+}
+
+#[test]
+fn rendering_and_preloading_agree_on_unknown_and_conflicting_positions() {
+    let raw_positions = [
+        (None, false),
+        (Some(CardPositionFlags::empty()), false),
+        (Some(CardPositionFlags::FACE_UP_ATTACK), true),
+        (Some(CardPositionFlags::FACE_UP_DEFENSE), true),
+        (Some(CardPositionFlags::FACE_DOWN_ATTACK), false),
+        (Some(CardPositionFlags::FACE_DOWN_DEFENSE), false),
+        (
+            Some(CardPositionFlags::FACE_UP_ATTACK | CardPositionFlags::FACE_DOWN_ATTACK),
+            false,
+        ),
+        (
+            Some(CardPositionFlags::FACE_UP_DEFENSE | CardPositionFlags::FACE_DOWN_DEFENSE),
+            false,
+        ),
+        (
+            Some(CardPositionFlags::FACE_UP_ATTACK | CardPositionFlags::FACE_UP_DEFENSE),
+            true,
+        ),
+    ];
+    let queried_positions = [
+        (None, true),
+        (Some(BattlePosition::FaceUpAttack), true),
+        (Some(BattlePosition::FaceUpDefense), true),
+        (Some(BattlePosition::FaceDown), false),
+        (Some(BattlePosition::FaceDownAttack), false),
+        (Some(BattlePosition::FaceDownDefense), false),
+    ];
+    for location in [
+        CardLocation::Hand,
+        CardLocation::MonsterZone,
+        CardLocation::SpellTrapZone,
+    ] {
+        for code in [0, 12345] {
+            for (raw_position, raw_face_up) in raw_positions {
+                for (queried_position, queried_face_up) in queried_positions {
+                    let (mut card, mut target) = fixture(location, raw_position);
+                    card.code = code;
+                    target.data.card_code = 54321;
+                    target.data.position = queried_position;
+                    let image = if code != 0
+                        && (location == CardLocation::Hand || raw_face_up && queried_face_up)
+                    {
+                        CardImage::Face(target.data)
+                    } else {
+                        CardImage::CardBack
+                    };
+                    assert_image_policy_and_rendering(card, target, image);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn pile_images_and_material_visibility_keep_their_existing_policy() {
+    for location in [
+        CardLocation::Deck,
+        CardLocation::ExtraDeck,
+        CardLocation::Graveyard,
+        CardLocation::Banishment,
+    ] {
+        for code in [0, 12345] {
+            let (mut card, mut target) =
+                fixture(location, Some(CardPositionFlags::FACE_DOWN_DEFENSE));
+            card.code = code;
+            target.data.position = Some(BattlePosition::FaceDownDefense);
+            for image in [
+                CardImage::CardBack,
+                CardImage::ExtraDeckBack,
+                CardImage::Face(target.data),
+                CardImage::Thumbnail(target.data),
+            ] {
+                target.appearance = CardAppearance::Pile(image);
+                assert_image_policy_and_rendering(card, target, image);
+            }
+        }
+    }
+    for code in [0, 12345] {
+        for raw_position in [
+            None,
+            Some(CardPositionFlags::FACE_UP_ATTACK),
+            Some(CardPositionFlags::FACE_DOWN_DEFENSE),
+        ] {
+            for (queried_position, face_up) in [
+                (None, true),
+                (Some(BattlePosition::FaceUpDefense), true),
+                (Some(BattlePosition::FaceDownAttack), false),
+                (Some(BattlePosition::FaceDownDefense), false),
+            ] {
+                let (mut card, mut target) = fixture(CardLocation::MonsterZone, raw_position);
+                card.code = code;
+                card.placement = CardPlacement::Overlay {
+                    host: card.id,
+                    sequence: 0,
+                };
+                target.appearance = CardAppearance::Material;
+                target.data.position = queried_position;
+                let image = if code != 0 && face_up {
+                    CardImage::Face(target.data)
+                } else {
+                    CardImage::CardBack
+                };
+                assert_image_policy_and_rendering(card, target, image);
+            }
+        }
+    }
+}
+
 #[test]
 fn chain_indicators_follow_cards_and_collect_buried_pile_links() {
     let mut layer = CardTracker::default();

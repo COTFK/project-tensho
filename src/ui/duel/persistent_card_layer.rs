@@ -170,7 +170,7 @@ fn LayerCard(
     animating: bool,
     moving: bool,
 ) -> Element {
-    let visible = visible_card(card, target);
+    let visible = target.zip(card_image(card, target));
     let hand = matches!(card.placement, CardPlacement::Zone(address) if address.location == CardLocation::Hand);
     let style = visible.map(|(target, _)| {
         let offset = match (card.placement, target.appearance) {
@@ -204,7 +204,7 @@ fn LayerCard(
             class: if animating { "[transition:transform_300ms_ease-in-out,width_300ms_ease-in-out,height_300ms_ease-in-out]" } else if hand { "[transition:transform_150ms_ease-in-out]" },
             class: if visible.is_none() { "hidden" },
             style,
-            if let Some((target, facedown)) = visible {
+            if let Some((target, image)) = visible {
                 div {
                     class: "relative w-full h-full [transform:rotate(var(--card-rotation))]",
                     class: if animating { "[transition:transform_300ms_ease-in-out]" } else if hand { "[transition:transform_150ms_ease-in-out]" },
@@ -215,10 +215,9 @@ fn LayerCard(
                         InteractiveCard {
                             card: target.data,
                             address: target.address,
-                            force_facedown: facedown,
                             passive: target.appearance != CardAppearance::Interactive,
                             animated: animating,
-                            image: card_image(card, Some(target)),
+                            image,
                             selected,
                             suppress: suppressed,
                         }

@@ -11,10 +11,9 @@ use crate::ui::components::{ActionButton, Card, CardActionMenu, CardImage};
 pub(super) fn InteractiveCard(
     card: CardData,
     address: CardAddress,
-    #[props(default)] force_facedown: bool,
+    image: CardImage,
     #[props(default)] passive: bool,
     #[props(default)] animated: bool,
-    #[props(default)] image: Option<CardImage>,
     selected: bool,
     suppress: bool,
 ) -> Element {
@@ -56,16 +55,6 @@ pub(super) fn InteractiveCard(
     } else {
         ""
     };
-    let facedown = force_facedown
-        || !hand
-            && matches!(
-                card.position,
-                Some(
-                    BattlePosition::FaceDown
-                        | BattlePosition::FaceDownAttack
-                        | BattlePosition::FaceDownDefense
-                )
-            );
     rsx! {
         div {
             class: if passive || !hand { "relative w-full h-full" } else { "" },
@@ -107,7 +96,7 @@ pub(super) fn InteractiveCard(
                 }
             }
             Card {
-                image: image.unwrap_or(if facedown { CardImage::CardBack } else { CardImage::Face(card) }),
+                image,
                 animated,
                 class: card_class,
                 is_selected: selected || (!hand && (actions.selected || actions.tribute_selected)),

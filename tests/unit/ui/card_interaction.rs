@@ -31,6 +31,106 @@ fn card(controller: Player, location: CardLocation, sequence: u8, index: u8) -> 
     }
 }
 
+fn image_app((data, image, passive): (CardData, CardImage, bool)) -> Element {
+    let pending = use_signal(|| None::<PendingInput>);
+    use_context_provider(|| ReadSignal::new(pending));
+    use_context_provider(|| {
+        EventHandler::new(|_: CardAction| -> () { panic!("Unexpected card action") })
+    });
+    rsx! {
+        InteractiveCard {
+            card: data,
+            address: address(data.controller, data.location, u32::from(data.sequence)),
+            image,
+            passive,
+            selected: false,
+            suppress: false,
+        }
+    }
+}
+
+#[test]
+fn supplied_images_are_not_reinterpreted_and_keep_card_rotation() {
+    use dioxus::core::{AttributeValue, Mutation};
+
+    let image_data = CardData {
+        card_code: 54321,
+        ..Default::default()
+    };
+    for location in [CardLocation::Hand, CardLocation::MonsterZone] {
+        for passive in [false, true] {
+            for position in [
+                None,
+                Some(BattlePosition::FaceUpAttack),
+                Some(BattlePosition::FaceUpDefense),
+                Some(BattlePosition::FaceDown),
+                Some(BattlePosition::FaceDownAttack),
+                Some(BattlePosition::FaceDownDefense),
+            ] {
+                let data = CardData {
+                    position,
+                    ..card(Player::Player, location, 0, 0)
+                };
+                for image in [
+                    CardImage::Face(image_data),
+                    CardImage::Thumbnail(image_data),
+                    CardImage::CardBack,
+                    CardImage::ExtraDeckBack,
+                ] {
+                    let mut dom = VirtualDom::new_with_props(image_app, (data, image, passive));
+                    let rendered = dom.rebuild_to_vec();
+                    let urls = rendered
+                        .edits
+                        .iter()
+                        .filter_map(|edit| match edit {
+                            Mutation::SetAttribute {
+                                name: "src",
+                                value: AttributeValue::Text(value),
+                                ..
+                            } => Some(value.as_str()),
+                            _ => None,
+                        })
+                        .collect::<Vec<_>>();
+                    assert_eq!(urls, [image.url()]);
+                    let card = rendered
+                        .edits
+                        .iter()
+                        .find_map(|edit| match edit {
+                            Mutation::NewEventListener { name, id } if name == "click" => Some(*id),
+                            _ => None,
+                        })
+                        .expect("Card should retain its click handler");
+                    let class = rendered
+                        .edits
+                        .iter()
+                        .find_map(|edit| match edit {
+                            Mutation::SetAttribute {
+                                name: "class",
+                                value: AttributeValue::Text(value),
+                                id,
+                                ..
+                            } if *id == card => Some(value.as_str()),
+                            _ => None,
+                        })
+                        .expect("Card should retain its class");
+                    let rotated = !passive
+                        && location != CardLocation::Hand
+                        && matches!(
+                            position,
+                            Some(BattlePosition::FaceUpDefense | BattlePosition::FaceDownDefense)
+                        );
+                    assert_eq!(class.contains("-rotate-90"), rotated);
+                    assert_eq!(class.contains("w-full"), passive);
+                    assert_eq!(
+                        class.contains("w-[10vw]"),
+                        !passive && location == CardLocation::Hand
+                    );
+                }
+            }
+        }
+    }
+}
+
 #[test]
 fn empty_prompts_offer_no_actions() {
     let actions = PendingInput::Idle(IdleMessageData::default()).card_actions(CardAddress {
@@ -214,10 +314,12 @@ fn a_rendered_menu_resolves_the_current_request_without_whole_app_context() {
             })
         });
         STATE.with(|slot| *slot.borrow_mut() = Some((state, view)));
+        let data = card(Player::Player, CardLocation::Hand, 0, 7);
         rsx! {
             InteractiveCard {
-                card: card(Player::Player, CardLocation::Hand, 0, 7),
+                card: data,
                 address: hand,
+                image: CardImage::Face(data),
                 selected: view.selected_card.read().is_some(),
                 suppress: !view.effects_to_select_from.read().is_empty(),
             }
