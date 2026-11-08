@@ -3,7 +3,9 @@ use std::future::pending;
 
 use crate::define_ui_state;
 use crate::duel::cards::{CardAddress, CardTracker};
-use crate::duel::controller::{self, DuelController, DuelSetup, process_until_input};
+use crate::duel::controller::{
+    self, DuelController, DuelSetup, process_until_input, resolve_chain_event,
+};
 use crate::duel::input::PendingInput;
 use crate::ocgcore::CardData;
 use crate::ocgcore::OCGCore;
@@ -11,14 +13,14 @@ use crate::ocgcore::Response;
 use crate::ocgcore::constants::CardLocation;
 use crate::ocgcore::constants::Phase;
 use crate::ocgcore::messages::CoreMessage;
-use crate::ui::card_animation::{CardAnimationState, plan_animation};
-use crate::ui::chain::ChainPlayback;
+use crate::ui::card_animation::plan_animation;
+use crate::ui::playback::Playback;
 use crate::ui::view_state::ViewState;
 use ocgcore_ffi::enums::OCG_DuelStatus;
 
 pub(crate) fn select_card(address: CardAddress) {
     let state = consume_context::<UIState>();
-    if state.interaction_blocked(try_consume_context::<Signal<CardAnimationState>>()) {
+    if state.interaction_blocked(consume_context::<Playback>()) {
         tracing::warn!("Ignoring card selection during animation");
         return;
     }
@@ -51,15 +53,14 @@ define_ui_state!(UIState {
 
 pub fn run_game_loop() {
     let mut state = consume_context::<UIState>();
-    let playback = try_consume_context::<Signal<CardAnimationState>>();
+    let mut playback = consume_context::<Playback>();
     let tracking = state.cards;
-    if state.interaction_blocked(playback) || (state.duel_finished)() || state.waiting_on_input() {
+    if state.processing_blocked(playback) {
         return;
     }
     let controller = consume_context::<Signal<Option<DuelController>>>();
     let controller = controller().expect("Duel context missing active controller");
     let mut view = consume_context::<ViewState>();
-    let chain = try_consume_context::<Signal<ChainPlayback>>();
     let mut duel_finished = state.duel_finished;
     process_until_input(
         || {
@@ -70,30 +71,17 @@ pub fn run_game_loop() {
             status
         },
         || {
-            let before = if playback.is_some() {
-                match &*tracking.peek() {
-                    Some(layer) => Some(layer.clone()),
-                    _ => None,
-                }
-            } else {
-                None
-            };
+            let before = tracking.peek().as_ref().cloned();
             let messages = controller.parse_messages();
-            let waiting = handle_core_messages(
-                &mut state,
-                &mut view,
-                &controller,
-                &messages,
-                playback,
-                chain,
-            );
+            let waiting =
+                handle_core_messages(&mut state, &mut view, &controller, &messages, playback);
             if (state.restarting)() || (state.failure)().is_some() {
                 return true;
             }
-            if let (Some(before), Some(mut playback)) = (before, playback) {
+            if let Some(before) = before {
                 if let Some(after) = &*tracking.peek() {
                     if let Some(animation) = plan_animation(&messages, &before, after) {
-                        animation.begin(&mut playback.write(), before);
+                        animation.begin(&mut playback.animation.write(), before);
                         return true;
                     }
                 }
@@ -106,7 +94,7 @@ pub fn run_game_loop() {
 pub fn handle_right_click(evt: MouseEvent) {
     evt.prevent_default();
     let state = consume_context::<UIState>();
-    if state.interaction_blocked(try_consume_context::<Signal<CardAnimationState>>()) {
+    if state.interaction_blocked(consume_context::<Playback>()) {
         return;
     }
 
@@ -142,7 +130,7 @@ pub(crate) async fn load_duel(
 
 pub fn send_response(response: Response) {
     let mut state = consume_context::<UIState>();
-    if state.interaction_blocked(try_consume_context::<Signal<CardAnimationState>>()) {
+    if state.interaction_blocked(consume_context::<Playback>()) {
         tracing::warn!("Ignoring response during card animation");
         return;
     }
@@ -163,31 +151,37 @@ impl UIState {
         self.pending_input.read().is_some()
     }
 
-    pub(crate) fn interaction_blocked(&self, playback: Option<Signal<CardAnimationState>>) -> bool {
-        (self.restarting)()
-            || (self.failure)().is_some()
-            || playback.is_some_and(|playback| playback().is_active())
-            || try_consume_context::<Signal<ChainPlayback>>().is_some_and(|chain| chain().active)
+    pub(crate) fn interaction_blocked(&self, playback: Playback) -> bool {
+        (self.restarting)() || (self.failure)().is_some() || playback.is_active()
     }
 
-    pub(crate) fn fail(&mut self, error: String, playback: Option<Signal<CardAnimationState>>) {
+    pub(crate) fn processing_blocked(&self, playback: Playback) -> bool {
+        self.interaction_blocked(playback) || (self.duel_finished)() || self.waiting_on_input()
+    }
+
+    pub(crate) fn modals_suppressed(&self, startup_ready: bool, playback: Playback) -> bool {
+        (!startup_ready && (self.failure)().is_none()) || self.interaction_blocked(playback)
+    }
+
+    pub(crate) fn reset_duel(&mut self, view: &mut ViewState, mut playback: Playback) {
+        playback.cancel();
+        self.reset();
+        view.reset();
+    }
+
+    pub(crate) fn restart(&mut self, view: &mut ViewState, playback: Playback) {
+        self.reset_duel(view, playback);
+        self.restarting.set(true);
+    }
+
+    pub(crate) fn fail(&mut self, error: String, mut playback: Playback) {
         if self.failure.peek().is_none() {
-            if let Some(mut playback) = playback {
-                playback.write().cancel();
-            }
-            if let Some(mut chain) = try_consume_context::<Signal<ChainPlayback>>() {
-                chain.write().cancel();
-            }
+            playback.cancel();
             self.failure.set(Some(error));
         }
     }
 
-    fn tracking_failed(
-        &mut self,
-        view: &mut ViewState,
-        error: String,
-        playback: Option<Signal<CardAnimationState>>,
-    ) {
+    fn tracking_failed(&mut self, view: &mut ViewState, error: String, playback: Playback) {
         tracing::error!("{error}");
         self.cards.set(None);
         view.selected_card.set(None);
@@ -198,7 +192,7 @@ impl UIState {
         &mut self,
         view: &mut ViewState,
         message: &CoreMessage,
-        playback: Option<Signal<CardAnimationState>>,
+        playback: Playback,
     ) -> bool {
         if self.interaction_blocked(playback) {
             return false;
@@ -240,8 +234,7 @@ fn handle_core_messages(
     view: &mut ViewState,
     controller: &DuelController,
     messages: &[CoreMessage],
-    playback: Option<Signal<CardAnimationState>>,
-    chain: Option<Signal<ChainPlayback>>,
+    mut playback: Playback,
 ) -> bool {
     let mut tracking = state.cards;
     let mut pending_input = state.pending_input;
@@ -255,16 +248,14 @@ fn handle_core_messages(
         if !state.apply_card_message(view, &message, playback) {
             return true;
         }
-        if matches!(
-            message,
-            CoreMessage::Chaining(_) | CoreMessage::ChainSolved(_) | CoreMessage::ChainEnd
-        ) && let Some(mut chain) = chain
         {
             let cards = tracking.peek();
             let layer = cards
                 .as_ref()
                 .expect("Card tracking missing for active duel");
-            chain.write().record(&message, layer);
+            if let Some(event) = resolve_chain_event(&message, layer) {
+                playback.chain.write().record(event);
+            }
         }
         let responded = pending_input.with_mut(|input| {
             current_phase.with_mut(|phase| controller.handle_message(message, input, phase))
@@ -291,10 +282,8 @@ fn handle_core_messages(
         return true;
     }
 
-    if let Some(mut chain) = chain
-        && chain.peek().has_pending_frames()
-    {
-        chain.write().start();
+    if playback.chain.peek().has_pending_frames() {
+        playback.chain.write().start();
     }
     state.waiting_on_input()
 }

@@ -5,6 +5,7 @@ use crate::ocgcore::CardData;
 use crate::ocgcore::messages::{SelectCardMessageData, SortCardMessageData};
 use crate::ui::card_animation::CardAnimationState;
 use crate::ui::components::ModalSuppression;
+use crate::ui::playback::use_playback;
 use dioxus::core::{AttributeValue, Mutation};
 use std::cell::RefCell;
 
@@ -18,11 +19,11 @@ thread_local! {
 
 fn app() -> Element {
     let state = use_context_provider(UIState::default);
-    let playback = use_context_provider(|| Signal::new(CardAnimationState::default()));
-    let suppressed = use_memo(move || state.interaction_blocked(Some(playback)));
+    let playback = use_playback();
+    let suppressed = use_memo(move || state.interaction_blocked(playback));
     use_context_provider(|| ModalSuppression(suppressed));
     STATE.with(|slot| *slot.borrow_mut() = Some(state));
-    PLAYBACK.with(|slot| *slot.borrow_mut() = Some(playback));
+    PLAYBACK.with(|slot| *slot.borrow_mut() = Some(playback.animation));
     rsx! {
         CardSelector {}
         SortCardSelector {}

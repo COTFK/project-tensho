@@ -13,6 +13,7 @@ use crate::ocgcore::constants::{BattlePosition, CardLocation, Player};
 use crate::state::UIState;
 use crate::ui::card_animation::{AnimationPhase, CardAnimationState, wait_millis};
 use crate::ui::components::CardImage;
+use crate::ui::playback::Playback;
 use crate::ui::view_state::ViewState;
 use crate::utility::{card_image_url, card_thumbnail_url};
 
@@ -494,7 +495,8 @@ pub(super) fn LayeredField(mut startup_ready: Signal<bool>, deck_codes: Vec<u32>
     let revision = use_context::<LayoutRevision>();
     let mut layered_mounted = use_signal(|| false);
     let artwork = use_signal(HashMap::<String, ArtworkStatus>::new);
-    let playback = try_consume_context::<Signal<CardAnimationState>>();
+    let playback_state = use_context::<Playback>();
+    let playback = playback_state.animation;
     let resource = use_resource(move || {
         let layout_revision = revision;
         let revision = (revision.0)();
@@ -520,12 +522,10 @@ pub(super) fn LayeredField(mut startup_ready: Signal<bool>, deck_codes: Vec<u32>
         (Some(input), Some(Ok(geometry))) => Some(
             targets(input, geometry)
                 .and_then(|mut targets| {
-                    if let Some(playback) = playback {
-                        let playback = playback();
-                        preserve_pile_images(input, &mut targets, &playback)?;
-                        shuffle_source_targets(&mut targets, geometry.hand_base, &playback)?;
-                        gather_hand(geometry.hand_base, &mut targets, &playback);
-                    }
+                    let playback = playback();
+                    preserve_pile_images(input, &mut targets, &playback)?;
+                    shuffle_source_targets(&mut targets, geometry.hand_base, &playback)?;
+                    gather_hand(geometry.hand_base, &mut targets, &playback);
                     Ok(targets)
                 })
                 .map_err(|error| format!("{error:#}")),
@@ -575,21 +575,20 @@ pub(super) fn LayeredField(mut startup_ready: Signal<bool>, deck_codes: Vec<u32>
         let finished = (state.duel_finished)();
         let _ = artwork();
         let _ = tracking();
-        let Some(playback) = playback else { return };
-        let current = playback();
+        let playing = playback_state.is_active();
         if (state.failure)().is_some() || (state.restarting)() {
             return;
         }
         if let Some(error) = &target_failure {
             tracing::error!("Card layer synchronization failed: {error}");
-            state.fail(error.clone(), Some(playback));
+            state.fail(error.clone(), playback_state);
             return;
         }
         if !ready {
             if let Some(url) = &artwork_failure {
                 let error = format!("Cannot load card artwork: {url}");
                 tracing::error!("{error}");
-                state.fail(error, Some(playback));
+                state.fail(error, playback_state);
                 return;
             }
             if let Some((measured_revision, result)) = measured.as_ref() {
@@ -597,7 +596,7 @@ pub(super) fn LayeredField(mut startup_ready: Signal<bool>, deck_codes: Vec<u32>
                     match result {
                         Err(error) => {
                             state
-                                .fail(format!("Cannot measure the field: {error}"), Some(playback));
+                                .fail(format!("Cannot measure the field: {error}"), playback_state);
                             return;
                         }
                         Ok(_)
@@ -608,7 +607,7 @@ pub(super) fn LayeredField(mut startup_ready: Signal<bool>, deck_codes: Vec<u32>
                                 targets_ready,
                                 artwork_ready,
                                 waiting || finished,
-                                current.is_active(),
+                                playing,
                             ) =>
                         {
                             startup_ready.set(true)
@@ -624,7 +623,7 @@ pub(super) fn LayeredField(mut startup_ready: Signal<bool>, deck_codes: Vec<u32>
                     Ok(_) => {}
                     Err(error) => state.fail(
                         format!("Cannot remeasure the field: {error}"),
-                        Some(playback),
+                        playback_state,
                     ),
                 }
             }
@@ -640,9 +639,7 @@ pub(super) fn LayeredField(mut startup_ready: Signal<bool>, deck_codes: Vec<u32>
         .as_ref()
         .map(|snapshot| snapshot.cards.cards().to_vec())
         .unwrap_or_default();
-    if let Some(playback) = playback {
-        shuffle_source_cards(&mut cards, &playback());
-    }
+    shuffle_source_cards(&mut cards, &playback());
     rsx! {
         Field {}
         Hand {}

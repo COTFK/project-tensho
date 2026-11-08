@@ -6,11 +6,12 @@ use super::card_stats::CardStats;
 use super::chain_badges::ChainBadges;
 use super::layout_anchors::CardAnchor;
 use crate::duel::cards::{Card as TrackedCard, CardAddress, CardId, CardPlacement};
+use crate::duel::controller::ChainLink;
 use crate::ocgcore::CardData;
 use crate::ocgcore::constants::{BattlePosition, CardLocation, Player};
 use crate::ocgcore::location_info::CardPositionFlags;
 use crate::ui::card_animation::CardAnimationState;
-use crate::ui::chain::{ChainLink, ChainPlayback};
+use crate::ui::chain::ChainPlayback;
 use crate::ui::components::CardImage;
 use crate::ui::view_state::ViewState;
 

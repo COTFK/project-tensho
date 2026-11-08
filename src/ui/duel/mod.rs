@@ -22,12 +22,13 @@ use crate::state::handle_right_click;
 use crate::state::load_duel;
 use crate::state::run_game_loop;
 use crate::ui::LoadingScreen;
-use crate::ui::card_animation::{CardAnimationState, use_animation_completion};
-use crate::ui::chain::{ChainPlayback, use_chain_playback};
+use crate::ui::card_animation::use_animation_completion;
+use crate::ui::chain::use_chain_playback;
 use crate::ui::components::ModalSuppression;
 use crate::ui::components::UIButton;
 use crate::ui::components::svg::FullscreenIcon;
 use crate::ui::components::svg::ResetIcon;
+use crate::ui::playback::{Playback, use_playback};
 use crate::ui::view_state::ViewState;
 use layered_field::LayeredField;
 use modal::ModalContainer;
@@ -39,6 +40,7 @@ pub fn DuelWrapper(
 ) -> Element {
     let mut state = use_context_provider(UIState::default);
     let mut view = use_context_provider(ViewState::default);
+    let playback = use_playback();
     let mut duel_context = use_context_provider(|| Signal::new(None::<DuelController>));
 
     let duel_resource = use_resource(move || {
@@ -52,7 +54,13 @@ pub fn DuelWrapper(
             Some(Ok(setup)) => Some(setup.clone()),
             _ => None,
         };
-        install_duel(&mut state, &mut view, &mut duel_context, next_setup);
+        install_duel(
+            &mut state,
+            &mut view,
+            playback,
+            &mut duel_context,
+            next_setup,
+        );
     });
 
     match &*duel_resource.read() {
@@ -80,6 +88,7 @@ pub fn DuelWrapper(
 fn install_duel(
     state: &mut UIState,
     view: &mut ViewState,
+    playback: Playback,
     duel_context: &mut Signal<Option<DuelController>>,
     setup: Option<DuelSetup>,
 ) {
@@ -91,8 +100,7 @@ fn install_duel(
     if unchanged {
         return;
     }
-    state.reset();
-    view.reset();
+    state.reset_duel(view, playback);
     let (duel, cards) = match setup {
         Some(setup) => (Some(setup.controller), Some(setup.cards)),
         None => (None, None),
@@ -108,16 +116,12 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>, deck_codes: Ve
     use_context_provider(layout_anchors::LayoutAnchors::default);
     let revision = use_context_provider(|| layout_anchors::LayoutRevision(Signal::new(0)));
     let startup_ready = use_signal(|| false);
-    let mut playback = use_context_provider(|| Signal::new(CardAnimationState::default()));
-    let mut chain = use_context_provider(|| Signal::new(ChainPlayback::default()));
-    let modal_suppressed = use_memo(move || {
-        (!startup_ready() && (state.failure)().is_none())
-            || state.interaction_blocked(Some(playback))
-    });
+    let playback = use_context::<Playback>();
+    let modal_suppressed = use_memo(move || state.modals_suppressed(startup_ready(), playback));
     use_context_provider(|| ModalSuppression(modal_suppressed));
 
-    use_animation_completion(playback);
-    use_chain_playback(chain);
+    use_animation_completion(playback.animation);
+    use_chain_playback(playback.chain);
 
     // Start game loop
     use_effect(run_game_loop);
@@ -129,7 +133,7 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>, deck_codes: Ve
             oncontextmenu: handle_right_click,
             onresize: move |_| revision.invalidate(),
             onclick: move |_| {
-                if !state.interaction_blocked(Some(playback)) && (view.selected_card)().is_some() {
+                if !state.interaction_blocked(playback) && (view.selected_card)().is_some() {
                     view.selected_card.set(None);
                 }
 
@@ -140,11 +144,7 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>, deck_codes: Ve
                 class: "fixed top-3 left-3 z-50 w-max h-max p-2",
                 label: "Restart game",
                 onclick: move |_| {
-                    playback.write().cancel();
-                    chain.write().cancel();
-                    state.reset();
-                    view.reset();
-                    state.restarting.set(true);
+                    state.restart(&mut view, playback);
                     duel_resource.clear();
                     duel_resource.restart();
                 },
@@ -169,7 +169,7 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>, deck_codes: Ve
                 ModalContainer {}
             }
             InteractionGate {
-                active: state.interaction_blocked(Some(playback)),
+                active: state.interaction_blocked(playback),
                 LayeredField { startup_ready, deck_codes }
             }
             if let Some(error) = &(state.failure)() {

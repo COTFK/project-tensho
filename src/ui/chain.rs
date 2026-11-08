@@ -2,17 +2,11 @@ use std::collections::VecDeque;
 
 use dioxus::prelude::*;
 
-use crate::duel::cards::{CardId, CardTracker};
-use crate::ocgcore::messages::CoreMessage;
+use crate::duel::cards::CardId;
+use crate::duel::controller::{ChainEvent, ChainLink};
 use crate::ui::card_animation::wait_millis;
 
 const CHAIN_FRAME_MILLIS: u32 = 600;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct ChainLink {
-    pub number: u32,
-    pub card: Option<CardId>,
-}
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct ChainPlayback {
@@ -35,56 +29,33 @@ impl ChainPlayback {
         !self.frames.is_empty()
     }
 
-    pub fn record(&mut self, message: &CoreMessage, cards: &CardTracker) {
-        match message {
-            CoreMessage::Chaining(message) => {
-                let card = match cards.card_at_location(message.location) {
-                    Ok(Some(card)) => Some(card.id),
-                    Ok(None) => {
-                        tracing::warn!(
-                            "No tracked card for chain link {} at {:?}",
-                            message.chain_link,
-                            message.location
-                        );
-                        None
-                    }
-                    Err(error) => {
-                        tracing::warn!(
-                            "Cannot locate card for chain link {}: {error:#}",
-                            message.chain_link
-                        );
-                        None
-                    }
-                };
+    pub fn record(&mut self, event: ChainEvent) {
+        match event {
+            ChainEvent::Added(link) => {
                 if self
                     .links
                     .iter()
-                    .any(|link| link.number == message.chain_link)
+                    .any(|existing| existing.number == link.number)
                 {
-                    tracing::warn!("Replacing duplicate chain link {}", message.chain_link);
-                    self.links.retain(|link| link.number != message.chain_link);
+                    tracing::warn!("Replacing duplicate chain link {}", link.number);
+                    self.links.retain(|existing| existing.number != link.number);
                 }
-                self.links.push(ChainLink {
-                    number: message.chain_link,
-                    card,
-                });
+                self.links.push(link);
             }
-            CoreMessage::ChainSolved(message) => {
+            ChainEvent::Solved(number) => {
                 let old_len = self.links.len();
-                self.links
-                    .retain(|link| link.number != u32::from(message.chain_link));
+                self.links.retain(|link| link.number != number);
                 if self.links.len() == old_len {
-                    tracing::warn!("Solved unknown chain link {}", message.chain_link);
+                    tracing::warn!("Solved unknown chain link {}", number);
                     return;
                 }
             }
-            CoreMessage::ChainEnd => {
+            ChainEvent::End => {
                 if self.links.is_empty() {
                     return;
                 }
                 self.links.clear();
             }
-            _ => return,
         }
         self.frames.push_back(self.links.clone());
     }

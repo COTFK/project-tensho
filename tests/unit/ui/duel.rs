@@ -1,7 +1,10 @@
 use super::*;
 use crate::duel::cards::CardTracker;
+use crate::duel::controller::{ChainEvent, ChainLink, resolve_chain_event};
 use crate::duel::input::PendingInput;
 use crate::ocgcore::CardData;
+use crate::ui::card_animation::CardAnimationState;
+use crate::ui::chain::ChainPlayback;
 
 #[path = "events.rs"]
 mod events;
@@ -23,6 +26,7 @@ fn restart_button_cancels_playback_and_clears_pending_input_and_view() {
     }
 
     fn app() -> Element {
+        use_playback();
         use_context_provider(ViewState::default);
         use_context_provider(|| {
             let mut state = UIState::default();
@@ -94,7 +98,9 @@ fn restart_button_cancels_playback_and_clears_pending_input_and_view() {
         .as_slice(),
     )
     .unwrap();
-    chain.write().record(&message, &cards);
+    chain
+        .write()
+        .record(resolve_chain_event(&message, &cards).unwrap());
     chain.write().start();
     let generation = animation.peek().generation;
     assert!(chain.peek().active);
@@ -120,7 +126,7 @@ fn restart_button_cancels_playback_and_clears_pending_input_and_view() {
     chain.write().start();
     assert!(!animation.peek().is_active());
     assert!(!chain.peek().active);
-    assert!(state.interaction_blocked(Some(animation)));
+    assert!(state.interaction_blocked(Playback { animation, chain }));
     STATE.with(|slot| *slot.borrow_mut() = None);
     VIEW.with(|slot| *slot.borrow_mut() = None);
     ANIMATION.with(|slot| *slot.borrow_mut() = None);
@@ -193,6 +199,9 @@ fn replaces_tracking_and_ui_state_when_a_duel_restarts() {
         let first = DuelController::new(core.create_duel(0).unwrap());
         let second = DuelController::new(core.create_duel(0).unwrap());
         let mut state = use_context_provider(UIState::default);
+        let playback = use_playback();
+        let mut animation = playback.animation;
+        let mut chain = playback.chain;
         let mut view = use_context_provider(ViewState::default);
         let mut duel = use_context_provider(|| Signal::new(None::<DuelController>));
         let mut tracking = state.cards;
@@ -200,8 +209,25 @@ fn replaces_tracking_and_ui_state_when_a_duel_restarts() {
             controller: first.clone(),
             cards: CardTracker::from_decks(&[1, 2], &[]).unwrap(),
         };
-        install_duel(&mut state, &mut view, &mut duel, Some(initial.clone()));
+        install_duel(
+            &mut state,
+            &mut view,
+            playback,
+            &mut duel,
+            Some(initial.clone()),
+        );
         let selected = tracking.peek().as_ref().unwrap().cards()[0].id;
+        animation
+            .write()
+            .begin(vec![selected], tracking.peek().as_ref().unwrap().clone());
+        let generation = animation.peek().generation;
+        for number in [1, 2] {
+            chain.write().record(ChainEvent::Added(ChainLink {
+                number,
+                card: Some(selected),
+            }));
+        }
+        chain.write().start();
         view.selected_card.set(Some(selected));
         view.open_pile
             .set(Some(crate::ocgcore::constants::CardLocation::ExtraDeck));
@@ -215,23 +241,39 @@ fn replaces_tracking_and_ui_state_when_a_duel_restarts() {
         state.restarting.set(true);
         state.failure.set(Some("test failure".into()));
         tracking.set(None);
-        install_duel(&mut state, &mut view, &mut duel, Some(initial));
+        install_duel(&mut state, &mut view, playback, &mut duel, Some(initial));
         assert!(state.waiting_on_input());
         assert!(tracking.read().is_none());
         assert_eq!(*view.selected_card.peek(), Some(selected));
         assert!(view.open_pile.peek().is_some());
         assert!(!view.effects_to_select_from.peek().is_empty());
+        assert!(animation.peek().is_active());
+        assert_eq!(animation.peek().generation, generation);
+        assert!(chain.peek().active);
+        assert!(chain.peek().has_pending_frames());
         let replacement = DuelSetup {
             controller: second.clone(),
             cards: CardTracker::from_decks(&[3], &[]).unwrap(),
         };
-        install_duel(&mut state, &mut view, &mut duel, Some(replacement));
+        install_duel(
+            &mut state,
+            &mut view,
+            playback,
+            &mut duel,
+            Some(replacement),
+        );
         assert!(!state.waiting_on_input());
         assert!(!(state.restarting)());
         assert!((state.failure)().is_none());
         assert!(view.selected_card.peek().is_none());
         assert!(view.open_pile.peek().is_none());
         assert!(view.effects_to_select_from.peek().is_empty());
+        assert!(!playback.is_active());
+        assert!(animation.peek().source.is_none());
+        assert!(animation.peek().moving.is_empty());
+        assert_ne!(animation.peek().generation, generation);
+        assert!(chain.peek().displayed.is_empty());
+        assert!(!chain.peek().has_pending_frames());
         assert!(duel.read().as_ref().unwrap().ptr_eq(&second));
         let guard = tracking.read();
         let Some(layer) = &*guard else {
@@ -239,10 +281,26 @@ fn replaces_tracking_and_ui_state_when_a_duel_restarts() {
         };
         assert_eq!(layer.cards().len(), 1);
         assert_eq!(layer.cards()[0].code, 3);
+        let card = layer.cards()[0].id;
+        let source = layer.clone();
         drop(guard);
-        install_duel(&mut state, &mut view, &mut duel, None);
+        animation.write().begin(vec![card], source);
+        animation.write().advance(
+            generation,
+            crate::ui::card_animation::AnimationPhase::Moving,
+        );
+        assert!(animation.peek().is_active());
+        chain.write().record(ChainEvent::Added(ChainLink {
+            number: 3,
+            card: Some(card),
+        }));
+        chain.write().start();
+        install_duel(&mut state, &mut view, playback, &mut duel, None);
         assert!(duel.read().is_none());
         assert!(tracking.read().is_none());
+        assert!(!playback.is_active());
+        assert!(chain.peek().displayed.is_empty());
+        assert!(!chain.peek().has_pending_frames());
         rsx! {}
     }
 

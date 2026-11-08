@@ -1,7 +1,7 @@
 use anyhow::Context;
 use rand::seq::SliceRandom;
 
-use super::cards::{CardPlacement, CardTracker};
+use super::cards::{CardId, CardPlacement, CardTracker};
 use super::input::PendingInput;
 use crate::ocgcore::constants::{CardLocation, Phase, Player};
 use crate::ocgcore::messages::CoreMessage;
@@ -22,6 +22,56 @@ pub(crate) struct DuelController {
 pub(crate) struct DuelSetup {
     pub controller: DuelController,
     pub cards: CardTracker,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ChainLink {
+    pub number: u32,
+    pub card: Option<CardId>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ChainEvent {
+    Added(ChainLink),
+    Solved(u32),
+    End,
+}
+
+pub(crate) fn resolve_chain_event(
+    message: &CoreMessage,
+    cards: &CardTracker,
+) -> Option<ChainEvent> {
+    match message {
+        CoreMessage::Chaining(message) => {
+            let card = match cards.card_at_location(message.location) {
+                Ok(Some(card)) => Some(card.id),
+                Ok(None) => {
+                    tracing::warn!(
+                        "No tracked card for chain link {} at {:?}",
+                        message.chain_link,
+                        message.location
+                    );
+                    None
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        "Cannot locate card for chain link {}: {error:#}",
+                        message.chain_link
+                    );
+                    None
+                }
+            };
+            Some(ChainEvent::Added(ChainLink {
+                number: message.chain_link,
+                card,
+            }))
+        }
+        CoreMessage::ChainSolved(message) => {
+            Some(ChainEvent::Solved(u32::from(message.chain_link)))
+        }
+        CoreMessage::ChainEnd => Some(ChainEvent::End),
+        _ => None,
+    }
 }
 
 impl DuelController {

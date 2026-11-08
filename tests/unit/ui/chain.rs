@@ -1,10 +1,14 @@
 use super::*;
-use crate::duel::cards::{CardAddress, CardPlacement};
+use crate::duel::cards::{CardAddress, CardPlacement, CardTracker};
+use crate::duel::controller::resolve_chain_event;
 use crate::ocgcore::constants::{CardLocation, Player};
 use crate::ocgcore::location_info::{
     CardLocationInfo, CardLocationKind, CardLocationPosition, CardPositionFlags,
 };
 use crate::ocgcore::messages::ChainLinkMessageData;
+use crate::ocgcore::messages::CoreMessage;
+use crate::ui::playback::use_playback;
+use crate::ui::view_state::ViewState;
 
 fn address(location: CardLocation, sequence: u32) -> CardAddress {
     CardAddress {
@@ -54,7 +58,7 @@ fn plays_batched_chain_in_activation_and_resolution_order() {
         solved(1),
         CoreMessage::ChainEnd,
     ] {
-        playback.record(&message, &cards);
+        playback.record(resolve_chain_event(&message, &cards).unwrap());
     }
     playback.start();
     assert_eq!(
@@ -97,19 +101,22 @@ fn plays_batched_chain_in_activation_and_resolution_order() {
 #[test]
 fn duel_failure_cancels_both_playbacks_and_invalidates_their_completions() {
     use crate::state::UIState;
-    use crate::ui::card_animation::{AnimationPhase, CardAnimationState};
+    use crate::ui::card_animation::AnimationPhase;
 
     fn app() -> Element {
         let mut state = use_context_provider(UIState::default);
-        let mut animation = use_context_provider(|| Signal::new(CardAnimationState::default()));
-        let mut chain = use_context_provider(|| Signal::new(ChainPlayback::default()));
+        let playback = use_playback();
+        let mut view = use_context_provider(ViewState::default);
+        let mut animation = playback.animation;
+        let mut chain = playback.chain;
         let mut cards = CardTracker::default();
         let card = cards.insert(address(CardLocation::Hand, 0), 1).unwrap();
         animation.write().begin(vec![card], cards.clone());
         for number in [1, 2] {
-            chain
-                .write()
-                .record(&chaining(number, address(CardLocation::Hand, 0)), &cards);
+            chain.write().record(
+                resolve_chain_event(&chaining(number, address(CardLocation::Hand, 0)), &cards)
+                    .unwrap(),
+            );
         }
         chain.write().start();
         let animation_generation = animation.peek().generation;
@@ -118,10 +125,10 @@ fn duel_failure_cancels_both_playbacks_and_invalidates_their_completions() {
         assert!(chain.peek().active);
         assert!(chain.peek().has_pending_frames());
 
-        state.fail("injected failure".into(), Some(animation));
+        state.fail("injected failure".into(), playback);
 
         assert_eq!(state.failure.peek().as_deref(), Some("injected failure"));
-        assert!(state.interaction_blocked(Some(animation)));
+        assert!(state.interaction_blocked(playback));
         assert!(!animation.peek().is_active());
         assert!(animation.peek().moving.is_empty());
         assert!(animation.peek().source.is_none());
@@ -135,13 +142,13 @@ fn duel_failure_cancels_both_playbacks_and_invalidates_their_completions() {
         chain.write().start();
         assert!(!animation.peek().is_active());
         assert!(!chain.peek().active);
-        assert!(state.interaction_blocked(Some(animation)));
+        assert!(state.interaction_blocked(playback));
 
-        state.reset();
+        state.reset_duel(&mut view, playback);
         animation.write().begin(vec![card], cards.clone());
-        chain
-            .write()
-            .record(&chaining(3, address(CardLocation::Hand, 0)), &cards);
+        chain.write().record(
+            resolve_chain_event(&chaining(3, address(CardLocation::Hand, 0)), &cards).unwrap(),
+        );
         chain.write().start();
         animation
             .write()
@@ -150,7 +157,7 @@ fn duel_failure_cancels_both_playbacks_and_invalidates_their_completions() {
         assert!(animation.peek().is_active());
         assert!(chain.peek().active);
         assert_eq!(chain.peek().links_for_card(card), vec![3]);
-        assert!(state.interaction_blocked(Some(animation)));
+        assert!(state.interaction_blocked(playback));
         rsx! {}
     }
     let mut dom = VirtualDom::new(app);
@@ -181,7 +188,7 @@ fn identifies_overlay_material_as_the_chain_source() {
     };
     data.location.position = CardLocationPosition::OverlaySequence(0);
     let mut playback = ChainPlayback::default();
-    playback.record(&message, &cards);
+    playback.record(resolve_chain_event(&message, &cards).unwrap());
     playback.start();
     assert_eq!(
         playback.displayed,
@@ -199,11 +206,15 @@ fn retains_all_links_from_same_card_and_clears_on_chain_end() {
         .insert(address(CardLocation::MonsterZone, 0), 1)
         .unwrap();
     let mut playback = ChainPlayback::default();
-    playback.record(&chaining(1, address(CardLocation::MonsterZone, 0)), &cards);
+    playback.record(
+        resolve_chain_event(&chaining(1, address(CardLocation::MonsterZone, 0)), &cards).unwrap(),
+    );
     playback.start();
     playback.advance(playback.generation);
     assert!(!playback.active);
-    playback.record(&chaining(2, address(CardLocation::MonsterZone, 0)), &cards);
+    playback.record(
+        resolve_chain_event(&chaining(2, address(CardLocation::MonsterZone, 0)), &cards).unwrap(),
+    );
     playback.start();
     assert_eq!(
         playback.displayed,
@@ -220,7 +231,7 @@ fn retains_all_links_from_same_card_and_clears_on_chain_end() {
     );
     assert_eq!(playback.links_for_card(card), vec![1, 2]);
     playback.advance(playback.generation);
-    playback.record(&CoreMessage::ChainEnd, &cards);
+    playback.record(resolve_chain_event(&CoreMessage::ChainEnd, &cards).unwrap());
     playback.start();
     assert!(playback.displayed.is_empty());
 }
@@ -230,8 +241,10 @@ fn cancelled_or_obsolete_timers_do_not_advance_a_new_chain() {
     let mut cards = CardTracker::default();
     cards.insert(address(CardLocation::Hand, 0), 1).unwrap();
     let mut playback = ChainPlayback::default();
-    playback.record(&chaining(1, address(CardLocation::Hand, 0)), &cards);
-    playback.record(&chaining(2, address(CardLocation::Hand, 0)), &cards);
+    playback
+        .record(resolve_chain_event(&chaining(1, address(CardLocation::Hand, 0)), &cards).unwrap());
+    playback
+        .record(resolve_chain_event(&chaining(2, address(CardLocation::Hand, 0)), &cards).unwrap());
     playback.start();
     let first = playback.generation;
     playback.advance(first);
@@ -239,7 +252,8 @@ fn cancelled_or_obsolete_timers_do_not_advance_a_new_chain() {
     assert_eq!(playback.displayed.len(), 2);
     let old = playback.generation;
     playback.cancel();
-    playback.record(&chaining(1, address(CardLocation::Hand, 0)), &cards);
+    playback
+        .record(resolve_chain_event(&chaining(1, address(CardLocation::Hand, 0)), &cards).unwrap());
     playback.start();
     playback.advance(old);
     assert!(playback.active);

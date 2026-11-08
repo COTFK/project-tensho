@@ -2,8 +2,14 @@ use super::*;
 use crate::duel::cards::CardPlacement;
 use crate::ocgcore::constants::Player;
 use crate::ocgcore::messages::SelectTributeMessageData;
+use crate::ui::playback::{Playback, use_playback};
 use ocgcore_ffi::constants::MSG_TAG_SWAP;
 use std::cell::Cell;
+
+fn provide_state() -> UIState {
+    use_playback();
+    use_context_provider(UIState::default)
+}
 
 fn handle_messages(messages: &[CoreMessage]) -> bool {
     let mut state = consume_context::<UIState>();
@@ -14,15 +20,14 @@ fn handle_messages(messages: &[CoreMessage]) -> bool {
         &mut view,
         &controller,
         messages,
-        try_consume_context::<Signal<CardAnimationState>>(),
-        try_consume_context::<Signal<ChainPlayback>>(),
+        consume_context::<Playback>(),
     )
 }
 
 #[test]
 fn pending_input_and_view_resets_are_independent() {
     fn app() -> Element {
-        let mut state = use_context_provider(UIState::default);
+        let mut state = provide_state();
         let mut view = use_context_provider(ViewState::default);
         let mut cards = CardTracker::default();
         let id = cards
@@ -79,7 +84,7 @@ fn pending_input_and_view_resets_are_independent() {
 #[test]
 fn view_reset_preserves_tracking_and_shared_tribute_progress() {
     fn app() -> Element {
-        let mut state = use_context_provider(UIState::default);
+        let mut state = provide_state();
         let mut view = use_context_provider(ViewState::default);
         let mut cards = CardTracker::default();
         let address = CardAddress {
@@ -142,7 +147,7 @@ fn selection_tracks_moves_and_invalidates_on_shuffle_or_failure() {
     }
 
     fn app() -> Element {
-        let mut state = use_context_provider(UIState::default);
+        let mut state = provide_state();
         let mut view = use_context_provider(ViewState::default);
         let mut layer = CardTracker::default();
         let hand = CardAddress {
@@ -211,7 +216,7 @@ fn selection_tracks_moves_and_invalidates_on_shuffle_or_failure() {
         assert!(view.selected_card.peek().is_none());
         select_card(hand);
         assert_ne!(view.selected_card.peek().unwrap(), selected);
-        state.tracking_failed(&mut view, "test".into(), None);
+        state.tracking_failed(&mut view, "test".into(), consume_context::<Playback>());
         assert!(view.selected_card.peek().is_none());
         select_card(hand);
         assert!(view.selected_card.peek().is_none());
@@ -250,7 +255,7 @@ fn selected_card_is_cleared_when_it_disappears() {
 #[test]
 fn finished_duel_stops_game_loop_and_reset_clears_flag() {
     fn app() -> Element {
-        let mut state = use_context_provider(UIState::default);
+        let mut state = provide_state();
         state.duel_finished.set(true);
         run_game_loop();
         assert!(*state.duel_finished.peek());
@@ -263,25 +268,86 @@ fn finished_duel_stops_game_loop_and_reset_clears_flag() {
 }
 
 #[test]
+fn startup_suppression_does_not_block_processing() {
+    fn app() -> Element {
+        let mut state = provide_state();
+        let playback = consume_context::<Playback>();
+        assert!(state.modals_suppressed(false, playback));
+        assert!(!state.processing_blocked(playback));
+        assert!(!state.interaction_blocked(playback));
+
+        state
+            .pending_input
+            .set(Some(PendingInput::YesNo("Activate?".into())));
+        assert!(state.processing_blocked(playback));
+        assert!(state.modals_suppressed(false, playback));
+        assert!(!state.modals_suppressed(true, playback));
+        state.clear_pending_input();
+        state.duel_finished.set(true);
+        assert!(state.processing_blocked(playback));
+        assert!(!state.modals_suppressed(true, playback));
+        rsx! {}
+    }
+    let mut dom = VirtualDom::new(app);
+    dom.rebuild_in_place();
+}
+
+#[test]
+fn either_playback_blocks_processing_and_interaction() {
+    use crate::duel::controller::{ChainEvent, ChainLink};
+
+    fn app() -> Element {
+        let state = provide_state();
+        let mut playback = consume_context::<Playback>();
+        playback
+            .animation
+            .write()
+            .begin(vec![], CardTracker::default());
+        assert!(state.processing_blocked(playback));
+        assert!(state.interaction_blocked(playback));
+        assert!(state.modals_suppressed(true, playback));
+        run_game_loop();
+        playback.cancel();
+        assert!(!state.processing_blocked(playback));
+
+        playback.chain.write().record(ChainEvent::Added(ChainLink {
+            number: 1,
+            card: None,
+        }));
+        playback.chain.write().start();
+        assert!(state.processing_blocked(playback));
+        assert!(state.interaction_blocked(playback));
+        assert!(state.modals_suppressed(true, playback));
+        run_game_loop();
+        playback.cancel();
+        assert!(!state.processing_blocked(playback));
+        assert!(!state.modals_suppressed(true, playback));
+        rsx! {}
+    }
+    let mut dom = VirtualDom::new(app);
+    dom.rebuild_in_place();
+}
+
+#[test]
 fn failure_and_restart_block_input_and_cancel_playback() {
     fn app() -> Element {
-        let mut state = use_context_provider(UIState::default);
-        let mut playback = use_context_provider(|| Signal::new(CardAnimationState::default()));
+        let mut state = provide_state();
+        let mut playback = consume_context::<Playback>().animation;
         playback.write().begin(vec![], CardTracker::default());
         let generation = playback.peek().generation;
-        state.fail("layout failed".into(), Some(playback));
+        state.fail("layout failed".into(), consume_context::<Playback>());
         assert_eq!(state.failure.peek().as_deref(), Some("layout failed"));
         assert!(!playback.peek().is_active());
-        assert!(state.interaction_blocked(Some(playback)));
+        assert!(state.interaction_blocked(consume_context::<Playback>()));
         playback.write().finish(generation);
-        assert!(state.interaction_blocked(Some(playback)));
+        assert!(state.interaction_blocked(consume_context::<Playback>()));
 
         state.reset();
-        assert!(!state.interaction_blocked(Some(playback)));
+        assert!(!state.interaction_blocked(consume_context::<Playback>()));
         state.restarting.set(true);
-        assert!(state.interaction_blocked(Some(playback)));
+        assert!(state.interaction_blocked(consume_context::<Playback>()));
         state.reset();
-        assert!(!state.interaction_blocked(Some(playback)));
+        assert!(!state.interaction_blocked(consume_context::<Playback>()));
         rsx! {}
     }
     let mut dom = VirtualDom::new(app);
@@ -297,7 +363,7 @@ fn tracking_failure_discards_partial_state_and_stops_messages() {
     use crate::ocgcore::messages::move_card::MoveReason;
 
     fn app() -> Element {
-        let mut state = use_context_provider(UIState::default);
+        let mut state = provide_state();
         let mut view = use_context_provider(ViewState::default);
         let address = CardAddress {
             controller: Player::Player,
@@ -323,7 +389,7 @@ fn tracking_failure_discards_partial_state_and_stops_messages() {
             },
             reason: MoveReason::EFFECT,
         });
-        assert!(!state.apply_card_message(&mut view, &message, None));
+        assert!(!state.apply_card_message(&mut view, &message, consume_context::<Playback>()));
         assert!(state.cards.peek().is_none());
         assert!(view.selected_card.peek().is_none());
         assert!(
@@ -334,7 +400,11 @@ fn tracking_failure_discards_partial_state_and_stops_messages() {
                 .unwrap()
                 .contains("Card tracking failed")
         );
-        assert!(!state.apply_card_message(&mut view, &CoreMessage::ReverseDeck, None));
+        assert!(!state.apply_card_message(
+            &mut view,
+            &CoreMessage::ReverseDeck,
+            consume_context::<Playback>()
+        ));
         rsx! {}
     }
     let mut dom = VirtualDom::new(app);
@@ -355,11 +425,15 @@ fn failed_tracking_blocks_layered_actions_until_restart() {
         ))
         .unwrap();
         let duel = core.create_duel(5).unwrap();
-        let mut state = use_context_provider(UIState::default);
+        let mut state = provide_state();
         let mut view = use_context_provider(ViewState::default);
         use_context_provider(|| Signal::new(Some(DuelController::new(duel))));
-        let _playback = use_context_provider(|| Signal::new(CardAnimationState::default()));
-        state.tracking_failed(&mut view, "injected divergence".into(), Some(_playback));
+        let _playback = consume_context::<Playback>().animation;
+        state.tracking_failed(
+            &mut view,
+            "injected divergence".into(),
+            consume_context::<Playback>(),
+        );
         state
             .pending_input
             .set(Some(PendingInput::YesNo("Activate?".into())));
@@ -389,7 +463,7 @@ fn request_messages_replace_actions_and_selection_progress() {
     fn app() -> Element {
         let core = test_core();
         let duel = core.create_duel(0).unwrap();
-        let mut state = use_context_provider(UIState::default);
+        let mut state = provide_state();
         let mut view = use_context_provider(ViewState::default);
         use_context_provider(|| Signal::new(Some(DuelController::new(duel))));
         state.cards.set(Some(CardTracker::default()));
@@ -561,7 +635,7 @@ fn consuming_a_response_clears_input_and_view_but_preserves_duel_state() {
             )
             .unwrap();
         duel.start();
-        let mut state = use_context_provider(UIState::default);
+        let mut state = provide_state();
         let mut view = use_context_provider(ViewState::default);
         use_context_provider(|| Signal::new(Some(DuelController::new(duel))));
         state.cards.set(Some(cards));
@@ -611,10 +685,10 @@ fn responses_are_blocked_during_playback_and_after_a_prompt_is_consumed() {
         ))
         .unwrap();
         let duel = core.create_duel(5).unwrap();
-        let mut state = use_context_provider(UIState::default);
+        let mut state = provide_state();
         let mut view = use_context_provider(ViewState::default);
         use_context_provider(|| Signal::new(Some(DuelController::new(duel))));
-        let mut playback = use_context_provider(|| Signal::new(CardAnimationState::default()));
+        let mut playback = consume_context::<Playback>().animation;
         state
             .pending_input
             .set(Some(PendingInput::YesNo("Activate?".into())));
@@ -684,14 +758,16 @@ fn layered_loop_pauses_on_a_real_draw_and_resumes_to_the_prompt() {
             );
         }
         duel.start();
-        let mut state = use_context_provider(UIState::default);
+        let mut state = provide_state();
         use_context_provider(ViewState::default);
         use_context_provider(|| Signal::new(Some(DuelController::new(duel))));
         state
             .cards
             .set(Some(CardTracker::from_decks(&deck, &[]).unwrap()));
         let tracking = state.cards;
-        let mut playback = use_context_provider(|| Signal::new(CardAnimationState::default()));
+        let mut playback = consume_context::<Playback>().animation;
+        assert!(state.modals_suppressed(false, consume_context::<Playback>()));
+        assert!(!state.processing_blocked(consume_context::<Playback>()));
         run_game_loop();
         assert!(playback.peek().is_active());
         assert_eq!(playback.peek().moving.len(), 5);
@@ -707,6 +783,8 @@ fn layered_loop_pauses_on_a_real_draw_and_resumes_to_the_prompt() {
                 playback.write().finish(generation);
             } else if state.waiting_on_input() {
                 assert!(tracking.peek().is_some());
+                assert!(state.modals_suppressed(false, consume_context::<Playback>()));
+                assert!(!state.modals_suppressed(true, consume_context::<Playback>()));
                 COMPLETED.with(|completed| completed.set(true));
                 return rsx! {};
             } else if *state.duel_finished.peek() {
@@ -777,19 +855,19 @@ fn layered_loop_starts_gathering_for_a_real_hand_shuffle() {
         )
         .unwrap();
         duel.start();
-        let mut state = use_context_provider(UIState::default);
+        let mut state = provide_state();
         use_context_provider(ViewState::default);
         use_context_provider(|| Signal::new(Some(DuelController::new(duel))));
         state
             .cards
             .set(Some(CardTracker::from_decks(&deck, &[]).unwrap()));
-        let mut playback = use_context_provider(|| Signal::new(CardAnimationState::default()));
+        let mut playback = consume_context::<Playback>().animation;
         for _ in 0..100 {
             run_game_loop();
             if playback.peek().phase
                 == crate::ui::card_animation::AnimationPhase::HandShuffleGathering
             {
-                assert!(state.interaction_blocked(Some(playback)));
+                assert!(state.interaction_blocked(consume_context::<Playback>()));
                 assert!(playback.peek().source.is_some());
                 COMPLETED.with(|completed| completed.set(true));
                 return rsx! {};
@@ -811,7 +889,7 @@ fn layered_loop_starts_gathering_for_a_real_hand_shuffle() {
 #[test]
 #[cfg(not(target_arch = "wasm32"))]
 fn batched_chain_messages_pause_the_loop_and_track_source_cards() {
-    use crate::ui::chain::{ChainLink, ChainPlayback};
+    use crate::duel::controller::ChainLink;
     use ocgcore_ffi::constants::{POS_FACEUP_ATTACK, TYPE_MONSTER, TYPE_NORMAL};
     use ocgcore_ffi::types::OCG_CardData;
 
@@ -857,11 +935,11 @@ fn batched_chain_messages_pause_the_loop_and_track_source_cards() {
         );
         let mut layer = CardTracker::default();
         let card = layer.insert(address, 10).unwrap();
-        let mut state = use_context_provider(UIState::default);
+        let mut state = provide_state();
         use_context_provider(ViewState::default);
         state.cards.set(Some(layer));
         use_context_provider(|| Signal::new(Some(DuelController::new(duel))));
-        let mut chain = use_context_provider(|| Signal::new(ChainPlayback::default()));
+        let mut chain = consume_context::<Playback>().chain;
         let bytes = [
             33, 0, 0, 0, 70, 10, 0, 0, 0, 0, 4, 0, 0, 0, 0, 1, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 73, 1, 1, 0, 0, 0, 74,
@@ -876,9 +954,9 @@ fn batched_chain_messages_pause_the_loop_and_track_source_cards() {
                 card: Some(card)
             }]
         );
-        assert!(state.interaction_blocked(None));
+        assert!(state.interaction_blocked(consume_context::<Playback>()));
         chain.write().cancel();
-        assert!(!state.interaction_blocked(None));
+        assert!(!state.interaction_blocked(consume_context::<Playback>()));
         COMPLETED.with(|completed| completed.set(true));
         rsx! {}
     }
@@ -900,7 +978,7 @@ fn handles_real_duel_messages_until_input() {
         .unwrap();
         let duel = core.create_duel(5).unwrap();
         duel.start();
-        let mut state = use_context_provider(UIState::default);
+        let mut state = provide_state();
         use_context_provider(ViewState::default);
         use_context_provider(|| Signal::new(Some(DuelController::new(duel.clone()))));
         state.cards.set(Some(CardTracker::default()));
@@ -932,15 +1010,19 @@ fn handles_real_duel_messages_until_input() {
 
 #[test]
 #[cfg(not(target_arch = "wasm32"))]
-fn failed_tracking_stops_processing_without_playback_context() {
+fn failed_tracking_stops_processing_with_inactive_playback() {
     thread_local! {
         static COMPLETED: Cell<bool> = const { Cell::new(false) };
     }
     fn app() -> Element {
-        let mut state = use_context_provider(UIState::default);
+        let mut state = provide_state();
         let mut view = use_context_provider(ViewState::default);
         state.cards.set(Some(CardTracker::default()));
-        state.tracking_failed(&mut view, "test failure".to_owned(), None);
+        state.tracking_failed(
+            &mut view,
+            "test failure".to_owned(),
+            consume_context::<Playback>(),
+        );
         assert!(state.cards.peek().is_none());
         assert_eq!(state.failure.peek().as_deref(), Some("test failure"));
         COMPLETED.with(|completed| completed.set(true));

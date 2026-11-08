@@ -3,6 +3,7 @@ use crate::ocgcore::constants::Player;
 use crate::ocgcore::messages::{
     IdleMessageData, SelectChainMessageData, SelectTributeMessageData, SelectUnselectMessageData,
 };
+use crate::ui::playback::use_playback;
 
 fn address(controller: Player, location: CardLocation, sequence: u32) -> CardAddress {
     CardAddress {
@@ -134,6 +135,7 @@ fn menu_actions_are_suppressed_and_resolved_from_current_prompt() {
 
     fn app() -> Element {
         let mut state = use_context_provider(UIState::default);
+        use_playback();
         let mut view = use_context_provider(ViewState::default);
         let hand = address(Player::Player, CardLocation::Hand, 0);
         let mut layer = CardTracker::default();
