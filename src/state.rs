@@ -23,8 +23,9 @@ use crate::ocgcore::messages::SelectUnselectMessageData;
 use crate::ocgcore::messages::SortCardMessageData;
 use crate::settings::CustomHand;
 use crate::ui::card_animation::{CardAnimationState, plan_animation};
-use crate::ui::card_layer::{CardAddress, CardId, CardLayer, CardPlacement};
+use crate::ui::card_layer::{CardAddress, CardLayer, CardPlacement};
 use crate::ui::chain::ChainPlayback;
+use crate::ui::view_state::ViewState;
 use crate::utility::ARCHETYPE_SCRIPT;
 use crate::utility::EXTRA_DECK_IDS;
 use crate::utility::MAIN_DECK_IDS;
@@ -37,7 +38,7 @@ use crate::utility::store_card_data;
 use ocgcore_ffi::enums::OCG_DuelStatus;
 
 pub(crate) fn select_card(address: CardAddress) {
-    let mut state = consume_context::<UIState>();
+    let state = consume_context::<UIState>();
     if state.interaction_blocked(try_consume_context::<Signal<CardAnimationState>>()) {
         tracing::warn!("Ignoring card selection during animation");
         return;
@@ -56,24 +57,13 @@ pub(crate) fn select_card(address: CardAddress) {
             return;
         }
     };
-    state.selected_card.set(Some(card_id));
-}
-
-fn reconcile_selected_card(state: &mut UIState, layer: &CardLayer) {
-    let Some(id) = *state.selected_card.peek() else {
-        return;
-    };
-    if !layer.card_by_id(id).is_some_and(|card| {
-        matches!(card.placement, CardPlacement::Zone(address) if address.controller == Player::Player)
-    }) {
-        state.selected_card.set(None);
-    }
+    let mut view = consume_context::<ViewState>();
+    view.selected_card.set(Some(card_id));
 }
 
 define_ui_state!(UIState {
     cards: Option<CardLayer>,
     current_phase: Option<Phase>,
-    selected_card: Option<CardId>,
     normal_summons: Vec<CardData>,
     special_summons: Vec<CardData>,
     monster_sets: Vec<CardData>,
@@ -89,8 +79,6 @@ define_ui_state!(UIState {
     yes_no_question: Option<String>,
     available_zones: Vec<Zone>,
     positions_to_select: Vec<BattlePosition>,
-    open_pile: Option<CardLocation>,
-    effects_to_select_from: Vec<CardData>,
     cards_to_select_from: Option<SelectUnselectMessageData>,
     tributes: Option<SelectTributeMessageData>,
     selected_tributes: Vec<u8>,
@@ -159,7 +147,7 @@ fn process_until_input(
 
 pub fn handle_right_click(evt: MouseEvent) {
     evt.prevent_default();
-    let mut state = consume_context::<UIState>();
+    let state = consume_context::<UIState>();
     if state.interaction_blocked(try_consume_context::<Signal<CardAnimationState>>()) {
         return;
     }
@@ -181,7 +169,8 @@ pub fn handle_right_click(evt: MouseEvent) {
         send_response(Response::No);
     }
 
-    state.open_pile.set(None);
+    let mut view = consume_context::<ViewState>();
+    view.open_pile.set(None);
 
     if (state.tributes)().is_some_and(|message| message.is_cancelable) {
         send_response(Response::PassPriority);
@@ -316,6 +305,7 @@ pub fn send_response(response: Response) {
 
     duel.set_response(response);
     state.clear_pending_input();
+    consume_context::<ViewState>().reset();
 }
 
 impl UIState {
@@ -338,15 +328,21 @@ impl UIState {
         }
     }
 
-    fn tracking_failed(&mut self, error: String, playback: Option<Signal<CardAnimationState>>) {
+    fn tracking_failed(
+        &mut self,
+        view: &mut ViewState,
+        error: String,
+        playback: Option<Signal<CardAnimationState>>,
+    ) {
         tracing::error!("{error}");
         self.cards.set(None);
-        self.selected_card.set(None);
+        view.selected_card.set(None);
         self.fail(error, playback);
     }
 
     fn apply_card_message(
         &mut self,
+        view: &mut ViewState,
         message: &CoreMessage,
         playback: Option<Signal<CardAnimationState>>,
     ) -> bool {
@@ -359,27 +355,18 @@ impl UIState {
                 .as_mut()
                 .expect("Card tracking missing for active duel");
             layer.apply(message)?;
-            reconcile_selected_card(self, layer);
+            view.reconcile_selection(layer);
             Ok::<_, anyhow::Error>(())
         });
         if let Err(error) = result {
             self.tracking_failed(
+                view,
                 format!("Card tracking failed for {message:?}: {error:#}"),
                 playback,
             );
             return false;
         }
         true
-    }
-
-    pub(crate) fn is_selected(&self, address: CardAddress) -> bool {
-        let selected = (self.selected_card)();
-        match &*(self.cards).read() {
-            Some(cards) => cards
-                .card_at(address)
-                .is_some_and(|card| Some(card.id) == selected),
-            _ => false,
-        }
     }
 
     pub(crate) fn zone_data(&self, location: CardLocation) -> Option<Vec<Option<CardData>>> {
@@ -390,7 +377,6 @@ impl UIState {
     }
 
     pub fn clear_pending_input(&mut self) {
-        self.selected_card.set(None);
         self.normal_summons.set(Vec::new());
         self.special_summons.set(Vec::new());
         self.monster_sets.set(Vec::new());
@@ -403,8 +389,6 @@ impl UIState {
         self.yes_no_question.set(None);
         self.available_zones.set(Vec::new());
         self.positions_to_select.set(Vec::new());
-        self.open_pile.set(None);
-        self.effects_to_select_from.set(Vec::new());
         self.cards_to_select_from.set(None);
         self.tributes.set(None);
         self.selected_tributes.set(Vec::new());
@@ -415,6 +399,7 @@ impl UIState {
 
 fn handle_core_messages(messages: &[CoreMessage]) -> bool {
     let mut state = consume_context::<UIState>();
+    let mut view = consume_context::<ViewState>();
     let duel = consume_context::<Signal<Option<Duel>>>();
     let duel = duel().expect("Duel context missing active duel");
     let mut tracking = state.cards;
@@ -426,7 +411,7 @@ fn handle_core_messages(messages: &[CoreMessage]) -> bool {
 
     for message in messages.iter().cloned() {
         tracing::trace!("Received core message: {message:?}");
-        if !state.apply_card_message(&message, playback) {
+        if !state.apply_card_message(&mut view, &message, playback) {
             return true;
         }
         if matches!(
@@ -463,6 +448,7 @@ fn handle_core_messages(messages: &[CoreMessage]) -> bool {
                 if message.effects.is_empty() {
                     duel.set_response(Response::PassPriority);
                     state.clear_pending_input();
+                    view.reset();
                     continue;
                 }
 
@@ -529,11 +515,15 @@ fn handle_core_messages(messages: &[CoreMessage]) -> bool {
             .as_mut()
             .expect("Card tracking missing for active duel");
         refresh_data(layer, &duel)?;
-        reconcile_selected_card(&mut state, layer);
+        view.reconcile_selection(layer);
         Ok::<_, anyhow::Error>(())
     });
     if let Err(error) = result {
-        state.tracking_failed(format!("Cannot refresh card data: {error:#}"), playback);
+        state.tracking_failed(
+            &mut view,
+            format!("Cannot refresh card data: {error:#}"),
+            playback,
+        );
         return true;
     }
 

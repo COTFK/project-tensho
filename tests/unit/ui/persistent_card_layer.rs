@@ -192,6 +192,7 @@ thread_local! {
 
 fn chain_badge_app() -> Element {
     use_context_provider(UIState::default);
+    use_context_provider(ViewState::default);
     let chain = use_context_provider(|| Signal::new(ChainPlayback::default()));
     TEST_CHAIN.with(|slot| *slot.borrow_mut() = Some(chain));
     let (card, target) = fixture(
@@ -242,6 +243,7 @@ fn rendered_card_displays_chain_numbers_and_removes_them_when_resolved() {
 
 fn field_app() -> Element {
     let mut state = use_context_provider(UIState::default);
+    let view = use_context_provider(ViewState::default);
     let playback = use_context_provider(|| Signal::new(CardAnimationState::default()));
     let (card, target) = fixture(
         CardLocation::MonsterZone,
@@ -250,13 +252,14 @@ fn field_app() -> Element {
     let mut layer = CardLayer::default();
     layer.insert(target.address, card.code).unwrap();
     state.cards.set(Some(layer));
-    TEST_SELECTION.with(|slot| *slot.borrow_mut() = Some(state.selected_card));
+    TEST_SELECTION.with(|slot| *slot.borrow_mut() = Some(view.selected_card));
     TEST_PLAYBACK.with(|slot| *slot.borrow_mut() = Some(playback));
     rsx! { PersistentCardLayer { cards: vec![card], targets: vec![target] } }
 }
 
 fn two_field_cards_app() -> Element {
     let mut state = use_context_provider(UIState::default);
+    use_context_provider(ViewState::default);
     let playback = use_context_provider(|| Signal::new(CardAnimationState::default()));
     let (first, first_target) = fixture(
         CardLocation::MonsterZone,
@@ -413,6 +416,7 @@ fn selected_field_card_is_above_other_cards_and_respects_movement_layering() {
 
 fn app() -> Element {
     use_context_provider(UIState::default);
+    use_context_provider(ViewState::default);
     let (card, target) = fixture(CardLocation::Hand, None);
     let state = use_signal(|| (vec![card], vec![target]));
     TEST_STATE.with(|slot| *slot.borrow_mut() = Some(state));

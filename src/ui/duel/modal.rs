@@ -11,6 +11,7 @@ use crate::ui::components::CardImage;
 use crate::ui::components::MessageModal;
 use crate::ui::components::OptionButton;
 use crate::ui::components::PickerModal;
+use crate::ui::view_state::ViewState;
 use crate::utility::get_optional_string_label;
 
 #[component]
@@ -305,13 +306,13 @@ pub fn SortCardSelector() -> Element {
 
 #[component]
 pub fn EffectSelector() -> Element {
-    let mut state = use_context::<UIState>();
+    let mut view = use_context::<ViewState>();
 
     rsx!(
         PickerModal {
             title: "Choose which effect to activate",
-            trigger: !state.effects_to_select_from.is_empty(),
-            for effect in (state.effects_to_select_from)() {
+            trigger: !view.effects_to_select_from.is_empty(),
+            for effect in (view.effects_to_select_from)() {
                 OptionButton {
                     label: {
                         effect
@@ -325,7 +326,7 @@ pub fn EffectSelector() -> Element {
             }
             OptionButton {
                 label: "Cancel",
-                onclick: move |_| state.effects_to_select_from.clear(),
+                onclick: move |_| view.effects_to_select_from.clear(),
                 additional_classes: "bg-gray-600 text-white w-full",
             }
 

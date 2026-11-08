@@ -8,11 +8,11 @@ use super::layout_anchors::CardAnchor;
 use crate::ocgcore::CardData;
 use crate::ocgcore::constants::{BattlePosition, CardLocation, Player};
 use crate::ocgcore::location_info::CardPositionFlags;
-use crate::state::UIState;
 use crate::ui::card_animation::CardAnimationState;
 use crate::ui::card_layer::{Card as TrackedCard, CardAddress, CardId, CardPlacement};
 use crate::ui::chain::{ChainLink, ChainPlayback};
 use crate::ui::components::CardImage;
+use crate::ui::view_state::ViewState;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum CardAppearance {
@@ -174,11 +174,11 @@ pub(super) fn PersistentCardLayer(cards: Vec<TrackedCard>, targets: Vec<CardTarg
 
 #[component]
 fn LayerCard(card: TrackedCard, target: Option<CardTarget>, chain_links: Vec<u32>) -> Element {
-    let state = use_context::<UIState>();
+    let view = use_context::<ViewState>();
     let playback = try_consume_context::<Signal<CardAnimationState>>();
     let animating = playback.is_some_and(|playback| playback().is_active());
     let moving = playback.is_some_and(|playback| playback().moving.contains(&card.id));
-    let selected = (state.selected_card)() == Some(card.id);
+    let selected = (view.selected_card)() == Some(card.id);
     let visible = visible_card(card, target);
     let hand = matches!(card.placement, CardPlacement::Zone(address) if address.location == CardLocation::Hand);
     let style = visible.map(|(target, _)| {

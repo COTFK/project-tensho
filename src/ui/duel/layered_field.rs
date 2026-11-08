@@ -13,6 +13,7 @@ use crate::state::UIState;
 use crate::ui::card_animation::{AnimationPhase, CardAnimationState, wait_millis};
 use crate::ui::card_layer::{Card, CardAddress, CardId, CardLayer, CardPlacement};
 use crate::ui::components::CardImage;
+use crate::ui::view_state::ViewState;
 use crate::utility::{card_image_url, card_thumbnail_url};
 
 #[derive(Clone, PartialEq)]
@@ -487,6 +488,7 @@ fn targets(
 #[component]
 pub(super) fn LayeredField(mut startup_ready: Signal<bool>, deck_codes: Vec<u32>) -> Element {
     let mut state = use_context::<UIState>();
+    let view = use_context::<ViewState>();
     let tracking = state.cards;
     let anchors = use_context::<LayoutAnchors>();
     let revision = use_context::<LayoutRevision>();
@@ -508,7 +510,7 @@ pub(super) fn LayeredField(mut startup_ready: Signal<bool>, deck_codes: Vec<u32>
             (revision, result)
         }
     });
-    let current = snapshot(tracking(), (state.selected_card)());
+    let current = snapshot(tracking(), (view.selected_card)());
     let current_revision = (revision.0)();
     let result = resource.read();
     let geometry = result.as_ref().and_then(|(measured_revision, result)| {

@@ -29,6 +29,7 @@ use crate::ui::components::ModalSuppression;
 use crate::ui::components::UIButton;
 use crate::ui::components::svg::FullscreenIcon;
 use crate::ui::components::svg::ResetIcon;
+use crate::ui::view_state::ViewState;
 use layered_field::LayeredField;
 use modal::ModalContainer;
 
@@ -38,6 +39,7 @@ pub fn DuelWrapper(
     custom_hand: Option<String>,
 ) -> Element {
     let mut state = use_context_provider(UIState::default);
+    let mut view = use_context_provider(ViewState::default);
     let mut duel_context = use_context_provider(|| Signal::new(None::<Duel>));
 
     let duel_resource = use_resource(move || {
@@ -51,7 +53,7 @@ pub fn DuelWrapper(
             Some(Ok(setup)) => Some(setup.clone()),
             _ => None,
         };
-        install_duel(&mut state, &mut duel_context, next_setup);
+        install_duel(&mut state, &mut view, &mut duel_context, next_setup);
     });
 
     match &*duel_resource.read() {
@@ -78,6 +80,7 @@ pub fn DuelWrapper(
 
 fn install_duel(
     state: &mut UIState,
+    view: &mut ViewState,
     duel_context: &mut Signal<Option<Duel>>,
     setup: Option<DuelSetup>,
 ) {
@@ -90,6 +93,7 @@ fn install_duel(
         return;
     }
     state.reset();
+    view.reset();
     let (duel, cards) = match setup {
         Some(setup) => (Some(setup.duel), Some(setup.cards)),
         None => (None, None),
@@ -101,6 +105,7 @@ fn install_duel(
 #[component]
 fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>, deck_codes: Vec<u32>) -> Element {
     let mut state = use_context::<UIState>();
+    let mut view = use_context::<ViewState>();
     use_context_provider(layout_anchors::LayoutAnchors::default);
     let revision = use_context_provider(|| layout_anchors::LayoutRevision(Signal::new(0)));
     let startup_ready = use_signal(|| false);
@@ -125,8 +130,8 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>, deck_codes: Ve
             oncontextmenu: handle_right_click,
             onresize: move |_| revision.invalidate(),
             onclick: move |_| {
-                if !state.interaction_blocked(Some(playback)) && (state.selected_card)().is_some() {
-                    state.selected_card.set(None);
+                if !state.interaction_blocked(Some(playback)) && (view.selected_card)().is_some() {
+                    view.selected_card.set(None);
                 }
 
             },
@@ -139,6 +144,7 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>, deck_codes: Ve
                     playback.write().cancel();
                     chain.write().cancel();
                     state.reset();
+                    view.reset();
                     state.restarting.set(true);
                     duel_resource.clear();
                     duel_resource.restart();

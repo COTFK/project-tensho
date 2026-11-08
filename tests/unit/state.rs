@@ -3,19 +3,102 @@ use ocgcore_ffi::constants::MSG_TAG_SWAP;
 use std::cell::Cell;
 
 #[test]
-fn pending_input_reset_closes_current_pile() {
+fn pending_input_and_view_resets_are_independent() {
     fn app() -> Element {
         let mut state = use_context_provider(UIState::default);
+        let mut view = use_context_provider(ViewState::default);
+        let mut cards = CardLayer::default();
+        let id = cards
+            .insert(
+                CardAddress {
+                    controller: Player::Player,
+                    location: CardLocation::Hand,
+                    sequence: 0,
+                },
+                42,
+            )
+            .unwrap();
+        let effect = CardData {
+            card_code: 42,
+            ..Default::default()
+        };
         for location in [
             CardLocation::Graveyard,
             CardLocation::Banishment,
             CardLocation::ExtraDeck,
         ] {
-            state.open_pile.set(Some(location));
-            assert_eq!(*state.open_pile.peek(), Some(location));
+            view.open_pile.set(Some(location));
+            view.selected_card.set(Some(id));
+            view.effects_to_select_from.set(vec![effect]);
+            assert_eq!(*view.open_pile.peek(), Some(location));
+            state.yes_no_question.set(Some("Activate?".into()));
+            state.waiting_on_input.set(true);
             state.clear_pending_input();
-            assert_eq!(*state.open_pile.peek(), None);
+            assert!(state.yes_no_question.peek().is_none());
+            assert!(!*state.waiting_on_input.peek());
+            assert_eq!(*view.open_pile.peek(), Some(location));
+            assert_eq!(*view.selected_card.peek(), Some(id));
+            assert_eq!(*view.effects_to_select_from.peek(), vec![effect]);
+            state.yes_no_question.set(Some("Activate?".into()));
+            state.waiting_on_input.set(true);
+            view.reset();
+            assert_eq!(*view.open_pile.peek(), None);
+            assert!(view.selected_card.peek().is_none());
+            assert!(view.effects_to_select_from.peek().is_empty());
+            assert_eq!(state.yes_no_question.peek().as_deref(), Some("Activate?"));
+            assert!(*state.waiting_on_input.peek());
         }
+        rsx! {}
+    }
+    let mut dom = VirtualDom::new(app);
+    dom.rebuild_in_place();
+}
+
+#[test]
+fn view_reset_preserves_tracking_and_shared_tribute_progress() {
+    fn app() -> Element {
+        let mut state = use_context_provider(UIState::default);
+        let mut view = use_context_provider(ViewState::default);
+        let mut cards = CardLayer::default();
+        let address = CardAddress {
+            controller: Player::Player,
+            location: CardLocation::MonsterZone,
+            sequence: 0,
+        };
+        let id = cards.insert(address, 42).unwrap();
+        let candidate = CardData {
+            card_code: 42,
+            controller: address.controller,
+            location: address.location,
+            action_index: Some(0),
+            ..Default::default()
+        };
+        let tribute = SelectTributeMessageData {
+            player: 0,
+            is_cancelable: true,
+            min_select: 1,
+            max_select: 1,
+            candidates: vec![candidate],
+        };
+        state.cards.set(Some(cards.clone()));
+        state.tributes.set(Some(tribute.clone()));
+        state.selected_tributes.set(vec![0]);
+        state.waiting_on_input.set(true);
+        state.current_phase.set(Some(Phase::Main1));
+        view.selected_card.set(Some(id));
+        view.open_pile.set(Some(CardLocation::Graveyard));
+        view.effects_to_select_from.set(vec![candidate]);
+
+        view.reset();
+
+        assert!(view.selected_card.peek().is_none());
+        assert!(view.open_pile.peek().is_none());
+        assert!(view.effects_to_select_from.peek().is_empty());
+        assert_eq!(*state.cards.peek(), Some(cards));
+        assert_eq!(*state.tributes.peek(), Some(tribute));
+        assert_eq!(*state.selected_tributes.peek(), vec![0]);
+        assert!(*state.waiting_on_input.peek());
+        assert_eq!(*state.current_phase.peek(), Some(Phase::Main1));
         rsx! {}
     }
     let mut dom = VirtualDom::new(app);
@@ -37,6 +120,7 @@ fn selection_tracks_moves_and_invalidates_on_shuffle_or_failure() {
 
     fn app() -> Element {
         let mut state = use_context_provider(UIState::default);
+        let mut view = use_context_provider(ViewState::default);
         let mut layer = CardLayer::default();
         let hand = CardAddress {
             controller: Player::Player,
@@ -61,7 +145,7 @@ fn selection_tracks_moves_and_invalidates_on_shuffle_or_failure() {
         let mut tracking = state.cards;
         tracking.set(Some(layer));
         select_card(hand);
-        let selected = state.selected_card.peek().unwrap();
+        let selected = view.selected_card.peek().unwrap();
         let loc = |address: CardAddress| CardLocationInfo {
             controller: Some(address.controller),
             location: CardLocationKind::Known(address.location),
@@ -82,9 +166,9 @@ fn selection_tracks_moves_and_invalidates_on_shuffle_or_failure() {
             .unwrap()
             .apply(&movement(hand, field))
             .unwrap();
-        reconcile_selected_card(&mut state, tracking.peek().as_ref().unwrap());
-        assert!(state.is_selected(field));
-        assert_eq!(state.selected_card.peek().unwrap(), selected);
+        view.reconcile_selection(tracking.peek().as_ref().unwrap());
+        assert!(view.is_selected(field, tracking.peek().as_ref()));
+        assert_eq!(view.selected_card.peek().unwrap(), selected);
         tracking
             .write()
             .as_mut()
@@ -100,14 +184,14 @@ fn selection_tracks_moves_and_invalidates_on_shuffle_or_failure() {
                 card_codes: vec![42, 43],
             }))
             .unwrap();
-        reconcile_selected_card(&mut state, tracking.peek().as_ref().unwrap());
-        assert!(state.selected_card.peek().is_none());
+        view.reconcile_selection(tracking.peek().as_ref().unwrap());
+        assert!(view.selected_card.peek().is_none());
         select_card(hand);
-        assert_ne!(state.selected_card.peek().unwrap(), selected);
-        state.tracking_failed("test".into(), None);
-        assert!(state.selected_card.peek().is_none());
+        assert_ne!(view.selected_card.peek().unwrap(), selected);
+        state.tracking_failed(&mut view, "test".into(), None);
+        assert!(view.selected_card.peek().is_none());
         select_card(hand);
-        assert!(state.selected_card.peek().is_none());
+        assert!(view.selected_card.peek().is_none());
         COMPLETED.with(|completed| completed.set(true));
         rsx! {}
     }
@@ -122,7 +206,7 @@ fn selected_card_is_cleared_when_it_disappears() {
     use crate::ui::card_layer::CardAddress;
 
     fn app() -> Element {
-        let mut state = use_context_provider(UIState::default);
+        let mut view = use_context_provider(ViewState::default);
         let address = CardAddress {
             controller: Player::Player,
             location: CardLocation::MonsterZone,
@@ -130,10 +214,10 @@ fn selected_card_is_cleared_when_it_disappears() {
         };
         let mut layer = CardLayer::default();
         let id = layer.insert(address, 42).unwrap();
-        state.selected_card.set(Some(id));
+        view.selected_card.set(Some(id));
         let empty = CardLayer::default();
-        reconcile_selected_card(&mut state, &empty);
-        assert!(state.selected_card.peek().is_none());
+        view.reconcile_selection(&empty);
+        assert!(view.selected_card.peek().is_none());
         rsx! {}
     }
     let mut dom = VirtualDom::new(app);
@@ -348,6 +432,7 @@ fn tracking_failure_discards_partial_state_and_stops_messages() {
 
     fn app() -> Element {
         let mut state = use_context_provider(UIState::default);
+        let mut view = use_context_provider(ViewState::default);
         let address = CardAddress {
             controller: Player::Player,
             location: CardLocation::Hand,
@@ -356,7 +441,7 @@ fn tracking_failure_discards_partial_state_and_stops_messages() {
         let mut layer = CardLayer::default();
         let id = layer.insert(address, 42).unwrap();
         state.cards.set(Some(layer));
-        state.selected_card.set(Some(id));
+        view.selected_card.set(Some(id));
         let info = CardLocationInfo {
             controller: Some(Player::Player),
             location: CardLocationKind::Known(CardLocation::Hand),
@@ -372,9 +457,9 @@ fn tracking_failure_discards_partial_state_and_stops_messages() {
             },
             reason: MoveReason::EFFECT,
         });
-        assert!(!state.apply_card_message(&message, None));
+        assert!(!state.apply_card_message(&mut view, &message, None));
         assert!(state.cards.peek().is_none());
-        assert!(state.selected_card.peek().is_none());
+        assert!(view.selected_card.peek().is_none());
         assert!(
             state
                 .failure
@@ -383,7 +468,7 @@ fn tracking_failure_discards_partial_state_and_stops_messages() {
                 .unwrap()
                 .contains("Card tracking failed")
         );
-        assert!(!state.apply_card_message(&CoreMessage::ReverseDeck, None));
+        assert!(!state.apply_card_message(&mut view, &CoreMessage::ReverseDeck, None));
         rsx! {}
     }
     let mut dom = VirtualDom::new(app);
@@ -405,9 +490,10 @@ fn failed_tracking_blocks_layered_actions_until_restart() {
         .unwrap();
         let duel = core.create_duel(5).unwrap();
         let mut state = use_context_provider(UIState::default);
+        let mut view = use_context_provider(ViewState::default);
         use_context_provider(|| Signal::new(Some(duel)));
         let _playback = use_context_provider(|| Signal::new(CardAnimationState::default()));
-        state.tracking_failed("injected divergence".into(), Some(_playback));
+        state.tracking_failed(&mut view, "injected divergence".into(), Some(_playback));
         state.waiting_on_input.set(true);
         run_game_loop();
         assert_eq!(state.failure.peek().as_deref(), Some("injected divergence"));
@@ -441,14 +527,15 @@ fn consuming_a_response_clears_input_and_view_but_preserves_duel_state() {
             .unwrap();
         duel.start();
         let mut state = use_context_provider(UIState::default);
+        let mut view = use_context_provider(ViewState::default);
         use_context_provider(|| Signal::new(Some(duel)));
         state.cards.set(Some(cards));
         run_game_loop();
         assert!(*state.waiting_on_input.peek());
         let summon = state.normal_summons.peek()[0];
-        state.selected_card.set(Some(id));
-        state.open_pile.set(Some(CardLocation::ExtraDeck));
-        state.effects_to_select_from.set(vec![summon]);
+        view.selected_card.set(Some(id));
+        view.open_pile.set(Some(CardLocation::ExtraDeck));
+        view.effects_to_select_from.set(vec![summon]);
         let cards = state.cards.peek().clone();
         let phase = *state.current_phase.peek();
 
@@ -462,9 +549,9 @@ fn consuming_a_response_clears_input_and_view_but_preserves_duel_state() {
         assert!(state.monster_sets.peek().is_empty());
         assert!(state.spell_trap_sets.peek().is_empty());
         assert!(state.activatable_effects.peek().is_empty());
-        assert!(state.selected_card.peek().is_none());
-        assert!(state.open_pile.peek().is_none());
-        assert!(state.effects_to_select_from.peek().is_empty());
+        assert!(view.selected_card.peek().is_none());
+        assert!(view.open_pile.peek().is_none());
+        assert!(view.effects_to_select_from.peek().is_empty());
         assert_eq!(*state.cards.peek(), cards);
         assert_eq!(*state.current_phase.peek(), phase);
         assert_eq!(phase, Some(Phase::Main1));
@@ -491,6 +578,7 @@ fn responses_are_blocked_during_playback_and_after_a_prompt_is_consumed() {
         .unwrap();
         let duel = core.create_duel(5).unwrap();
         let mut state = use_context_provider(UIState::default);
+        let mut view = use_context_provider(ViewState::default);
         use_context_provider(|| Signal::new(Some(duel)));
         let mut playback = use_context_provider(|| Signal::new(CardAnimationState::default()));
         state.waiting_on_input.set(true);
@@ -507,9 +595,9 @@ fn responses_are_blocked_during_playback_and_after_a_prompt_is_consumed() {
             sequence: 0,
         };
         let id = CardLayer::default().insert(address, 1).unwrap();
-        state.selected_card.set(Some(id));
+        view.selected_card.set(Some(id));
         send_response(Response::Yes);
-        assert!(state.selected_card.peek().is_some());
+        assert!(view.selected_card.peek().is_some());
         COMPLETED.with(|completed| completed.set(true));
         rsx! {}
     }
@@ -561,6 +649,7 @@ fn layered_loop_pauses_on_a_real_draw_and_resumes_to_the_prompt() {
         }
         duel.start();
         let mut state = use_context_provider(UIState::default);
+        use_context_provider(ViewState::default);
         use_context_provider(|| Signal::new(Some(duel)));
         state
             .cards
@@ -653,6 +742,7 @@ fn layered_loop_starts_gathering_for_a_real_hand_shuffle() {
         .unwrap();
         duel.start();
         let mut state = use_context_provider(UIState::default);
+        use_context_provider(ViewState::default);
         use_context_provider(|| Signal::new(Some(duel)));
         state
             .cards
@@ -732,6 +822,7 @@ fn batched_chain_messages_pause_the_loop_and_track_source_cards() {
         let mut layer = CardLayer::default();
         let card = layer.insert(address, 10).unwrap();
         let mut state = use_context_provider(UIState::default);
+        use_context_provider(ViewState::default);
         state.cards.set(Some(layer));
         use_context_provider(|| Signal::new(Some(duel)));
         let mut chain = use_context_provider(|| Signal::new(ChainPlayback::default()));
@@ -774,6 +865,7 @@ fn handles_real_duel_messages_until_input() {
         let duel = core.create_duel(5).unwrap();
         duel.start();
         let mut state = use_context_provider(UIState::default);
+        use_context_provider(ViewState::default);
         use_context_provider(|| Signal::new(Some(duel.clone())));
         state.cards.set(Some(CardLayer::default()));
         let tracking = state.cards;
@@ -810,8 +902,9 @@ fn failed_tracking_stops_processing_without_playback_context() {
     }
     fn app() -> Element {
         let mut state = use_context_provider(UIState::default);
+        let mut view = use_context_provider(ViewState::default);
         state.cards.set(Some(CardLayer::default()));
-        state.tracking_failed("test failure".to_owned(), None);
+        state.tracking_failed(&mut view, "test failure".to_owned(), None);
         assert!(state.cards.peek().is_none());
         assert_eq!(state.failure.peek().as_deref(), Some("test failure"));
         COMPLETED.with(|completed| completed.set(true));

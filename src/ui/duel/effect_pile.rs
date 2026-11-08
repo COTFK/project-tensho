@@ -15,10 +15,12 @@ use crate::ui::components::CardImage;
 use crate::ui::components::OptionButton;
 use crate::ui::components::PickerModal;
 use crate::ui::components::svg::LightningTrioIcon;
+use crate::ui::view_state::ViewState;
 
 #[component]
 pub fn EffectPile(location: CardLocation) -> Element {
-    let mut state = use_context::<UIState>();
+    let state = use_context::<UIState>();
+    let mut view = use_context::<ViewState>();
 
     let has_cards = state
         .zone_data(location)
@@ -29,7 +31,7 @@ pub fn EffectPile(location: CardLocation) -> Element {
         .any(|card| card.location == location);
 
     // Disable if effect selection modal is active
-    let suppress_actions = !state.effects_to_select_from.is_empty();
+    let suppress_actions = !view.effects_to_select_from.is_empty();
 
     rsx!(
         div {
@@ -40,7 +42,7 @@ pub fn EffectPile(location: CardLocation) -> Element {
             },
             class: if has_cards {"hover:outline-4 hover:outline-yellow-300"},
             onclick: move |_| if has_cards {
-                state.open_pile.set(Some(location));
+                view.open_pile.set(Some(location));
             },
             if has_cards {
                 div {
@@ -62,11 +64,12 @@ pub fn EffectPile(location: CardLocation) -> Element {
 #[component]
 pub fn EffectPileModal(location: CardLocation) -> Element {
     let state = use_context::<UIState>();
+    let view = use_context::<ViewState>();
     let cards = state.zone_data(location).unwrap_or_default();
     let tracking = (state.cards)();
     let chain = try_consume_context::<Signal<ChainPlayback>>().map(|chain| chain());
     let cards_prompting_to_activate = state.card_prompting_to_activate;
-    let mut open_pile = state.open_pile;
+    let mut open_pile = view.open_pile;
     let title = if location == CardLocation::Banishment {
         "Banishment"
     } else {
@@ -100,7 +103,7 @@ pub fn EffectPileModal(location: CardLocation) -> Element {
                             .unwrap_or_default();
 
                         // Disable if effect selection modal is active
-                        let suppress_actions = !state.effects_to_select_from.is_empty();
+                        let suppress_actions = !view.effects_to_select_from.is_empty();
 
                         rsx!(
                             div {

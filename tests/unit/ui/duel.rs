@@ -1,4 +1,5 @@
 use super::*;
+use crate::ocgcore::CardData;
 use crate::ui::card_layer::CardLayer;
 
 #[path = "events.rs"]
@@ -15,11 +16,13 @@ fn restart_button_cancels_playback_and_clears_pending_input_and_view() {
 
     thread_local! {
         static STATE: RefCell<Option<UIState>> = const { RefCell::new(None) };
+        static VIEW: RefCell<Option<ViewState>> = const { RefCell::new(None) };
         static ANIMATION: RefCell<Option<Signal<CardAnimationState>>> = const { RefCell::new(None) };
         static CHAIN: RefCell<Option<Signal<ChainPlayback>>> = const { RefCell::new(None) };
     }
 
     fn app() -> Element {
+        use_context_provider(ViewState::default);
         use_context_provider(|| {
             let mut state = UIState::default();
             state.restarting.set(true);
@@ -31,6 +34,7 @@ fn restart_button_cancels_playback_and_clears_pending_input_and_view() {
             deck_codes: vec![],
         });
         STATE.with(|slot| *slot.borrow_mut() = Some(consume_context::<UIState>()));
+        VIEW.with(|slot| *slot.borrow_mut() = Some(consume_context::<ViewState>()));
         ANIMATION.with(|slot| {
             *slot.borrow_mut() = Some(consume_context::<Signal<CardAnimationState>>())
         });
@@ -56,6 +60,7 @@ fn restart_button_cancels_playback_and_clears_pending_input_and_view() {
         .expect("Restart button should be mounted");
     dom.process_events();
     let mut state = STATE.with(|slot| slot.borrow().unwrap());
+    let mut view = VIEW.with(|slot| slot.borrow().unwrap());
     let mut animation = ANIMATION.with(|slot| slot.borrow().unwrap());
     let mut chain = CHAIN.with(|slot| slot.borrow().unwrap());
     let mut cards = CardLayer::default();
@@ -70,8 +75,12 @@ fn restart_button_cancels_playback_and_clears_pending_input_and_view() {
         )
         .unwrap();
     state.cards.set(Some(cards.clone()));
-    state.selected_card.set(Some(card));
-    state.open_pile.set(Some(CardLocation::Graveyard));
+    view.selected_card.set(Some(card));
+    view.open_pile.set(Some(CardLocation::Graveyard));
+    view.effects_to_select_from.set(vec![CardData {
+        card_code: 1,
+        ..Default::default()
+    }]);
     state.waiting_on_input.set(true);
     state.yes_no_question.set(Some("Activate?".into()));
     animation.write().begin(vec![card], cards.clone());
@@ -94,8 +103,9 @@ fn restart_button_cancels_playback_and_clears_pending_input_and_view() {
     assert!(!*state.waiting_on_input.peek());
     assert!(state.yes_no_question.peek().is_none());
     assert!(state.cards.peek().is_none());
-    assert!(state.selected_card.peek().is_none());
-    assert!(state.open_pile.peek().is_none());
+    assert!(view.selected_card.peek().is_none());
+    assert!(view.open_pile.peek().is_none());
+    assert!(view.effects_to_select_from.peek().is_empty());
     assert!(!animation.peek().is_active());
     assert!(animation.peek().moving.is_empty());
     assert!(animation.peek().source.is_none());
@@ -110,6 +120,7 @@ fn restart_button_cancels_playback_and_clears_pending_input_and_view() {
     assert!(!chain.peek().active);
     assert!(state.interaction_blocked(Some(animation)));
     STATE.with(|slot| *slot.borrow_mut() = None);
+    VIEW.with(|slot| *slot.borrow_mut() = None);
     ANIMATION.with(|slot| *slot.borrow_mut() = None);
     CHAIN.with(|slot| *slot.borrow_mut() = None);
 }
@@ -180,28 +191,43 @@ fn replaces_tracking_and_ui_state_when_a_duel_restarts() {
         let first = core.create_duel(0).unwrap();
         let second = core.create_duel(0).unwrap();
         let mut state = use_context_provider(UIState::default);
+        let mut view = use_context_provider(ViewState::default);
         let mut duel = use_context_provider(|| Signal::new(None::<Duel>));
         let mut tracking = state.cards;
         let initial = DuelSetup {
             duel: first.clone(),
             cards: CardLayer::from_decks(&[1, 2], &[]).unwrap(),
         };
-        install_duel(&mut state, &mut duel, Some(initial.clone()));
+        install_duel(&mut state, &mut view, &mut duel, Some(initial.clone()));
+        let selected = tracking.peek().as_ref().unwrap().cards()[0].id;
+        view.selected_card.set(Some(selected));
+        view.open_pile
+            .set(Some(crate::ocgcore::constants::CardLocation::ExtraDeck));
+        view.effects_to_select_from.set(vec![CardData {
+            card_code: 1,
+            ..Default::default()
+        }]);
         state.waiting_on_input.set(true);
         state.restarting.set(true);
         state.failure.set(Some("test failure".into()));
         tracking.set(None);
-        install_duel(&mut state, &mut duel, Some(initial));
+        install_duel(&mut state, &mut view, &mut duel, Some(initial));
         assert!((state.waiting_on_input)());
         assert!(tracking.read().is_none());
+        assert_eq!(*view.selected_card.peek(), Some(selected));
+        assert!(view.open_pile.peek().is_some());
+        assert!(!view.effects_to_select_from.peek().is_empty());
         let replacement = DuelSetup {
             duel: second.clone(),
             cards: CardLayer::from_decks(&[3], &[]).unwrap(),
         };
-        install_duel(&mut state, &mut duel, Some(replacement));
+        install_duel(&mut state, &mut view, &mut duel, Some(replacement));
         assert!(!(state.waiting_on_input)());
         assert!(!(state.restarting)());
         assert!((state.failure)().is_none());
+        assert!(view.selected_card.peek().is_none());
+        assert!(view.open_pile.peek().is_none());
+        assert!(view.effects_to_select_from.peek().is_empty());
         assert!(duel.read().as_ref().unwrap().ptr_eq(&second));
         let guard = tracking.read();
         let Some(layer) = &*guard else {
@@ -210,7 +236,7 @@ fn replaces_tracking_and_ui_state_when_a_duel_restarts() {
         assert_eq!(layer.cards().len(), 1);
         assert_eq!(layer.cards()[0].code, 3);
         drop(guard);
-        install_duel(&mut state, &mut duel, None);
+        install_duel(&mut state, &mut view, &mut duel, None);
         assert!(duel.read().is_none());
         assert!(tracking.read().is_none());
         rsx! {}

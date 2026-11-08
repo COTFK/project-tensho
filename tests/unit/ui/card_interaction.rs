@@ -133,6 +133,7 @@ fn menu_actions_are_suppressed_and_resolved_from_current_prompt() {
 
     fn app() -> Element {
         let mut state = use_context_provider(UIState::default);
+        let mut view = use_context_provider(ViewState::default);
         let hand = address(Player::Player, CardLocation::Hand, 0);
         let mut layer = CardLayer::default();
         layer.insert(hand, 42).unwrap();
@@ -141,18 +142,23 @@ fn menu_actions_are_suppressed_and_resolved_from_current_prompt() {
         state
             .normal_summons
             .set(vec![card(Player::Player, CardLocation::Hand, 0, 7)]);
-        assert_eq!(current_menu_actions(&state, hand).unwrap().summon, Some(7));
+        assert_eq!(
+            current_menu_actions(&state, &view, hand).unwrap().summon,
+            Some(7)
+        );
         state
             .normal_summons
             .set(vec![card(Player::Player, CardLocation::Hand, 0, 9)]);
-        assert_eq!(current_menu_actions(&state, hand).unwrap().summon, Some(9));
-        state
-            .effects_to_select_from
+        assert_eq!(
+            current_menu_actions(&state, &view, hand).unwrap().summon,
+            Some(9)
+        );
+        view.effects_to_select_from
             .set(vec![card(Player::Player, CardLocation::Hand, 0, 1)]);
-        assert!(current_menu_actions(&state, hand).is_none());
-        state.effects_to_select_from.set(vec![]);
-        state.selected_card.set(None);
-        assert!(current_menu_actions(&state, hand).is_none());
+        assert!(current_menu_actions(&state, &view, hand).is_none());
+        view.effects_to_select_from.set(vec![]);
+        view.selected_card.set(None);
+        assert!(current_menu_actions(&state, &view, hand).is_none());
         rsx! {}
     }
     let mut dom = VirtualDom::new(app);

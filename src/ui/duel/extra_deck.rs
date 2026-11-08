@@ -15,10 +15,12 @@ use crate::ui::components::CardImage;
 use crate::ui::components::OptionButton;
 use crate::ui::components::PickerModal;
 use crate::ui::components::svg::SummonIcon;
+use crate::ui::view_state::ViewState;
 
 #[component]
 pub fn ExtraDeck() -> Element {
-    let mut state = use_context::<UIState>();
+    let state = use_context::<UIState>();
+    let mut view = use_context::<ViewState>();
     let available_special_summons = (state.special_summons)();
 
     let has_summons = available_special_summons
@@ -29,14 +31,14 @@ pub fn ExtraDeck() -> Element {
         .is_some_and(|cards| !cards.is_empty());
 
     // Disable if effect selection modal is active
-    let suppress_actions = !state.effects_to_select_from.is_empty();
+    let suppress_actions = !view.effects_to_select_from.is_empty();
 
     rsx!(
         div {
             class: "relative bg-slate-50/2 {ZONE_SIZE} aspect-square flex items-center justify-center border-0.5",
             class: if has_cards {"hover:outline-4 hover:outline-yellow-300"},
             onclick: move |_| if has_cards {
-                state.open_pile.set(Some(CardLocation::ExtraDeck));
+                view.open_pile.set(Some(CardLocation::ExtraDeck));
             },
             if has_cards {
                 div {
@@ -54,11 +56,12 @@ pub fn ExtraDeck() -> Element {
 #[component]
 pub fn ExtraDeckModal() -> Element {
     let state = use_context::<UIState>();
+    let view = use_context::<ViewState>();
     let extra_deck = state.zone_data(CardLocation::ExtraDeck).unwrap_or_default();
     let tracking = (state.cards)();
     let chain = try_consume_context::<Signal<ChainPlayback>>().map(|chain| chain());
     let available_special_summons = (state.special_summons)();
-    let mut open_pile = state.open_pile;
+    let mut open_pile = view.open_pile;
 
     let mut selected_card = use_signal(|| None);
 
@@ -91,7 +94,7 @@ pub fn ExtraDeckModal() -> Element {
                         let is_special_summonable = special_summon_index.is_some();
 
                         // Disable if effect selection modal is active
-                        let suppress_actions = !state.effects_to_select_from.is_empty();
+                        let suppress_actions = !view.effects_to_select_from.is_empty();
 
                         rsx!(
                             div {

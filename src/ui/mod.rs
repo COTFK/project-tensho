@@ -5,6 +5,7 @@ mod components;
 mod duel;
 mod loading;
 mod rotate_device;
+pub(crate) mod view_state;
 
 pub use duel::DuelWrapper;
 pub use loading::LoadingScreen;
