@@ -10,10 +10,7 @@ use crate::duel::controller::ChainLink;
 use crate::ocgcore::CardData;
 use crate::ocgcore::constants::{BattlePosition, CardLocation, Player};
 use crate::ocgcore::location_info::CardPositionFlags;
-use crate::ui::card_animation::CardAnimationState;
-use crate::ui::chain::ChainPlayback;
 use crate::ui::components::CardImage;
-use crate::ui::view_state::ViewState;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum CardAppearance {
@@ -151,11 +148,16 @@ fn chain_indicators(cards: &[TrackedCard], links: &[ChainLink]) -> BTreeMap<Card
 }
 
 #[component]
-pub(super) fn PersistentCardLayer(cards: Vec<TrackedCard>, targets: Vec<CardTarget>) -> Element {
-    let chain = try_consume_context::<Signal<ChainPlayback>>();
-    let indicators = chain
-        .map(|chain| chain_indicators(&cards, &chain().displayed))
-        .unwrap_or_default();
+pub(super) fn PersistentCardLayer(
+    cards: Vec<TrackedCard>,
+    targets: Vec<CardTarget>,
+    selected: Option<CardId>,
+    suppressed: bool,
+    animating: bool,
+    moving: Vec<CardId>,
+    chain_links: Vec<ChainLink>,
+) -> Element {
+    let indicators = chain_indicators(&cards, &chain_links);
     let mut cards = cards;
     cards.sort_by_key(|card| card.id);
     rsx! {
@@ -167,6 +169,10 @@ pub(super) fn PersistentCardLayer(cards: Vec<TrackedCard>, targets: Vec<CardTarg
                     card,
                     target: targets.iter().find(|target| target.id == card.id).copied(),
                     chain_links: indicators.get(&card.id).cloned().unwrap_or_default(),
+                    selected: selected == Some(card.id),
+                    suppressed,
+                    animating,
+                    moving: moving.contains(&card.id),
                 }
             }
         }
@@ -174,12 +180,15 @@ pub(super) fn PersistentCardLayer(cards: Vec<TrackedCard>, targets: Vec<CardTarg
 }
 
 #[component]
-fn LayerCard(card: TrackedCard, target: Option<CardTarget>, chain_links: Vec<u32>) -> Element {
-    let view = use_context::<ViewState>();
-    let playback = try_consume_context::<Signal<CardAnimationState>>();
-    let animating = playback.is_some_and(|playback| playback().is_active());
-    let moving = playback.is_some_and(|playback| playback().moving.contains(&card.id));
-    let selected = (view.selected_card)() == Some(card.id);
+fn LayerCard(
+    card: TrackedCard,
+    target: Option<CardTarget>,
+    chain_links: Vec<u32>,
+    selected: bool,
+    suppressed: bool,
+    animating: bool,
+    moving: bool,
+) -> Element {
     let visible = visible_card(card, target);
     let hand = matches!(card.placement, CardPlacement::Zone(address) if address.location == CardLocation::Hand);
     let style = visible.map(|(target, _)| {
@@ -229,6 +238,8 @@ fn LayerCard(card: TrackedCard, target: Option<CardTarget>, chain_links: Vec<u32
                             passive: target.appearance != CardAppearance::Interactive,
                             animated: animating,
                             image: card_image(card, Some(target)),
+                            selected,
+                            suppress: suppressed,
                         }
                     }
                     ChainBadges { links: chain_links, rotation: target.rotation }

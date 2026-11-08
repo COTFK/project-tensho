@@ -21,8 +21,5 @@ impl Playback {
 }
 
 pub(crate) fn use_playback() -> Playback {
-    let playback = use_context_provider(Playback::default);
-    use_context_provider(|| playback.animation);
-    use_context_provider(|| playback.chain);
-    playback
+    use_context_provider(Playback::default)
 }

@@ -1,6 +1,8 @@
 use super::*;
 use crate::duel::cards::{CardAddress, CardTracker};
-use crate::state::UIState;
+use crate::duel::input::{CardAction, PendingInput};
+use crate::ui::card_animation::CardAnimationState;
+use crate::ui::chain::ChainPlayback;
 use dioxus::core::{AttributeValue, ElementId, Mutation};
 use std::cell::RefCell;
 
@@ -191,15 +193,26 @@ thread_local! {
 }
 
 fn chain_badge_app() -> Element {
-    use_context_provider(UIState::default);
-    use_context_provider(ViewState::default);
-    let chain = use_context_provider(|| Signal::new(ChainPlayback::default()));
+    use_card_inputs();
+    let chain = use_signal(ChainPlayback::default);
     TEST_CHAIN.with(|slot| *slot.borrow_mut() = Some(chain));
     let (card, target) = fixture(
         CardLocation::MonsterZone,
         Some(CardPositionFlags::FACE_UP_ATTACK),
     );
-    rsx! { PersistentCardLayer { cards: vec![card], targets: vec![target] } }
+    rsx! { PersistentCardLayer {
+        cards: vec![card], targets: vec![target],
+        selected: None, suppressed: false, animating: false, moving: vec![],
+        chain_links: chain().displayed,
+    } }
+}
+
+fn use_card_inputs() {
+    let pending = use_signal(|| None::<PendingInput>);
+    use_context_provider(|| ReadSignal::new(pending));
+    use_context_provider(|| {
+        EventHandler::new(|_: CardAction| -> () { panic!("Unexpected card action") })
+    });
 }
 
 #[test]
@@ -242,25 +255,25 @@ fn rendered_card_displays_chain_numbers_and_removes_them_when_resolved() {
 }
 
 fn field_app() -> Element {
-    let mut state = use_context_provider(UIState::default);
-    let view = use_context_provider(ViewState::default);
-    let playback = use_context_provider(|| Signal::new(CardAnimationState::default()));
+    use_card_inputs();
+    let selected = use_signal(|| None::<CardId>);
+    let playback = use_signal(CardAnimationState::default);
     let (card, target) = fixture(
         CardLocation::MonsterZone,
         Some(CardPositionFlags::FACE_UP_ATTACK),
     );
-    let mut layer = CardTracker::default();
-    layer.insert(target.address, card.code).unwrap();
-    state.cards.set(Some(layer));
-    TEST_SELECTION.with(|slot| *slot.borrow_mut() = Some(view.selected_card));
+    TEST_SELECTION.with(|slot| *slot.borrow_mut() = Some(selected));
     TEST_PLAYBACK.with(|slot| *slot.borrow_mut() = Some(playback));
-    rsx! { PersistentCardLayer { cards: vec![card], targets: vec![target] } }
+    rsx! { PersistentCardLayer {
+        cards: vec![card], targets: vec![target],
+        selected: selected(), suppressed: false, animating: playback().is_active(),
+        moving: playback().moving, chain_links: vec![],
+    } }
 }
 
 fn two_field_cards_app() -> Element {
-    let mut state = use_context_provider(UIState::default);
-    use_context_provider(ViewState::default);
-    let playback = use_context_provider(|| Signal::new(CardAnimationState::default()));
+    use_card_inputs();
+    let playback = use_signal(CardAnimationState::default);
     let (first, first_target) = fixture(
         CardLocation::MonsterZone,
         Some(CardPositionFlags::FACE_UP_ATTACK),
@@ -279,12 +292,13 @@ fn two_field_cards_app() -> Element {
     second_target.address = second_address;
     second_target.data.card_code = second.code;
     second_target.data.sequence = 1;
-    state.cards.set(Some(layer));
     TEST_PLAYBACK.with(|slot| *slot.borrow_mut() = Some(playback));
     rsx! {
         PersistentCardLayer {
             cards: vec![first, second],
             targets: vec![first_target, second_target],
+            selected: None, suppressed: false, animating: playback().is_active(),
+            moving: playback().moving, chain_links: vec![],
         }
     }
 }
@@ -415,13 +429,15 @@ fn selected_field_card_is_above_other_cards_and_respects_movement_layering() {
 }
 
 fn app() -> Element {
-    use_context_provider(UIState::default);
-    use_context_provider(ViewState::default);
+    use_card_inputs();
     let (card, target) = fixture(CardLocation::Hand, None);
     let state = use_signal(|| (vec![card], vec![target]));
     TEST_STATE.with(|slot| *slot.borrow_mut() = Some(state));
     let (cards, targets) = state();
-    rsx! { PersistentCardLayer { cards, targets } }
+    rsx! { PersistentCardLayer {
+        cards, targets, selected: None, suppressed: false, animating: false,
+        moving: vec![], chain_links: vec![],
+    } }
 }
 
 fn card_root(edits: &[Mutation], id: CardId) -> ElementId {

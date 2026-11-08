@@ -6,8 +6,7 @@ use crate::duel::cards::{CardAddress, CardTracker};
 use crate::duel::controller::{
     self, DuelController, DuelSetup, process_until_input, resolve_chain_event,
 };
-use crate::duel::input::PendingInput;
-use crate::ocgcore::CardData;
+use crate::duel::input::{CardAction, CardActions, PendingInput};
 use crate::ocgcore::OCGCore;
 use crate::ocgcore::Response;
 use crate::ocgcore::constants::CardLocation;
@@ -18,28 +17,154 @@ use crate::ui::playback::Playback;
 use crate::ui::view_state::ViewState;
 use ocgcore_ffi::enums::OCG_DuelStatus;
 
-pub(crate) fn select_card(address: CardAddress) {
-    let state = consume_context::<UIState>();
+pub(crate) fn current_menu_actions(
+    state: &UIState,
+    view: &ViewState,
+    address: CardAddress,
+) -> Option<CardActions> {
+    if !view.is_selected(address, state.cards.peek().as_ref())
+        || !view.effects_to_select_from.peek().is_empty()
+    {
+        tracing::warn!("Ignoring a stale or suppressed card action at {address:?}");
+        return None;
+    }
+    Some(prompt_actions(state, address))
+}
+
+fn prompt_actions(state: &UIState, address: CardAddress) -> CardActions {
+    state
+        .pending_input
+        .read()
+        .as_ref()
+        .map(|input| input.card_actions(address))
+        .unwrap_or_default()
+}
+
+pub(crate) fn handle_card_action(action: CardAction) {
+    let mut state = consume_context::<UIState>();
     if state.interaction_blocked(consume_context::<Playback>()) {
-        tracing::warn!("Ignoring card selection during animation");
+        tracing::warn!("Ignoring card action while interaction is blocked");
         return;
     }
-    let tracking = state.cards;
-    let card_id = match &*tracking.peek() {
-        Some(layer) => match layer.card_at(address) {
-            Some(card) => card.id,
-            None => {
-                tracing::error!("Cannot select untracked card at {address:?}");
-                return;
-            }
-        },
-        None => {
-            tracing::error!("Cannot select a card without an active tracker");
-            return;
-        }
-    };
     let mut view = consume_context::<ViewState>();
-    view.selected_card.set(Some(card_id));
+    if let Some(response) = resolve_card_action(&mut state, &mut view, action) {
+        send_response(response);
+    }
+}
+
+pub(crate) fn resolve_card_action(
+    state: &mut UIState,
+    view: &mut ViewState,
+    action: CardAction,
+) -> Option<Response> {
+    let address = match action {
+        CardAction::Select(address)
+        | CardAction::Summon(address)
+        | CardAction::Activate(address)
+        | CardAction::Set(address)
+        | CardAction::SpecialSummon(address) => address,
+    };
+    if matches!(action, CardAction::Select(_)) {
+        let actions = prompt_actions(state, address);
+        if address.location != CardLocation::Hand {
+            if let Some(index) = actions.tribute {
+                state.pending_input.with_mut(|input| {
+                    let Some(PendingInput::Tribute { selected, .. }) = input else {
+                        tracing::warn!("Tribute selection is no longer available at {address:?}");
+                        return;
+                    };
+                    if let Some(position) = selected.iter().position(|selected| *selected == index)
+                    {
+                        selected.remove(position);
+                    } else if selected.len() < actions.tribute_max {
+                        selected.push(index);
+                    }
+                });
+                return None;
+            }
+            if let Some(index) = actions.selection {
+                return Some(Response::SelectUnselectCard { index });
+            }
+        }
+        view.select_card(address, state.cards.peek().as_ref());
+        return None;
+    }
+    let pile = matches!(
+        address.location,
+        CardLocation::ExtraDeck | CardLocation::Graveyard | CardLocation::Banishment
+    );
+    let actions = if pile {
+        if *view.open_pile.peek() != Some(address.location)
+            || !view.effects_to_select_from.peek().is_empty()
+        {
+            tracing::warn!("Ignoring a stale or suppressed pile action at {address:?}");
+            return None;
+        }
+        prompt_actions(state, address)
+    } else {
+        let Some(actions) = current_menu_actions(state, view, address) else {
+            return None;
+        };
+        actions
+    };
+    match action {
+        CardAction::Summon(_) => {
+            let Some(index) = actions.summon else {
+                tracing::warn!("Summon is no longer available at {address:?}");
+                return None;
+            };
+            view.selected_card.set(None);
+            Some(Response::NormalSummon { index })
+        }
+        CardAction::Set(_) => {
+            if let Some(index) = actions.spell_trap_set {
+                view.selected_card.set(None);
+                Some(Response::SetSpellTrap { index })
+            } else if let Some(index) = actions.monster_set {
+                view.selected_card.set(None);
+                Some(Response::SetMonster { index })
+            } else {
+                tracing::warn!("Setting is no longer available at {address:?}");
+                None
+            }
+        }
+        CardAction::Activate(_) => {
+            let hand = address.location == CardLocation::Hand;
+            if let Some(prompted) = actions.prompted {
+                if let Some(index) = prompted.action_index {
+                    view.selected_card.set(None);
+                    return Some(Response::Chain { index });
+                }
+                if !hand {
+                    return Some(Response::Yes);
+                }
+            }
+            if !pile && !hand && actions.effects.len() > 1 {
+                view.effects_to_select_from.set(actions.effects);
+                view.selected_card.set(None);
+                None
+            } else if !pile
+                && let Some(index) = actions
+                    .effects
+                    .last()
+                    .and_then(|effect| effect.action_index)
+            {
+                view.selected_card.set(None);
+                Some(Response::Activate { index })
+            } else {
+                tracing::warn!("Activation is no longer available at {address:?}");
+                None
+            }
+        }
+        CardAction::SpecialSummon(_) => {
+            let Some(index) = actions.special_summon else {
+                tracing::warn!("Special summon is no longer available at {address:?}");
+                return None;
+            };
+            Some(Response::SpecialSummon { index })
+        }
+        CardAction::Select(_) => unreachable!(),
+    }
 }
 
 define_ui_state!(UIState {
@@ -215,13 +340,6 @@ impl UIState {
             return false;
         }
         true
-    }
-
-    pub(crate) fn zone_data(&self, location: CardLocation) -> Option<Vec<Option<CardData>>> {
-        match &*self.cards.read() {
-            Some(cards) => cards.zone_data(location),
-            _ => None,
-        }
     }
 
     pub fn clear_pending_input(&mut self) {

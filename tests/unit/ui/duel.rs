@@ -162,13 +162,14 @@ fn restart_button_cancels_playback_and_clears_pending_input_and_view() {
     }
 
     fn app() -> Element {
-        use_playback();
-        use_context_provider(ViewState::default);
-        use_context_provider(|| {
+        let playback = use_playback();
+        let view = use_context_provider(ViewState::default);
+        let state = use_context_provider(|| {
             let mut state = UIState::default();
             state.restarting.set(true);
             state
         });
+        use_duel_contexts(state, view, playback);
         let duel_resource = use_resource(std::future::pending::<anyhow::Result<DuelSetup>>);
         let screen = DuelScreen(DuelScreenProps {
             duel_resource,
@@ -176,10 +177,8 @@ fn restart_button_cancels_playback_and_clears_pending_input_and_view() {
         });
         STATE.with(|slot| *slot.borrow_mut() = Some(consume_context::<UIState>()));
         VIEW.with(|slot| *slot.borrow_mut() = Some(consume_context::<ViewState>()));
-        ANIMATION.with(|slot| {
-            *slot.borrow_mut() = Some(consume_context::<Signal<CardAnimationState>>())
-        });
-        CHAIN.with(|slot| *slot.borrow_mut() = Some(consume_context::<Signal<ChainPlayback>>()));
+        ANIMATION.with(|slot| *slot.borrow_mut() = Some(consume_context::<Playback>().animation));
+        CHAIN.with(|slot| *slot.borrow_mut() = Some(consume_context::<Playback>().chain));
         screen
     }
 

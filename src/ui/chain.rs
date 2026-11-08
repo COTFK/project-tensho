@@ -2,7 +2,6 @@ use std::collections::VecDeque;
 
 use dioxus::prelude::*;
 
-use crate::duel::cards::CardId;
 use crate::duel::controller::{ChainEvent, ChainLink};
 use crate::ui::card_animation::wait_millis;
 
@@ -18,13 +17,6 @@ pub(crate) struct ChainPlayback {
 }
 
 impl ChainPlayback {
-    pub fn links_for_card(&self, card: CardId) -> Vec<u32> {
-        self.displayed
-            .iter()
-            .filter_map(|link| (link.card == Some(card)).then_some(link.number))
-            .collect()
-    }
-
     pub fn has_pending_frames(&self) -> bool {
         !self.frames.is_empty()
     }

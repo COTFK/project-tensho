@@ -274,8 +274,9 @@ fn layered_field_reports_errors_without_owning_duel_lifecycle() {
 
     fn app() -> Element {
         let mut state = use_context_provider(UIState::default);
-        use_context_provider(ViewState::default);
+        let view = use_context_provider(ViewState::default);
         let mut playback = use_playback();
+        super::super::use_duel_contexts(state, view, playback);
         use_context_provider(LayoutAnchors::default);
         use_context_provider(|| LayoutRevision(Signal::new(0)));
         use_hook(move || {
@@ -295,6 +296,7 @@ fn layered_field_reports_errors_without_owning_duel_lifecycle() {
                 selected,
                 animation: playback.animation,
                 preloading: true,
+                effects_open: false,
                 deck_codes: vec![],
                 onlayout: move |status| REPORTED.with(|reports| reports.borrow_mut().push(status)),
             }

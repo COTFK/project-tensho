@@ -1,5 +1,6 @@
 use super::*;
 use crate::duel::cards::CardPlacement;
+use crate::ocgcore::CardData;
 use crate::ocgcore::constants::Player;
 use crate::ocgcore::messages::SelectTributeMessageData;
 use crate::ui::playback::{Playback, use_playback};
@@ -172,7 +173,7 @@ fn selection_tracks_moves_and_invalidates_on_shuffle_or_failure() {
             .unwrap();
         let mut tracking = state.cards;
         tracking.set(Some(layer));
-        select_card(hand);
+        handle_card_action(CardAction::Select(hand));
         let selected = view.selected_card.peek().unwrap();
         let loc = |address: CardAddress| CardLocationInfo {
             controller: Some(address.controller),
@@ -214,11 +215,11 @@ fn selection_tracks_moves_and_invalidates_on_shuffle_or_failure() {
             .unwrap();
         view.reconcile_selection(tracking.peek().as_ref().unwrap());
         assert!(view.selected_card.peek().is_none());
-        select_card(hand);
+        handle_card_action(CardAction::Select(hand));
         assert_ne!(view.selected_card.peek().unwrap(), selected);
         state.tracking_failed(&mut view, "test".into(), consume_context::<Playback>());
         assert!(view.selected_card.peek().is_none());
-        select_card(hand);
+        handle_card_action(CardAction::Select(hand));
         assert!(view.selected_card.peek().is_none());
         COMPLETED.with(|completed| completed.set(true));
         rsx! {}

@@ -1,14 +1,12 @@
-use crate::duel::input::PendingInput;
 use dioxus::prelude::*;
 
 use super::chain_badges::ChainBadges;
 use super::constants::ZONE_SIZE;
+use super::modal::PileCard;
 use crate::duel::cards::CardAddress;
-use crate::ocgcore::Response;
-use crate::ocgcore::constants::{CardLocation, Player};
-use crate::state::UIState;
-use crate::state::send_response;
-use crate::ui::chain::ChainPlayback;
+use crate::duel::input::CardAction;
+use crate::ocgcore::CardData;
+use crate::ocgcore::constants::CardLocation;
 use crate::ui::components::ActionButton;
 use crate::ui::components::Card;
 use crate::ui::components::CardActionMenu;
@@ -16,40 +14,22 @@ use crate::ui::components::CardImage;
 use crate::ui::components::OptionButton;
 use crate::ui::components::PickerModal;
 use crate::ui::components::svg::SummonIcon;
-use crate::ui::view_state::ViewState;
 
 #[component]
-pub fn ExtraDeck() -> Element {
-    let state = use_context::<UIState>();
-    let mut view = use_context::<ViewState>();
-    let available_special_summons = match (state.pending_input)() {
-        Some(PendingInput::Idle(actions)) => actions.special_summons,
-        _ => Vec::new(),
-    };
-
-    let has_summons = available_special_summons
-        .iter()
-        .any(|card| card.location == CardLocation::ExtraDeck);
-    let has_cards = state
-        .zone_data(CardLocation::ExtraDeck)
-        .is_some_and(|cards| !cards.is_empty());
-
-    // Disable if effect selection modal is active
-    let suppress_actions = !view.effects_to_select_from.is_empty();
-
+pub fn ExtraDeck(has_cards: bool, highlighted: bool, onbrowse: EventHandler<()>) -> Element {
     rsx!(
         div {
             class: "relative bg-slate-50/2 {ZONE_SIZE} aspect-square flex items-center justify-center border-0.5",
             class: if has_cards {"hover:outline-4 hover:outline-yellow-300"},
             onclick: move |_| if has_cards {
-                view.open_pile.set(Some(CardLocation::ExtraDeck));
+                onbrowse.call(());
             },
             if has_cards {
                 div {
                     class: "relative h-full aspect-[59/86]",
                     div {
                         class: "absolute inset-[1px] my-0.5 ml-0.5 mb-1 md:inset-[2px] md:my-1 md:mb-2 md:ml-1 rounded-[2px] blur-[1px] mix-blend-screen pointer-events-none",
-                        class: if has_summons && !suppress_actions { "bg-yellow-400" },
+                        class: if highlighted { "bg-yellow-400" },
                     }
                 }
             }
@@ -58,18 +38,13 @@ pub fn ExtraDeck() -> Element {
 }
 
 #[component]
-pub fn ExtraDeckModal() -> Element {
-    let state = use_context::<UIState>();
-    let view = use_context::<ViewState>();
-    let extra_deck = state.zone_data(CardLocation::ExtraDeck).unwrap_or_default();
-    let tracking = (state.cards)();
-    let chain = try_consume_context::<Signal<ChainPlayback>>().map(|chain| chain());
-    let available_special_summons = match (state.pending_input)() {
-        Some(PendingInput::Idle(actions)) => actions.special_summons,
-        _ => Vec::new(),
-    };
-    let mut open_pile = view.open_pile;
-
+pub fn ExtraDeckModal(
+    extra_deck: Vec<PileCard>,
+    available_special_summons: Vec<CardData>,
+    mut open_pile: Signal<Option<CardLocation>>,
+    suppress_actions: bool,
+    onaction: EventHandler<CardAction>,
+) -> Element {
     let mut selected_card = use_signal(|| None);
 
     rsx!(
@@ -82,15 +57,8 @@ pub fn ExtraDeckModal() -> Element {
                 class: "overflow-x-auto scroll-smooth scrollbar-thin",
                 for (index, card) in extra_deck.iter().enumerate() {
                     {
-                        let card = (*card).unwrap();
-                        let links = tracking.as_ref()
-                            .and_then(|layer| layer.card_at(CardAddress {
-                                controller: Player::Player,
-                                location: CardLocation::ExtraDeck,
-                                sequence: index as u32,
-                            }))
-                            .and_then(|card| chain.as_ref().map(|chain| chain.links_for_card(card.id)))
-                            .unwrap_or_default();
+                        let links = card.links.clone();
+                        let card = card.data;
                         let special_summon_index = available_special_summons
                             .iter()
                             .position(|summon| {
@@ -99,9 +67,6 @@ pub fn ExtraDeckModal() -> Element {
                             })
                             .map(|index| index as u8);
                         let is_special_summonable = special_summon_index.is_some();
-
-                        // Disable if effect selection modal is active
-                        let suppress_actions = !view.effects_to_select_from.is_empty();
 
                         rsx!(
                             div {
@@ -124,8 +89,12 @@ pub fn ExtraDeckModal() -> Element {
                                         label: "Summon",
                                         class: "border-yellow-500 text-yellow-300",
                                         onclick: move |_| {
-                                            if let Some(special_summon_index) = special_summon_index {
-                                                send_response(Response::SpecialSummon { index: special_summon_index });
+                                            if is_special_summonable {
+                                                onaction.call(CardAction::SpecialSummon(CardAddress {
+                                                    controller: card.controller,
+                                                    location: CardLocation::ExtraDeck,
+                                                    sequence: u32::from(card.sequence),
+                                                }));
                                             }
                                             selected_card.set(None);
                                             open_pile.set(None);

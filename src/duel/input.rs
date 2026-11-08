@@ -26,9 +26,19 @@ pub(crate) enum PendingInput {
     Sort(SortCardMessageData),
 }
 
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CardAction {
+    Select(CardAddress),
+    Summon(CardAddress),
+    Activate(CardAddress),
+    Set(CardAddress),
+    SpecialSummon(CardAddress),
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct CardActions {
     pub summon: Option<u8>,
+    pub special_summon: Option<u8>,
     pub monster_set: Option<u8>,
     pub spell_trap_set: Option<u8>,
     pub effects: Vec<CardData>,
@@ -87,6 +97,11 @@ impl PendingInput {
                         .and_then(|card| card.action_index)
                 };
                 actions.summon = last_index(&message.normal_summons);
+                actions.special_summon = message
+                    .special_summons
+                    .iter()
+                    .position(|card| matches(&card))
+                    .map(|index| index as u8);
                 actions.monster_set = last_index(&message.monster_sets);
                 actions.spell_trap_set = last_index(&message.spell_trap_sets);
                 actions.effects = message

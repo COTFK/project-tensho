@@ -7,6 +7,7 @@ use super::hand::{Hand, hand_transform};
 use super::layout_anchors::{AnchorNotReady, CardAnchor, LayoutAnchors, LayoutRevision};
 use super::persistent_card_layer::{CardAppearance, CardTarget, PersistentCardLayer, card_image};
 use crate::duel::cards::{Card, CardAddress, CardId, CardPlacement, CardTracker};
+use crate::duel::controller::ChainLink;
 use crate::ocgcore::CardData;
 use crate::ocgcore::CardType;
 use crate::ocgcore::constants::{BattlePosition, CardLocation, Player};
@@ -497,6 +498,7 @@ pub(super) fn LayeredField(
     selected: ReadSignal<Option<CardId>>,
     animation: ReadSignal<CardAnimationState>,
     preloading: bool,
+    effects_open: bool,
     deck_codes: Vec<u32>,
     onlayout: EventHandler<LayoutStatus>,
 ) -> Element {
@@ -504,6 +506,7 @@ pub(super) fn LayeredField(
     let revision = use_context::<LayoutRevision>();
     let mut layered_mounted = use_signal(|| false);
     let artwork = use_signal(HashMap::<String, ArtworkStatus>::new);
+    let chain_links = use_context::<Memo<Vec<ChainLink>>>();
     let resource = use_resource(move || {
         let revision = (revision.0)();
         let anchors = anchors.clone();
@@ -577,9 +580,14 @@ pub(super) fn LayeredField(
         .map(|snapshot| snapshot.cards.cards().to_vec())
         .unwrap_or_default();
     shuffle_source_cards(&mut cards, &animation());
+    let hand_size = tracking
+        .read()
+        .as_ref()
+        .and_then(|cards| cards.zone_data(CardLocation::Hand))
+        .map_or(0, |cards| cards.len());
     rsx! {
         Field {}
-        Hand {}
+        Hand { hand_size }
         // Remeasure after the card layer is first ready.
         if layered {
             div {
@@ -590,7 +598,15 @@ pub(super) fn LayeredField(
                 },
             }
         }
-        PersistentCardLayer { cards, targets: visible_targets }
+        PersistentCardLayer {
+            cards,
+            targets: visible_targets,
+            selected: selected(),
+            suppressed: effects_open,
+            animating: animation.read().is_active(),
+            moving: animation.read().moving.clone(),
+            chain_links: chain_links(),
+        }
         ArtworkPreloader { urls: required_artwork, artwork }
     }
 }

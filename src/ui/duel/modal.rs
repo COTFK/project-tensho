@@ -1,47 +1,134 @@
-use crate::duel::input::PendingInput;
+use crate::duel::cards::{CardAddress, CardTracker};
+use crate::duel::controller::ChainLink;
+use crate::duel::input::{CardAction, PendingInput};
 use dioxus::prelude::*;
 
 use super::effect_pile::EffectPileModal;
 use super::extra_deck::ExtraDeckModal;
-use crate::ocgcore::Response;
-use crate::ocgcore::constants::CardLocation;
-use crate::state::UIState;
-use crate::state::send_response;
+use crate::ocgcore::constants::{BattlePosition, CardLocation, Player};
+use crate::ocgcore::messages::{
+    AnnounceNumberMessageData, SelectCardMessageData, SelectOptionMessageData,
+    SelectTributeMessageData, SelectUnselectMessageData, SortCardMessageData,
+};
+use crate::ocgcore::{CardData, Response};
 use crate::ui::components::Card;
 use crate::ui::components::CardImage;
 use crate::ui::components::MessageModal;
 use crate::ui::components::OptionButton;
 use crate::ui::components::PickerModal;
-use crate::ui::view_state::ViewState;
 use crate::utility::get_optional_string_label;
 
 #[component]
 pub fn ModalContainer() -> Element {
-    rsx!(
-        PromptActivationModal {}
-        YesNoQuestionModal {}
-        CardChoiceModal {}
-        PositionSelectorModal {}
-        CardSelector { }
-        SortCardSelector { }
-        EffectPileModal { location: CardLocation::Graveyard }
-        EffectPileModal { location: CardLocation::Banishment }
-        EffectSelector {}
-        ExtraDeckModal {}
-        OptionSelector {}
-        NumberSelector {}
-
-    )
-}
-
-#[component]
-fn PromptActivationModal() -> Element {
-    let state = use_context::<UIState>();
-    let pending = (state.pending_input)();
+    let pending = use_context::<ReadSignal<Option<PendingInput>>>()();
+    let tracking = use_context::<ReadSignal<Option<CardTracker>>>();
+    let chain = use_context::<Memo<Vec<ChainLink>>>()();
+    let open_pile = use_context::<Signal<Option<CardLocation>>>();
+    let effects = use_context::<Signal<Vec<CardData>>>();
+    let onresponse = use_context::<EventHandler<Response>>();
+    let onaction = use_context::<EventHandler<CardAction>>();
+    let suppress_actions = !effects.read().is_empty();
     let prompts = pending
         .as_ref()
         .map(PendingInput::prompted_effects)
-        .unwrap_or_default();
+        .unwrap_or_default()
+        .to_vec();
+    let cards = tracking.read();
+    rsx!(
+        PromptActivationModal { prompts: prompts.clone(), onresponse }
+        YesNoQuestionModal {
+            question: match &pending { Some(PendingInput::YesNo(value)) => Some(value.clone()), _ => None },
+            onresponse,
+        }
+        CardChoiceModal {
+            cards_to_select_from: match &pending { Some(PendingInput::Unselect(value)) => Some(value.clone()), _ => None },
+            tributes: match &pending { Some(PendingInput::Tribute { message, .. }) => Some(message.clone()), _ => None },
+            selected_tributes: match &pending { Some(PendingInput::Tribute { selected, .. }) => selected.clone(), _ => Vec::new() },
+            onresponse,
+        }
+        PositionSelectorModal {
+            positions: match &pending { Some(PendingInput::Position(value)) => value.clone(), _ => Vec::new() },
+            onresponse,
+        }
+        CardSelector {
+            selectables: match &pending { Some(PendingInput::Cards(value)) => Some(value.clone()), _ => None },
+            onresponse,
+        }
+        SortCardSelector {
+            sort_cards: match &pending { Some(PendingInput::Sort(value)) => Some(value.clone()), _ => None },
+            onresponse,
+        }
+        EffectPileModal {
+            location: CardLocation::Graveyard,
+            cards: pile_cards(cards.as_ref(), CardLocation::Graveyard, &chain),
+            cards_prompting_to_activate: prompts.clone(),
+            open_pile, suppress_actions, onaction,
+        }
+        EffectPileModal {
+            location: CardLocation::Banishment,
+            cards: pile_cards(cards.as_ref(), CardLocation::Banishment, &chain),
+            cards_prompting_to_activate: prompts,
+            open_pile, suppress_actions, onaction,
+        }
+        EffectSelector { effects, onresponse }
+        ExtraDeckModal {
+            extra_deck: pile_cards(cards.as_ref(), CardLocation::ExtraDeck, &chain),
+            available_special_summons: match &pending { Some(PendingInput::Idle(value)) => value.special_summons.clone(), _ => Vec::new() },
+            open_pile, suppress_actions, onaction,
+        }
+        OptionSelector {
+            options_message: match &pending { Some(PendingInput::Options(value)) => Some(value.clone()), _ => None },
+            onresponse,
+        }
+        NumberSelector {
+            numbers: match &pending { Some(PendingInput::Numbers(value)) => Some(value.clone()), _ => None },
+            onresponse,
+        }
+    )
+}
+
+#[derive(Clone, PartialEq)]
+pub(super) struct PileCard {
+    pub data: CardData,
+    pub links: Vec<u32>,
+}
+
+fn pile_cards(
+    tracking: Option<&CardTracker>,
+    location: CardLocation,
+    chain: &[ChainLink],
+) -> Vec<PileCard> {
+    let Some(tracking) = tracking else {
+        return Vec::new();
+    };
+    tracking
+        .zone_data(location)
+        .unwrap_or_default()
+        .into_iter()
+        .enumerate()
+        .map(|(index, data)| {
+            let card = tracking.card_at(CardAddress {
+                controller: Player::Player,
+                location,
+                sequence: index as u32,
+            });
+            PileCard {
+                data: data.expect("Missing queried pile card data"),
+                links: card
+                    .map(|card| {
+                        chain
+                            .iter()
+                            .filter_map(|link| (link.card == Some(card.id)).then_some(link.number))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+            }
+        })
+        .collect()
+}
+
+#[component]
+fn PromptActivationModal(prompts: Vec<CardData>, onresponse: EventHandler<Response>) -> Element {
     let has_action_index = prompts.iter().any(|card| card.action_index.is_some());
 
     rsx!(
@@ -50,7 +137,7 @@ fn PromptActivationModal() -> Element {
             title: "A card or effect can be activated. Activate?",
             OptionButton {
                 label: "No",
-                onclick: |_| send_response(Response::PassPriority),
+                onclick: move |_| onresponse.call(Response::PassPriority),
                 additional_classes: "bg-red-600/70",
             }
         }
@@ -59,7 +146,7 @@ fn PromptActivationModal() -> Element {
             title: "Activate trigger effect?",
             OptionButton {
                 label: "No",
-                onclick: |_| send_response(Response::No),
+                onclick: move |_| onresponse.call(Response::No),
                 additional_classes: "bg-red-600/70",
             }
         }
@@ -67,13 +154,7 @@ fn PromptActivationModal() -> Element {
 }
 
 #[component]
-fn YesNoQuestionModal() -> Element {
-    let state = use_context::<UIState>();
-    let question = match (state.pending_input)() {
-        Some(PendingInput::YesNo(question)) => Some(question),
-        _ => None,
-    };
-
+fn YesNoQuestionModal(question: Option<String>, onresponse: EventHandler<Response>) -> Element {
     rsx!(
         MessageModal {
             trigger: question.is_some(),
@@ -82,12 +163,12 @@ fn YesNoQuestionModal() -> Element {
                 class: "flex flex-row gap-4",
                 OptionButton {
                     label: "Yes",
-                    onclick: |_| send_response(Response::Yes),
+                    onclick: move |_| onresponse.call(Response::Yes),
                     additional_classes: "bg-green-600/70",
                 }
                 OptionButton {
                     label: "No",
-                    onclick: |_| send_response(Response::No),
+                    onclick: move |_| onresponse.call(Response::No),
                     additional_classes: "bg-red-600/70",
                 }
             }
@@ -96,14 +177,12 @@ fn YesNoQuestionModal() -> Element {
 }
 
 #[component]
-fn CardChoiceModal() -> Element {
-    let state = use_context::<UIState>();
-    let pending = (state.pending_input)();
-    let (cards_to_select_from, tributes, selected_tributes) = match pending {
-        Some(PendingInput::Unselect(message)) => (Some(message), None, Vec::new()),
-        Some(PendingInput::Tribute { message, selected }) => (None, Some(message), selected),
-        _ => (None, None, Vec::new()),
-    };
+fn CardChoiceModal(
+    cards_to_select_from: Option<SelectUnselectMessageData>,
+    tributes: Option<SelectTributeMessageData>,
+    selected_tributes: Vec<u8>,
+    onresponse: EventHandler<Response>,
+) -> Element {
     let selected_tributes_len = selected_tributes.len();
     let tribute_selection_is_valid = tributes.as_ref().is_some_and(|message| {
         selected_tributes_len >= message.min_select as usize
@@ -120,13 +199,13 @@ fn CardChoiceModal() -> Element {
                     OptionButton {
                         label: "Confirm",
                         disabled: !message.finishable,
-                        onclick: |_| send_response(Response::PassPriority),
+                        onclick: move |_| onresponse.call(Response::PassPriority),
                         additional_classes: "bg-green-600/70",
                     }
                     OptionButton {
                         label: "Cancel",
                         disabled: !message.cancelable,
-                        onclick: |_| send_response(Response::PassPriority),
+                        onclick: move |_| onresponse.call(Response::PassPriority),
                         additional_classes: "bg-red-600/70",
                     }
                 }
@@ -138,12 +217,12 @@ fn CardChoiceModal() -> Element {
                         label: "Confirm",
                         disabled: !tribute_selection_is_valid,
                         additional_classes: if tribute_selection_is_valid { "bg-green-700 cursor-pointer" } else { "bg-gray-600 cursor-not-allowed" },
-                        onclick: move |_| send_response(Response::SelectTributes { tributes: selected_tributes.clone() }),
+                        onclick: move |_| onresponse.call(Response::SelectTributes { tributes: selected_tributes.clone() }),
                     }
                     OptionButton {
                         label: "Cancel",
                         disabled: !message.is_cancelable,
-                        onclick: |_| send_response(Response::PassPriority),
+                        onclick: move |_| onresponse.call(Response::PassPriority),
                         additional_classes: "bg-red-600/70",
                     }
                 }
@@ -153,13 +232,10 @@ fn CardChoiceModal() -> Element {
 }
 
 #[component]
-fn PositionSelectorModal() -> Element {
-    let state = use_context::<UIState>();
-    let positions = match (state.pending_input)() {
-        Some(PendingInput::Position(positions)) => positions,
-        _ => Vec::new(),
-    };
-
+fn PositionSelectorModal(
+    positions: Vec<BattlePosition>,
+    onresponse: EventHandler<Response>,
+) -> Element {
     rsx!(
         MessageModal {
             trigger: !positions.is_empty(),
@@ -167,7 +243,7 @@ fn PositionSelectorModal() -> Element {
             for position in positions {
                 OptionButton {
                     label: position,
-                    onclick: move |_| send_response(Response::SelectPosition { position }),
+                    onclick: move |_| onresponse.call(Response::SelectPosition { position }),
                     additional_classes: "bg-gray-600 text-white",
                 }
             }
@@ -176,12 +252,10 @@ fn PositionSelectorModal() -> Element {
 }
 
 #[component]
-pub fn CardSelector() -> Element {
-    let state = use_context::<UIState>();
-    let selectables = match (state.pending_input)() {
-        Some(PendingInput::Cards(message)) => Some(message),
-        _ => None,
-    };
+pub fn CardSelector(
+    selectables: Option<SelectCardMessageData>,
+    onresponse: EventHandler<Response>,
+) -> Element {
     let mut selected_cards = use_signal(Vec::new);
 
     let selected_count = selected_cards().len();
@@ -245,7 +319,7 @@ pub fn CardSelector() -> Element {
                     label: "Done",
                     disabled: !can_confirm,
                     onclick: move |_| {
-                        send_response(Response::SelectCard { indices: selected_cards() });
+                        onresponse.call(Response::SelectCard { indices: selected_cards() });
                         selected_cards.set(Vec::new());
                     },
                     additional_classes: if can_confirm { "bg-green-700 cursor-pointer" } else { "bg-gray-600 cursor-not-allowed" },
@@ -256,12 +330,10 @@ pub fn CardSelector() -> Element {
 }
 
 #[component]
-pub fn SortCardSelector() -> Element {
-    let state = use_context::<UIState>();
-    let sort_cards = match (state.pending_input)() {
-        Some(PendingInput::Sort(message)) => Some(message),
-        _ => None,
-    };
+pub fn SortCardSelector(
+    sort_cards: Option<SortCardMessageData>,
+    onresponse: EventHandler<Response>,
+) -> Element {
     let cards = sort_cards
         .as_ref()
         .map(|message| message.cards.clone())
@@ -315,7 +387,7 @@ pub fn SortCardSelector() -> Element {
                     label: "Done",
                     disabled: !can_confirm,
                     onclick: move |_| {
-                        send_response(Response::SortCard { indices: selected_cards() });
+                        onresponse.call(Response::SortCard { indices: selected_cards() });
                     },
                     additional_classes: if can_confirm { "bg-green-700 cursor-pointer" } else { "bg-gray-600 cursor-not-allowed" },
                 }
@@ -325,14 +397,15 @@ pub fn SortCardSelector() -> Element {
 }
 
 #[component]
-pub fn EffectSelector() -> Element {
-    let mut view = use_context::<ViewState>();
-
+pub fn EffectSelector(
+    mut effects: Signal<Vec<CardData>>,
+    onresponse: EventHandler<Response>,
+) -> Element {
     rsx!(
         PickerModal {
             title: "Choose which effect to activate",
-            trigger: !view.effects_to_select_from.is_empty(),
-            for effect in (view.effects_to_select_from)() {
+            trigger: !effects.is_empty(),
+            for effect in effects() {
                 OptionButton {
                     label: {
                         effect
@@ -340,13 +413,13 @@ pub fn EffectSelector() -> Element {
                             .map(|description| get_optional_string_label(effect.card_code, description as usize))
                             .unwrap_or_else(|| String::from("error"))
                     },
-                    onclick: move |_| send_response(Response::Activate { index: effect.action_index.unwrap() }),
+                    onclick: move |_| onresponse.call(Response::Activate { index: effect.action_index.unwrap() }),
                     additional_classes: "bg-gray-600 text-white w-full",
                 }
             }
             OptionButton {
                 label: "Cancel",
-                onclick: move |_| view.effects_to_select_from.clear(),
+                onclick: move |_| effects.clear(),
                 additional_classes: "bg-gray-600 text-white w-full",
             }
 
@@ -355,13 +428,10 @@ pub fn EffectSelector() -> Element {
 }
 
 #[component]
-pub fn OptionSelector() -> Element {
-    let state = use_context::<UIState>();
-    let options_message = match (state.pending_input)() {
-        Some(PendingInput::Options(message)) => Some(message),
-        _ => None,
-    };
-
+pub fn OptionSelector(
+    options_message: Option<SelectOptionMessageData>,
+    onresponse: EventHandler<Response>,
+) -> Element {
     rsx!(
         PickerModal {
             title: "Choose an option",
@@ -372,7 +442,7 @@ pub fn OptionSelector() -> Element {
                         label: {
                             get_optional_string_label(option.card_code.unwrap(), option.string_index.unwrap())
                         },
-                        onclick: move |_| send_response(Response::SelectOption { index: index as u8 }),
+                        onclick: move |_| onresponse.call(Response::SelectOption { index: index as u8 }),
                         additional_classes: "bg-gray-600 text-white w-full",
                     }
                 }
@@ -382,13 +452,10 @@ pub fn OptionSelector() -> Element {
 }
 
 #[component]
-pub fn NumberSelector() -> Element {
-    let state = use_context::<UIState>();
-    let numbers = match (state.pending_input)() {
-        Some(PendingInput::Numbers(message)) => Some(message),
-        _ => None,
-    };
-
+pub fn NumberSelector(
+    numbers: Option<AnnounceNumberMessageData>,
+    onresponse: EventHandler<Response>,
+) -> Element {
     rsx!(
         PickerModal {
             title: "Choose an option",
@@ -397,7 +464,7 @@ pub fn NumberSelector() -> Element {
                 for (index, number) in message.numbers.iter().enumerate() {
                     OptionButton {
                         label: "{number}",
-                        onclick: move |_| send_response(Response::SelectOption { index: index as u8 }),
+                        onclick: move |_| onresponse.call(Response::SelectOption { index: index as u8 }),
                         additional_classes: "bg-gray-600 text-white w-full",
                     }
                 }

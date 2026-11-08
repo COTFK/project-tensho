@@ -1,5 +1,5 @@
 use super::*;
-use crate::duel::cards::{CardAddress, CardPlacement, CardTracker};
+use crate::duel::cards::{CardAddress, CardId, CardPlacement, CardTracker};
 use crate::duel::controller::resolve_chain_event;
 use crate::ocgcore::constants::{CardLocation, Player};
 use crate::ocgcore::location_info::{
@@ -16,6 +16,14 @@ fn address(location: CardLocation, sequence: u32) -> CardAddress {
         location,
         sequence,
     }
+}
+
+fn links_for_card(playback: &ChainPlayback, card: CardId) -> Vec<u32> {
+    playback
+        .displayed
+        .iter()
+        .filter_map(|link| (link.card == Some(card)).then_some(link.number))
+        .collect()
 }
 
 fn chaining(number: u32, address: CardAddress) -> CoreMessage {
@@ -83,8 +91,8 @@ fn plays_batched_chain_in_activation_and_resolution_order() {
             },
         ]
     );
-    assert_eq!(playback.links_for_card(first), vec![1]);
-    assert_eq!(playback.links_for_card(second), vec![2]);
+    assert_eq!(links_for_card(&playback, first), vec![1]);
+    assert_eq!(links_for_card(&playback, second), vec![2]);
     playback.advance(playback.generation);
     assert_eq!(
         playback.displayed,
@@ -156,7 +164,7 @@ fn duel_failure_cancels_both_playbacks_and_invalidates_their_completions() {
         chain.write().advance(chain_generation);
         assert!(animation.peek().is_active());
         assert!(chain.peek().active);
-        assert_eq!(chain.peek().links_for_card(card), vec![3]);
+        assert_eq!(links_for_card(&chain.peek(), card), vec![3]);
         assert!(state.interaction_blocked(playback));
         rsx! {}
     }
@@ -229,7 +237,7 @@ fn retains_all_links_from_same_card_and_clears_on_chain_end() {
             },
         ]
     );
-    assert_eq!(playback.links_for_card(card), vec![1, 2]);
+    assert_eq!(links_for_card(&playback, card), vec![1, 2]);
     playback.advance(playback.generation);
     playback.record(resolve_chain_event(&CoreMessage::ChainEnd, &cards).unwrap());
     playback.start();

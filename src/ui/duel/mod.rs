@@ -21,6 +21,7 @@ use crate::state::UIState;
 use crate::state::handle_right_click;
 use crate::state::load_duel;
 use crate::state::run_game_loop;
+use crate::state::{handle_card_action, send_response};
 use crate::ui::LoadingScreen;
 use crate::ui::card_animation::use_animation_completion;
 use crate::ui::chain::use_chain_playback;
@@ -41,6 +42,7 @@ pub fn DuelWrapper(
     let mut state = use_context_provider(UIState::default);
     let mut view = use_context_provider(ViewState::default);
     let playback = use_playback();
+    use_duel_contexts(state, view, playback);
     let mut duel_context = use_context_provider(|| Signal::new(None::<DuelController>));
 
     let duel_resource = use_resource(move || {
@@ -83,6 +85,17 @@ pub fn DuelWrapper(
         Some(Err(e)) => rsx!("{e:#?}"),
         None => rsx!(LoadingScreen {}),
     }
+}
+
+fn use_duel_contexts(state: UIState, view: ViewState, playback: Playback) {
+    use_context_provider(|| ReadSignal::new(state.cards));
+    use_context_provider(|| ReadSignal::new(state.pending_input));
+    use_context_provider(|| view.open_pile);
+    use_context_provider(|| view.effects_to_select_from);
+    use_context_provider(|| EventHandler::new(send_response));
+    use_context_provider(|| EventHandler::new(handle_card_action));
+    let links = use_memo(move || playback.chain.read().displayed.clone());
+    use_context_provider(|| links);
 }
 
 fn install_duel(
@@ -179,6 +192,7 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>, deck_codes: Ve
                     selected: view.selected_card,
                     animation: playback.animation,
                     preloading: !startup_ready(),
+                    effects_open: !view.effects_to_select_from.read().is_empty(),
                     deck_codes,
                     onlayout: move |status| {
                         if *layout_status.peek() != status {

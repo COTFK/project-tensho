@@ -3,6 +3,7 @@ use crate::duel::cards::CardTracker;
 use crate::duel::input::PendingInput;
 use crate::ocgcore::CardData;
 use crate::ocgcore::messages::{SelectCardMessageData, SortCardMessageData};
+use crate::state::UIState;
 use crate::ui::card_animation::CardAnimationState;
 use crate::ui::components::ModalSuppression;
 use crate::ui::playback::use_playback;
@@ -18,16 +19,95 @@ thread_local! {
 }
 
 fn app() -> Element {
-    let state = use_context_provider(UIState::default);
+    let state = use_hook(UIState::default);
     let playback = use_playback();
     let suppressed = use_memo(move || state.interaction_blocked(playback));
     use_context_provider(|| ModalSuppression(suppressed));
     STATE.with(|slot| *slot.borrow_mut() = Some(state));
     PLAYBACK.with(|slot| *slot.borrow_mut() = Some(playback.animation));
+    let pending = (state.pending_input)();
     rsx! {
-        CardSelector {}
-        SortCardSelector {}
+        CardSelector {
+            selectables: match &pending { Some(PendingInput::Cards(message)) => Some(message.clone()), _ => None },
+            onresponse: |_| -> () { panic!("Unexpected picker submission") },
+        }
+        SortCardSelector {
+            sort_cards: match &pending { Some(PendingInput::Sort(message)) => Some(message.clone()), _ => None },
+            onresponse: |_| -> () { panic!("Unexpected picker submission") },
+        }
     }
+}
+
+#[test]
+fn pile_rows_keep_card_order_and_chain_links_without_playback_state() {
+    use crate::duel::cards::{CardAddress, CardPlacement};
+    let mut tracking = CardTracker::default();
+    let grave = CardAddress {
+        controller: Player::Player,
+        location: CardLocation::Graveyard,
+        sequence: 0,
+    };
+    let first = tracking.insert(grave, 42).unwrap();
+    let second = tracking
+        .insert(
+            CardAddress {
+                sequence: 1,
+                ..grave
+            },
+            42,
+        )
+        .unwrap();
+    let extra = tracking
+        .insert(
+            CardAddress {
+                location: CardLocation::ExtraDeck,
+                ..grave
+            },
+            43,
+        )
+        .unwrap();
+    for card in tracking.cards_mut() {
+        let CardPlacement::Zone(address) = card.placement else {
+            unreachable!()
+        };
+        card.data = Some(CardData {
+            card_code: card.code,
+            controller: address.controller,
+            location: address.location,
+            sequence: address.sequence as u8,
+            ..Default::default()
+        });
+    }
+    let links = [
+        ChainLink {
+            number: 1,
+            card: Some(second),
+        },
+        ChainLink {
+            number: 2,
+            card: Some(first),
+        },
+        ChainLink {
+            number: 3,
+            card: Some(extra),
+        },
+        ChainLink {
+            number: 4,
+            card: Some(second),
+        },
+    ];
+    let rows = pile_cards(Some(&tracking), CardLocation::Graveyard, &links);
+    assert_eq!(
+        rows.iter().map(|row| row.data.sequence).collect::<Vec<_>>(),
+        [0, 1]
+    );
+    assert_eq!(rows[0].links, [2]);
+    assert_eq!(rows[1].links, [1, 4]);
+    assert_eq!(
+        pile_cards(Some(&tracking), CardLocation::ExtraDeck, &links)[0].links,
+        [3]
+    );
+    assert!(pile_cards(None, CardLocation::Graveyard, &links).is_empty());
 }
 
 #[test]

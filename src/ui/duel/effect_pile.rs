@@ -1,14 +1,12 @@
-use crate::duel::input::PendingInput;
 use dioxus::prelude::*;
 
 use super::chain_badges::ChainBadges;
 use super::constants::ZONE_SIZE;
+use super::modal::PileCard;
 use crate::duel::cards::CardAddress;
-use crate::ocgcore::Response;
-use crate::ocgcore::constants::{CardLocation, Player};
-use crate::state::UIState;
-use crate::state::send_response;
-use crate::ui::chain::ChainPlayback;
+use crate::duel::input::CardAction;
+use crate::ocgcore::CardData;
+use crate::ocgcore::constants::CardLocation;
 use crate::ui::components::ActionButton;
 use crate::ui::components::Card;
 use crate::ui::components::CardActionMenu;
@@ -16,26 +14,14 @@ use crate::ui::components::CardImage;
 use crate::ui::components::OptionButton;
 use crate::ui::components::PickerModal;
 use crate::ui::components::svg::LightningTrioIcon;
-use crate::ui::view_state::ViewState;
 
 #[component]
-pub fn EffectPile(location: CardLocation) -> Element {
-    let state = use_context::<UIState>();
-    let mut view = use_context::<ViewState>();
-
-    let has_cards = state
-        .zone_data(location)
-        .is_some_and(|cards| !cards.is_empty());
-    let has_trigger_effects = state.pending_input.read().as_ref().is_some_and(|input| {
-        input
-            .prompted_effects()
-            .iter()
-            .any(|card| card.location == location)
-    });
-
-    // Disable if effect selection modal is active
-    let suppress_actions = !view.effects_to_select_from.is_empty();
-
+pub fn EffectPile(
+    location: CardLocation,
+    has_cards: bool,
+    highlighted: bool,
+    onbrowse: EventHandler<CardLocation>,
+) -> Element {
     rsx!(
         div {
             class: if location == CardLocation::Banishment {
@@ -45,7 +31,7 @@ pub fn EffectPile(location: CardLocation) -> Element {
             },
             class: if has_cards {"hover:outline-4 hover:outline-yellow-300"},
             onclick: move |_| if has_cards {
-                view.open_pile.set(Some(location));
+                onbrowse.call(location);
             },
             if has_cards {
                 div {
@@ -56,7 +42,7 @@ pub fn EffectPile(location: CardLocation) -> Element {
                     },
                     div {
                         class: "absolute inset-[2px] md:inset-[4px] my-0.5 md:my-1 rounded-[2px] blur-[1px] mix-blend-screen pointer-events-none",
-                        class: if has_trigger_effects && !suppress_actions { "bg-yellow-400" },
+                        class: if highlighted { "bg-yellow-400" },
                     }
                 }
             }
@@ -65,18 +51,14 @@ pub fn EffectPile(location: CardLocation) -> Element {
 }
 
 #[component]
-pub fn EffectPileModal(location: CardLocation) -> Element {
-    let state = use_context::<UIState>();
-    let view = use_context::<ViewState>();
-    let cards = state.zone_data(location).unwrap_or_default();
-    let tracking = (state.cards)();
-    let chain = try_consume_context::<Signal<ChainPlayback>>().map(|chain| chain());
-    let pending = (state.pending_input)();
-    let cards_prompting_to_activate = pending
-        .as_ref()
-        .map(PendingInput::prompted_effects)
-        .unwrap_or_default();
-    let mut open_pile = view.open_pile;
+pub fn EffectPileModal(
+    location: CardLocation,
+    cards: Vec<PileCard>,
+    cards_prompting_to_activate: Vec<CardData>,
+    mut open_pile: Signal<Option<CardLocation>>,
+    suppress_actions: bool,
+    onaction: EventHandler<CardAction>,
+) -> Element {
     let title = if location == CardLocation::Banishment {
         "Banishment"
     } else {
@@ -99,24 +81,17 @@ pub fn EffectPileModal(location: CardLocation) -> Element {
                             .iter()
                             .find(|card| card.location == location && card.sequence == index as u8)
                             .copied();
-                        let chain_index = prompted_card.and_then(|card| card.action_index);
-                        let links = tracking.as_ref()
-                            .and_then(|layer| layer.card_at(CardAddress {
-                                controller: Player::Player,
-                                location,
-                                sequence: index as u32,
-                            }))
-                            .and_then(|card| chain.as_ref().map(|chain| chain.links_for_card(card.id)))
-                            .unwrap_or_default();
-
-                        // Disable if effect selection modal is active
-                        let suppress_actions = !view.effects_to_select_from.is_empty();
+                        let address = CardAddress {
+                            controller: card.data.controller,
+                            location,
+                            sequence: u32::from(card.data.sequence),
+                        };
 
                         rsx!(
                             div {
                                 class: "relative py-2",
                                 Card {
-                                    image: CardImage::Face(card.unwrap()),
+                                    image: CardImage::Face(card.data),
                                     class: "w-[12vw]",
                                     is_selected: selected_card() == Some(index),
                                     show_highlight_on_select: true,
@@ -125,7 +100,7 @@ pub fn EffectPileModal(location: CardLocation) -> Element {
                                     show_orange_aura: prompted_card.is_some() && !suppress_actions,
                                     onclick: move |_| selected_card.set(Some(index))
                                 }
-                                ChainBadges { links }
+                                ChainBadges { links: card.links.clone() }
                                 CardActionMenu {
                                     class: "absolute left-1/2 bottom-1/2 -translate-x-[50%] translate-y-[50%] px-3 py-2 md:px-6 z-20",
                                     trigger: selected_card() == Some(index) && prompted_card.is_some() && !suppress_actions,
@@ -134,12 +109,7 @@ pub fn EffectPileModal(location: CardLocation) -> Element {
                                         class: "border-yellow-500 text-yellow-300",
                                         onclick: move |_| {
                                             if prompted_card.is_some() && !suppress_actions {
-                                                if let Some(index) = chain_index {
-                                                    send_response(Response::Chain { index });
-                                                } else {
-                                                    send_response(Response::Yes);
-                                                }
-
+                                                onaction.call(CardAction::Activate(address));
                                                 selected_card.set(None);
                                             }
                                         },

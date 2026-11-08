@@ -12,6 +12,23 @@ define_ui_state!(ViewState {
 });
 
 impl ViewState {
+    pub(crate) fn select_card(&mut self, address: CardAddress, cards: Option<&CardTracker>) {
+        let id = match cards {
+            Some(cards) => match cards.card_at(address) {
+                Some(card) => card.id,
+                None => {
+                    tracing::error!("Cannot select untracked card at {address:?}");
+                    return;
+                }
+            },
+            None => {
+                tracing::error!("Cannot select a card without an active tracker");
+                return;
+            }
+        };
+        self.selected_card.set(Some(id));
+    }
+
     pub(crate) fn is_selected(&self, address: CardAddress, cards: Option<&CardTracker>) -> bool {
         let selected = (self.selected_card)();
         cards
