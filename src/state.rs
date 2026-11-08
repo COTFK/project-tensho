@@ -40,15 +40,19 @@ fn prompt_actions(state: &UIState, address: CardAddress) -> CardActions {
         .unwrap_or_default()
 }
 
-pub(crate) fn handle_card_action(action: CardAction) {
-    let mut state = consume_context::<UIState>();
-    if state.interaction_blocked(consume_context::<Playback>()) {
+pub(crate) fn handle_card_action(
+    mut state: UIState,
+    mut view: ViewState,
+    playback: Playback,
+    controller: ReadSignal<Option<DuelController>>,
+    action: CardAction,
+) {
+    if state.interaction_blocked(playback) {
         tracing::warn!("Ignoring card action while interaction is blocked");
         return;
     }
-    let mut view = consume_context::<ViewState>();
     if let Some(response) = resolve_card_action(&mut state, &mut view, action) {
-        send_response(response);
+        send_response(state, view, playback, controller, response);
     }
 }
 
@@ -176,16 +180,17 @@ define_ui_state!(UIState {
     failure: Option<String>,
 });
 
-pub fn run_game_loop() {
-    let mut state = consume_context::<UIState>();
-    let mut playback = consume_context::<Playback>();
+pub(crate) fn run_game_loop(
+    mut state: UIState,
+    mut view: ViewState,
+    mut playback: Playback,
+    controller: ReadSignal<Option<DuelController>>,
+) {
     let tracking = state.cards;
     if state.processing_blocked(playback) {
         return;
     }
-    let controller = consume_context::<Signal<Option<DuelController>>>();
     let controller = controller().expect("Duel context missing active controller");
-    let mut view = consume_context::<ViewState>();
     let mut duel_finished = state.duel_finished;
     process_until_input(
         || {
@@ -216,10 +221,15 @@ pub fn run_game_loop() {
     );
 }
 
-pub fn handle_right_click(evt: MouseEvent) {
+pub(crate) fn handle_right_click(
+    state: UIState,
+    mut view: ViewState,
+    playback: Playback,
+    controller: ReadSignal<Option<DuelController>>,
+    evt: MouseEvent,
+) {
     evt.prevent_default();
-    let state = consume_context::<UIState>();
-    if state.interaction_blocked(consume_context::<Playback>()) {
+    if state.interaction_blocked(playback) {
         return;
     }
 
@@ -229,10 +239,9 @@ pub fn handle_right_click(evt: MouseEvent) {
         .as_ref()
         .and_then(PendingInput::decline_response);
     if let Some(response) = response {
-        send_response(response);
+        send_response(state, view, playback, controller, response);
     }
 
-    let mut view = consume_context::<ViewState>();
     view.open_pile.set(None);
 }
 
@@ -253,9 +262,14 @@ pub(crate) async fn load_duel(
     controller::load_duel(core, custom_hand).await
 }
 
-pub fn send_response(response: Response) {
-    let mut state = consume_context::<UIState>();
-    if state.interaction_blocked(consume_context::<Playback>()) {
+pub(crate) fn send_response(
+    mut state: UIState,
+    mut view: ViewState,
+    playback: Playback,
+    controller: ReadSignal<Option<DuelController>>,
+    response: Response,
+) {
+    if state.interaction_blocked(playback) {
         tracing::warn!("Ignoring response during card animation");
         return;
     }
@@ -263,12 +277,11 @@ pub fn send_response(response: Response) {
         tracing::warn!("Ignoring response without a pending prompt");
         return;
     }
-    let controller = consume_context::<Signal<Option<DuelController>>>();
     let controller = controller().expect("Duel context missing active controller");
 
     controller.send_response(response);
     state.clear_pending_input();
-    consume_context::<ViewState>().reset();
+    view.reset();
 }
 
 impl UIState {

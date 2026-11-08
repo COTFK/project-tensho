@@ -31,7 +31,7 @@ use crate::ui::components::ModalSuppression;
 use crate::ui::components::UIButton;
 use crate::ui::components::svg::FullscreenIcon;
 use crate::ui::components::svg::ResetIcon;
-use crate::ui::playback::{Playback, use_playback};
+use crate::ui::playback::Playback;
 use crate::ui::view_state::ViewState;
 use layered_field::{LayeredField, LayoutStatus};
 use modal::ModalContainer;
@@ -41,11 +41,12 @@ pub fn DuelWrapper(
     core_resource: Resource<anyhow::Result<OCGCore>>,
     custom_hand: Option<String>,
 ) -> Element {
-    let mut state = use_context_provider(UIState::default);
-    let mut view = use_context_provider(ViewState::default);
-    let playback = use_playback();
-    use_duel_contexts(state, view, playback);
-    let mut duel_context = use_context_provider(|| Signal::new(None::<DuelController>));
+    let mut state = use_hook(UIState::default);
+    let mut view = use_hook(ViewState::default);
+    let playback = use_hook(Playback::default);
+    let mut controller = use_signal(|| None::<DuelController>);
+    let controller_input = use_hook(move || ReadSignal::new(controller));
+    use_duel_contexts(state, view, playback, controller_input);
 
     let duel_resource = use_resource(move || {
         let custom_hand = custom_hand.clone();
@@ -58,22 +59,20 @@ pub fn DuelWrapper(
             Some(Ok(setup)) => Some(setup.clone()),
             _ => None,
         };
-        install_duel(
-            &mut state,
-            &mut view,
-            playback,
-            &mut duel_context,
-            next_setup,
-        );
+        install_duel(&mut state, &mut view, playback, &mut controller, next_setup);
     });
 
     match &*duel_resource.read() {
         Some(Ok(setup))
-            if duel_context()
+            if controller()
                 .as_ref()
                 .is_some_and(|duel| duel.ptr_eq(&setup.controller)) =>
         {
             rsx!(DuelScreen {
+                state,
+                view,
+                playback,
+                controller: controller_input,
                 duel_resource: duel_resource,
                 deck_codes: setup
                     .cards
@@ -89,13 +88,26 @@ pub fn DuelWrapper(
     }
 }
 
-fn use_duel_contexts(state: UIState, view: ViewState, playback: Playback) {
+fn use_duel_contexts(
+    state: UIState,
+    view: ViewState,
+    playback: Playback,
+    controller: ReadSignal<Option<DuelController>>,
+) {
     use_context_provider(|| ReadSignal::new(state.cards));
     use_context_provider(|| ReadSignal::new(state.pending_input));
     use_context_provider(|| view.open_pile);
     use_context_provider(|| view.effects_to_select_from);
-    use_context_provider(|| EventHandler::new(send_response));
-    use_context_provider(|| EventHandler::new(handle_card_action));
+    use_context_provider(|| {
+        EventHandler::new(move |response| {
+            send_response(state, view, playback, controller, response)
+        })
+    });
+    use_context_provider(|| {
+        EventHandler::new(move |action| {
+            handle_card_action(state, view, playback, controller, action)
+        })
+    });
     let links = use_memo(move || playback.chain.read().displayed.clone());
     use_context_provider(|| links);
 }
@@ -104,10 +116,10 @@ fn install_duel(
     state: &mut UIState,
     view: &mut ViewState,
     playback: Playback,
-    duel_context: &mut Signal<Option<DuelController>>,
+    controller: &mut Signal<Option<DuelController>>,
     setup: Option<DuelSetup>,
 ) {
-    let unchanged = match (&*duel_context.peek(), &setup) {
+    let unchanged = match (&*controller.peek(), &setup) {
         (Some(current), Some(next)) => current.ptr_eq(&next.controller),
         (None, None) => true,
         _ => false,
@@ -121,26 +133,29 @@ fn install_duel(
         None => (None, None),
     };
     state.cards.set(cards);
-    duel_context.set(duel);
+    controller.set(duel);
 }
 
 #[component]
-fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>, deck_codes: Vec<u32>) -> Element {
-    let mut state = use_context::<UIState>();
-    let mut view = use_context::<ViewState>();
+fn DuelScreen(
+    mut state: UIState,
+    mut view: ViewState,
+    playback: Playback,
+    controller: ReadSignal<Option<DuelController>>,
+    duel_resource: Resource<anyhow::Result<DuelSetup>>,
+    deck_codes: Vec<u32>,
+) -> Element {
     use_context_provider(layout_anchors::LayoutAnchors::default);
     let revision = use_context_provider(|| layout_anchors::LayoutRevision(Signal::new(0)));
     let mut startup_ready = use_signal(|| false);
     let mut layout_status = use_signal(LayoutStatus::default);
-    let playback = use_context::<Playback>();
     let modal_suppressed = use_memo(move || state.modals_suppressed(startup_ready(), playback));
     use_context_provider(|| ModalSuppression(modal_suppressed));
 
     use_animation_completion(playback.animation);
     use_chain_playback(playback.chain);
 
-    // Start game loop
-    use_effect(run_game_loop);
+    use_effect(move || run_game_loop(state, view, playback, controller));
     use_effect(move || {
         synchronize_layout(&mut state, &mut startup_ready, playback, layout_status());
     });
@@ -149,7 +164,7 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>, deck_codes: Ve
     rsx!(
         main {
             class: "portrait:hidden relative h-dvh w-dvw bg-gray-800 select-none",
-            oncontextmenu: handle_right_click,
+            oncontextmenu: move |event| handle_right_click(state, view, playback, controller, event),
             onresize: move |_| revision.invalidate(),
             onclick: move |_| {
                 if !state.interaction_blocked(playback) && (view.selected_card)().is_some() {

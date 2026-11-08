@@ -5,6 +5,7 @@ use crate::duel::input::PendingInput;
 use crate::ocgcore::CardData;
 use crate::ui::card_animation::CardAnimationState;
 use crate::ui::chain::ChainPlayback;
+use crate::ui::playback::use_playback;
 
 #[path = "events.rs"]
 mod events;
@@ -162,23 +163,32 @@ fn restart_button_cancels_playback_and_clears_pending_input_and_view() {
     }
 
     fn app() -> Element {
-        let playback = use_playback();
-        let view = use_context_provider(ViewState::default);
-        let state = use_context_provider(|| {
+        let playback = use_hook(Playback::default);
+        let view = use_hook(ViewState::default);
+        let state = use_hook(|| {
             let mut state = UIState::default();
             state.restarting.set(true);
             state
         });
-        use_duel_contexts(state, view, playback);
+        let controller = use_signal(|| None::<DuelController>);
+        let controller_input = use_hook(move || ReadSignal::new(controller));
+        use_duel_contexts(state, view, playback, controller_input);
         let duel_resource = use_resource(std::future::pending::<anyhow::Result<DuelSetup>>);
         let screen = DuelScreen(DuelScreenProps {
+            state,
+            view,
+            playback,
+            controller: controller_input,
             duel_resource,
             deck_codes: vec![],
         });
-        STATE.with(|slot| *slot.borrow_mut() = Some(consume_context::<UIState>()));
-        VIEW.with(|slot| *slot.borrow_mut() = Some(consume_context::<ViewState>()));
-        ANIMATION.with(|slot| *slot.borrow_mut() = Some(consume_context::<Playback>().animation));
-        CHAIN.with(|slot| *slot.borrow_mut() = Some(consume_context::<Playback>().chain));
+        assert!(try_consume_context::<UIState>().is_none());
+        assert!(try_consume_context::<ViewState>().is_none());
+        assert!(try_consume_context::<Playback>().is_none());
+        STATE.with(|slot| *slot.borrow_mut() = Some(state));
+        VIEW.with(|slot| *slot.borrow_mut() = Some(view));
+        ANIMATION.with(|slot| *slot.borrow_mut() = Some(playback.animation));
+        CHAIN.with(|slot| *slot.borrow_mut() = Some(playback.chain));
         screen
     }
 
@@ -319,6 +329,145 @@ fn interaction_gate_removes_inert_when_playback_finishes() {
         unblocked.edits
     );
     ACTIVE.with(|slot| *slot.borrow_mut() = None);
+}
+
+#[test]
+#[cfg(not(target_arch = "wasm32"))]
+fn bound_actions_responses_and_right_click_need_only_explicit_inputs() {
+    use crate::duel::cards::CardAddress;
+    use crate::duel::input::CardAction;
+    use crate::ocgcore::Response;
+    use crate::ocgcore::constants::{CardLocation, Player};
+    use crate::ocgcore::messages::IdleMessageData;
+    use dioxus::core::Mutation;
+    use std::cell::RefCell;
+
+    thread_local! {
+        static INPUTS: RefCell<Option<(UIState, ViewState, Playback)>> = const { RefCell::new(None) };
+    }
+
+    fn app() -> Element {
+        let mut state = use_hook(UIState::default);
+        let view = use_hook(ViewState::default);
+        let playback = use_hook(Playback::default);
+        let controller = use_signal(|| {
+            let core = futures::executor::block_on(OCGCore::load(
+                |_| panic!("Unexpected card lookup"),
+                Box::new(|_| None),
+                |_, _| {},
+            ))
+            .unwrap();
+            Some(DuelController::new(core.create_duel(0).unwrap()))
+        });
+        let hand = CardAddress {
+            controller: Player::Player,
+            location: CardLocation::Hand,
+            sequence: 0,
+        };
+        use_hook(move || {
+            let mut cards = CardTracker::default();
+            cards.insert(hand, 42).unwrap();
+            state.cards.set(Some(cards));
+        });
+        let controller_input = use_hook(move || ReadSignal::new(controller));
+        use_duel_contexts(state, view, playback, controller_input);
+        assert!(try_consume_context::<UIState>().is_none());
+        assert!(try_consume_context::<ViewState>().is_none());
+        assert!(try_consume_context::<Playback>().is_none());
+        assert!(try_consume_context::<Signal<Option<DuelController>>>().is_none());
+        let onaction = use_context::<EventHandler<CardAction>>();
+        let onresponse = use_context::<EventHandler<Response>>();
+        INPUTS.with(|slot| *slot.borrow_mut() = Some((state, view, playback)));
+        rsx! {
+            main {
+                id: "coordination",
+                oncontextmenu: move |event| handle_right_click(state, view, playback, controller_input, event),
+                button { id: "select", onclick: move |_| onaction.call(CardAction::Select(hand)), "Select" }
+                button { id: "respond", onclick: move |_| onresponse.call(Response::No), "Respond" }
+            }
+        }
+    }
+
+    events::install();
+    let mut dom = VirtualDom::new(app);
+    let initial = dom.rebuild_to_vec();
+    let clicks = initial
+        .edits
+        .iter()
+        .filter_map(|edit| match edit {
+            Mutation::NewEventListener { name, id } if name == "click" => Some(*id),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(clicks.len(), 2);
+    let select = clicks[0];
+    let respond = clicks[1];
+    let main = initial
+        .edits
+        .iter()
+        .find_map(|edit| match edit {
+            Mutation::NewEventListener { name, id } if name == "contextmenu" => Some(*id),
+            _ => None,
+        })
+        .expect("Right-click handler should be mounted");
+    dom.process_events();
+    let (mut state, mut view, mut playback) = INPUTS.with(|slot| slot.borrow().unwrap());
+    events::dispatch(&dom, "click", select);
+    dom.render_immediate_to_vec();
+    let selected = *view.selected_card.peek();
+    assert!(selected.is_some());
+    view.open_pile.set(Some(CardLocation::Graveyard));
+    events::dispatch(&dom, "click", respond);
+    assert_eq!(*view.selected_card.peek(), selected);
+    assert_eq!(*view.open_pile.peek(), Some(CardLocation::Graveyard));
+    state
+        .pending_input
+        .set(Some(PendingInput::YesNo("Activate?".into())));
+    events::dispatch(&dom, "click", respond);
+    assert!(!state.waiting_on_input());
+    assert!(view.selected_card.peek().is_none());
+    assert!(view.open_pile.peek().is_none());
+    state
+        .pending_input
+        .set(Some(PendingInput::Idle(IdleMessageData::default())));
+    events::dispatch(&dom, "click", select);
+    view.open_pile.set(Some(CardLocation::ExtraDeck));
+    events::dispatch(&dom, "contextmenu", main);
+    assert!(state.waiting_on_input());
+    assert_eq!(*view.selected_card.peek(), selected);
+    assert!(view.open_pile.peek().is_none());
+    state
+        .pending_input
+        .set(Some(PendingInput::YesNo("Activate?".into())));
+    view.open_pile.set(Some(CardLocation::Graveyard));
+    view.effects_to_select_from.set(vec![CardData::default()]);
+    playback
+        .animation
+        .write()
+        .begin(vec![], CardTracker::default());
+    playback.chain.write().record(ChainEvent::Added(ChainLink {
+        number: 1,
+        card: None,
+    }));
+    playback.chain.write().start();
+    for animation_active in [true, false] {
+        if !animation_active {
+            playback.animation.write().cancel();
+        }
+        events::dispatch(&dom, "contextmenu", main);
+        events::dispatch(&dom, "click", respond);
+        assert!(state.waiting_on_input());
+        assert_eq!(*view.selected_card.peek(), selected);
+        assert_eq!(*view.open_pile.peek(), Some(CardLocation::Graveyard));
+        assert!(!view.effects_to_select_from.peek().is_empty());
+    }
+    playback.chain.write().cancel();
+    events::dispatch(&dom, "contextmenu", main);
+    assert!(!state.waiting_on_input());
+    assert!(view.selected_card.peek().is_none());
+    assert!(view.open_pile.peek().is_none());
+    assert!(view.effects_to_select_from.peek().is_empty());
+    INPUTS.with(|slot| *slot.borrow_mut() = None);
 }
 
 #[test]

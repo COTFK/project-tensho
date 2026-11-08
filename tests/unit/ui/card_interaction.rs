@@ -1,12 +1,13 @@
 use super::*;
 use crate::duel::cards::CardTracker;
+use crate::duel::controller::DuelController;
 use crate::ocgcore::Response;
 use crate::ocgcore::constants::Player;
 use crate::ocgcore::messages::{
     IdleMessageData, SelectChainMessageData, SelectTributeMessageData, SelectUnselectMessageData,
 };
 use crate::state::{UIState, current_menu_actions, handle_card_action, resolve_card_action};
-use crate::ui::playback::use_playback;
+use crate::ui::playback::Playback;
 use crate::ui::view_state::ViewState;
 
 #[path = "events.rs"]
@@ -241,14 +242,21 @@ fn menu_actions_are_suppressed_and_resolved_from_current_prompt() {
     use crate::duel::cards::CardTracker;
 
     fn app() -> Element {
-        let mut state = use_context_provider(UIState::default);
-        use_playback();
-        let mut view = use_context_provider(ViewState::default);
+        let mut state = use_hook(UIState::default);
+        let playback = use_hook(Playback::default);
+        let mut view = use_hook(ViewState::default);
+        let controller = use_signal(|| None::<DuelController>);
         let hand = address(Player::Player, CardLocation::Hand, 0);
         let mut layer = CardTracker::default();
         layer.insert(hand, 42).unwrap();
         state.cards.set(Some(layer));
-        handle_card_action(CardAction::Select(hand));
+        handle_card_action(
+            state,
+            view,
+            playback,
+            controller.into(),
+            CardAction::Select(hand),
+        );
         state
             .pending_input
             .set(Some(PendingInput::Idle(IdleMessageData {
@@ -486,9 +494,13 @@ fn card_intents_keep_activation_set_and_pile_response_encodings() {
 #[test]
 fn card_intents_toggle_tributes_and_respect_playback_blocking() {
     fn app() -> Element {
-        let mut state = use_context_provider(UIState::default);
-        let mut view = use_context_provider(ViewState::default);
-        let mut playback = use_playback();
+        let mut state = use_hook(UIState::default);
+        let mut view = use_hook(ViewState::default);
+        let mut playback = use_hook(Playback::default);
+        let controller = use_signal(|| None::<DuelController>);
+        assert!(try_consume_context::<UIState>().is_none());
+        assert!(try_consume_context::<ViewState>().is_none());
+        assert!(try_consume_context::<Playback>().is_none());
         let field = address(Player::Player, CardLocation::MonsterZone, 0);
         let mut cards = CardTracker::default();
         let id = cards.insert(field, 42).unwrap();
@@ -503,22 +515,46 @@ fn card_intents_toggle_tributes_and_respect_playback_blocking() {
             },
             selected: Vec::new(),
         }));
-        handle_card_action(CardAction::Select(field));
+        handle_card_action(
+            state,
+            view,
+            playback,
+            controller.into(),
+            CardAction::Select(field),
+        );
         assert!(matches!(state.pending_input.peek().as_ref(),
                 Some(PendingInput::Tribute { selected, .. }) if selected == &[7]));
         playback
             .animation
             .write()
             .begin(vec![id], CardTracker::default());
-        handle_card_action(CardAction::Select(field));
+        handle_card_action(
+            state,
+            view,
+            playback,
+            controller.into(),
+            CardAction::Select(field),
+        );
         assert!(matches!(state.pending_input.peek().as_ref(),
                 Some(PendingInput::Tribute { selected, .. }) if selected == &[7]));
         playback.cancel();
-        handle_card_action(CardAction::Select(field));
+        handle_card_action(
+            state,
+            view,
+            playback,
+            controller.into(),
+            CardAction::Select(field),
+        );
         assert!(matches!(state.pending_input.peek().as_ref(),
                 Some(PendingInput::Tribute { selected, .. }) if selected.is_empty()));
         state.clear_pending_input();
-        handle_card_action(CardAction::Select(field));
+        handle_card_action(
+            state,
+            view,
+            playback,
+            controller.into(),
+            CardAction::Select(field),
+        );
         assert_eq!(*view.selected_card.peek(), Some(id));
         view.selected_card.set(None);
         rsx! {}

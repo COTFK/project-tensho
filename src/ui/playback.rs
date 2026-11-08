@@ -3,7 +3,7 @@ use dioxus::prelude::*;
 use super::card_animation::CardAnimationState;
 use super::chain::ChainPlayback;
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, PartialEq)]
 pub(crate) struct Playback {
     pub animation: Signal<CardAnimationState>,
     pub chain: Signal<ChainPlayback>,
@@ -20,6 +20,7 @@ impl Playback {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn use_playback() -> Playback {
     use_context_provider(Playback::default)
 }

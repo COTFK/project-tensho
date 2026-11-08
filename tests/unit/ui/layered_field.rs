@@ -336,7 +336,8 @@ fn layered_field_reports_errors_without_owning_duel_lifecycle() {
         let mut state = use_context_provider(UIState::default);
         let view = use_context_provider(ViewState::default);
         let mut playback = use_playback();
-        super::super::use_duel_contexts(state, view, playback);
+        let controller = use_signal(|| None::<crate::duel::controller::DuelController>);
+        super::super::use_duel_contexts(state, view, playback, controller.into());
         use_context_provider(LayoutAnchors::default);
         use_context_provider(|| LayoutRevision(Signal::new(0)));
         use_hook(move || {
