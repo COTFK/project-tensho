@@ -10,6 +10,142 @@ use crate::ui::chain::ChainPlayback;
 mod events;
 
 #[test]
+fn startup_combines_layout_core_and_both_playbacks_and_stays_ready_on_resize() {
+    use std::cell::RefCell;
+
+    thread_local! {
+        static CONTEXT: RefCell<Option<(UIState, Playback, Signal<bool>, Signal<LayoutStatus>)>> =
+            const { RefCell::new(None) };
+    }
+
+    fn app() -> Element {
+        let mut state = use_context_provider(UIState::default);
+        let playback = use_playback();
+        let mut ready = use_signal(|| false);
+        let layout = use_signal(LayoutStatus::default);
+        use_effect(move || synchronize_layout(&mut state, &mut ready, playback, layout()));
+        CONTEXT.with(|slot| *slot.borrow_mut() = Some((state, playback, ready, layout)));
+        rsx! {}
+    }
+
+    fn settle(dom: &mut VirtualDom) {
+        dom.render_immediate_to_vec();
+        dom.process_events();
+    }
+
+    let mut dom = VirtualDom::new(app);
+    dom.rebuild_in_place();
+    dom.process_events();
+    let (mut state, mut playback, ready, mut layout) = CONTEXT.with(|slot| slot.borrow().unwrap());
+    assert!(!*ready.peek());
+    assert!(!state.processing_blocked(playback));
+    layout.set(LayoutStatus::Ready);
+    settle(&mut dom);
+    assert!(!*ready.peek());
+
+    state
+        .pending_input
+        .set(Some(PendingInput::YesNo("Activate?".into())));
+    playback
+        .animation
+        .write()
+        .begin(vec![], CardTracker::default());
+    playback.chain.write().record(ChainEvent::Added(ChainLink {
+        number: 1,
+        card: None,
+    }));
+    playback.chain.write().start();
+    settle(&mut dom);
+    assert!(!*ready.peek());
+    playback.animation.write().cancel();
+    settle(&mut dom);
+    assert!(!*ready.peek());
+    playback.chain.write().cancel();
+    settle(&mut dom);
+    assert!(*ready.peek());
+
+    layout.set(LayoutStatus::Pending);
+    state.clear_pending_input();
+    playback
+        .animation
+        .write()
+        .begin(vec![], CardTracker::default());
+    playback.chain.write().record(ChainEvent::Added(ChainLink {
+        number: 2,
+        card: None,
+    }));
+    playback.chain.write().start();
+    settle(&mut dom);
+    assert!(*ready.peek());
+    assert!(state.failure.peek().is_none());
+    layout.set(LayoutStatus::Failed("resize failed".into()));
+    settle(&mut dom);
+    assert!(*ready.peek());
+    assert_eq!(state.failure.peek().as_deref(), Some("resize failed"));
+    assert!(!playback.is_active());
+    assert!(!playback.chain.peek().has_pending_frames());
+    CONTEXT.with(|slot| *slot.borrow_mut() = None);
+}
+
+#[test]
+fn a_finished_duel_can_complete_startup_after_layout_and_playback_settle() {
+    fn app() -> Element {
+        let mut state = use_context_provider(UIState::default);
+        let mut playback = use_playback();
+        let mut ready = use_signal(|| false);
+        state.duel_finished.set(true);
+        synchronize_layout(&mut state, &mut ready, playback, LayoutStatus::Pending);
+        assert!(!*ready.peek());
+        playback
+            .animation
+            .write()
+            .begin(vec![], CardTracker::default());
+        synchronize_layout(&mut state, &mut ready, playback, LayoutStatus::Ready);
+        assert!(!*ready.peek());
+        playback.cancel();
+        synchronize_layout(&mut state, &mut ready, playback, LayoutStatus::Ready);
+        assert!(*ready.peek());
+        rsx! {}
+    }
+    let mut dom = VirtualDom::new(app);
+    dom.rebuild_in_place();
+}
+
+#[test]
+fn layout_reports_cannot_unlock_failed_or_restarting_duels() {
+    fn app() -> Element {
+        let mut state = use_context_provider(UIState::default);
+        let playback = use_playback();
+        let mut ready = use_signal(|| false);
+        state.restarting.set(true);
+        synchronize_layout(&mut state, &mut ready, playback, LayoutStatus::Ready);
+        assert!(!*ready.peek());
+        synchronize_layout(
+            &mut state,
+            &mut ready,
+            playback,
+            LayoutStatus::Failed("ignored".into()),
+        );
+        assert!(state.failure.peek().is_none());
+
+        state.restarting.set(false);
+        state.failure.set(Some("existing failure".into()));
+        synchronize_layout(&mut state, &mut ready, playback, LayoutStatus::Ready);
+        assert!(!*ready.peek());
+        synchronize_layout(
+            &mut state,
+            &mut ready,
+            playback,
+            LayoutStatus::Failed("ignored".into()),
+        );
+        assert_eq!(state.failure.peek().as_deref(), Some("existing failure"));
+        rsx! {}
+    }
+    let mut dom = VirtualDom::new(app);
+    dom.rebuild_in_place();
+}
+
+#[test]
 fn restart_button_cancels_playback_and_clears_pending_input_and_view() {
     use crate::duel::cards::CardAddress;
     use crate::ocgcore::constants::{CardLocation, Player};

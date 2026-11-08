@@ -163,14 +163,184 @@ fn persistent_missing_anchors_are_reported() {
 }
 
 #[test]
-fn startup_waits_for_mounted_current_geometry_and_settled_duel() {
-    assert!(!startup_layout_ready(false, 2, 2, true, true, true, false));
-    assert!(!startup_layout_ready(true, 1, 2, true, true, true, false));
-    assert!(!startup_layout_ready(true, 2, 2, false, true, true, false));
-    assert!(!startup_layout_ready(true, 2, 2, true, false, true, false));
-    assert!(!startup_layout_ready(true, 2, 2, true, true, false, false));
-    assert!(!startup_layout_ready(true, 2, 2, true, true, true, true));
-    assert!(startup_layout_ready(true, 2, 2, true, true, true, false));
+fn layout_readiness_requires_mounted_current_geometry_targets_and_artwork() {
+    let (snapshot, anchors) = fixture();
+    let geometry = futures::executor::block_on(measure_field(&anchors)).unwrap();
+    let targets = Some(Ok(targets(&snapshot, &geometry).unwrap()));
+    let measured = Some((2, Ok(geometry)));
+    for (mounted, revision, measured, targets, artwork_ready) in [
+        (false, 2, measured.as_ref(), targets.as_ref(), true),
+        (true, 3, measured.as_ref(), targets.as_ref(), true),
+        (true, 2, None, targets.as_ref(), true),
+        (true, 2, measured.as_ref(), None, true),
+        (true, 2, measured.as_ref(), targets.as_ref(), false),
+    ] {
+        assert_eq!(
+            layout_status(
+                mounted,
+                revision,
+                measured,
+                targets,
+                (None, artwork_ready),
+                true
+            ),
+            LayoutStatus::Pending
+        );
+    }
+    assert_eq!(
+        layout_status(
+            true,
+            2,
+            measured.as_ref(),
+            targets.as_ref(),
+            (None, true),
+            true
+        ),
+        LayoutStatus::Ready
+    );
+}
+
+#[test]
+fn stale_measurement_errors_are_ignored_but_current_errors_are_reported() {
+    let measured = Some((1, Err("missing anchor".into())));
+    assert_eq!(
+        layout_status(true, 2, measured.as_ref(), None, (None, true), true),
+        LayoutStatus::Pending
+    );
+    for (preloading, action) in [(true, "measure"), (false, "remeasure")] {
+        assert_eq!(
+            layout_status(true, 1, measured.as_ref(), None, (None, true), preloading),
+            LayoutStatus::Failed(format!("Cannot {action} the field: missing anchor"))
+        );
+    }
+}
+
+#[test]
+fn target_and_startup_artwork_errors_preserve_failure_priority() {
+    let measured = Some((1, Err("missing anchor".into())));
+    let targets = Some(Err("invalid target".into()));
+    let artwork = (Some("failed image".into()), false);
+    assert_eq!(
+        layout_status(
+            true,
+            1,
+            measured.as_ref(),
+            targets.as_ref(),
+            artwork.clone(),
+            true
+        ),
+        LayoutStatus::Failed("invalid target".into())
+    );
+    assert_eq!(
+        layout_status(true, 1, measured.as_ref(), None, artwork.clone(), true),
+        LayoutStatus::Failed("Cannot load card artwork: failed image".into())
+    );
+    assert_eq!(
+        layout_status(true, 1, measured.as_ref(), None, artwork, false),
+        LayoutStatus::Failed("Cannot remeasure the field: missing anchor".into())
+    );
+}
+
+#[test]
+fn artwork_failures_after_preloading_do_not_stop_a_ready_layout() {
+    let (snapshot, anchors) = fixture();
+    let geometry = futures::executor::block_on(measure_field(&anchors)).unwrap();
+    let targets = Some(Ok(targets(&snapshot, &geometry).unwrap()));
+    let measured = Some((1, Ok(geometry)));
+    assert_eq!(
+        layout_status(
+            true,
+            1,
+            measured.as_ref(),
+            targets.as_ref(),
+            (Some("failed image".into()), false),
+            false,
+        ),
+        LayoutStatus::Ready
+    );
+}
+
+#[test]
+fn layered_field_reports_errors_without_owning_duel_lifecycle() {
+    use crate::state::UIState;
+    use crate::ui::playback::{Playback, use_playback};
+    use crate::ui::view_state::ViewState;
+    use std::cell::RefCell;
+
+    thread_local! {
+        static REPORTED: RefCell<Vec<LayoutStatus>> = const { RefCell::new(Vec::new()) };
+        static CONTEXT: RefCell<Option<(UIState, Playback)>> = const { RefCell::new(None) };
+    }
+
+    fn app() -> Element {
+        let mut state = use_context_provider(UIState::default);
+        use_context_provider(ViewState::default);
+        let mut playback = use_playback();
+        use_context_provider(LayoutAnchors::default);
+        use_context_provider(|| LayoutRevision(Signal::new(0)));
+        use_hook(move || {
+            state.failure.set(Some("existing failure".into()));
+            state.restarting.set(true);
+            playback
+                .animation
+                .write()
+                .begin(vec![], CardTracker::default());
+        });
+        CONTEXT.with(|slot| *slot.borrow_mut() = Some((state, playback)));
+        let tracking = use_signal(|| Some(CardTracker::default()));
+        let selected = use_signal(|| None::<CardId>);
+        rsx! {
+            LayeredField {
+                tracking,
+                selected,
+                animation: playback.animation,
+                preloading: true,
+                deck_codes: vec![],
+                onlayout: move |status| REPORTED.with(|reports| reports.borrow_mut().push(status)),
+            }
+        }
+    }
+
+    REPORTED.with(|reports| reports.borrow_mut().clear());
+    let mut dom = VirtualDom::new(app);
+    dom.rebuild_in_place();
+    let reporting = async {
+        for _ in 0..32 {
+            dom.process_events();
+            if REPORTED.with(|reports| {
+                reports
+                    .borrow()
+                    .iter()
+                    .any(|status| matches!(status, LayoutStatus::Failed(_)))
+            }) {
+                return;
+            }
+            dom.wait_for_work().await;
+            dom.render_immediate_to_vec();
+        }
+        panic!("Layout did not report its measurement failure");
+    };
+    match futures::executor::block_on(futures::future::select(
+        Box::pin(reporting),
+        Box::pin(wait_millis(5_000)),
+    )) {
+        futures::future::Either::Left(_) => {}
+        futures::future::Either::Right(_) => panic!("Timed out waiting for the layout report"),
+    }
+    REPORTED.with(|reports| {
+        assert_eq!(reports.borrow().first(), Some(&LayoutStatus::Pending));
+        assert!(matches!(
+            reports.borrow().last(),
+            Some(LayoutStatus::Failed(error)) if error.starts_with("Cannot measure the field:")
+        ));
+        reports.borrow_mut().clear();
+    });
+    CONTEXT.with(|slot| {
+        let (state, playback) = slot.borrow_mut().take().unwrap();
+        assert_eq!(state.failure.peek().as_deref(), Some("existing failure"));
+        assert!(*state.restarting.peek());
+        assert!(playback.animation.peek().is_active());
+    });
 }
 
 #[test]

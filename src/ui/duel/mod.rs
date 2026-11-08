@@ -30,7 +30,7 @@ use crate::ui::components::svg::FullscreenIcon;
 use crate::ui::components::svg::ResetIcon;
 use crate::ui::playback::{Playback, use_playback};
 use crate::ui::view_state::ViewState;
-use layered_field::LayeredField;
+use layered_field::{LayeredField, LayoutStatus};
 use modal::ModalContainer;
 
 #[component]
@@ -115,7 +115,8 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>, deck_codes: Ve
     let mut view = use_context::<ViewState>();
     use_context_provider(layout_anchors::LayoutAnchors::default);
     let revision = use_context_provider(|| layout_anchors::LayoutRevision(Signal::new(0)));
-    let startup_ready = use_signal(|| false);
+    let mut startup_ready = use_signal(|| false);
+    let mut layout_status = use_signal(LayoutStatus::default);
     let playback = use_context::<Playback>();
     let modal_suppressed = use_memo(move || state.modals_suppressed(startup_ready(), playback));
     use_context_provider(|| ModalSuppression(modal_suppressed));
@@ -125,6 +126,9 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>, deck_codes: Ve
 
     // Start game loop
     use_effect(run_game_loop);
+    use_effect(move || {
+        synchronize_layout(&mut state, &mut startup_ready, playback, layout_status());
+    });
 
     let loading = !startup_ready() && (state.failure)().is_none();
     rsx!(
@@ -170,7 +174,18 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>, deck_codes: Ve
             }
             InteractionGate {
                 active: state.interaction_blocked(playback),
-                LayeredField { startup_ready, deck_codes }
+                LayeredField {
+                    tracking: state.cards,
+                    selected: view.selected_card,
+                    animation: playback.animation,
+                    preloading: !startup_ready(),
+                    deck_codes,
+                    onlayout: move |status| {
+                        if *layout_status.peek() != status {
+                            layout_status.set(status);
+                        }
+                    },
+                }
             }
             if let Some(error) = &(state.failure)() {
                 div {
@@ -195,6 +210,31 @@ fn DuelScreen(duel_resource: Resource<anyhow::Result<DuelSetup>>, deck_codes: Ve
             }
         }
     )
+}
+
+fn synchronize_layout(
+    state: &mut UIState,
+    startup_ready: &mut Signal<bool>,
+    playback: Playback,
+    layout: LayoutStatus,
+) {
+    if (state.failure)().is_some() || (state.restarting)() {
+        return;
+    }
+    match layout {
+        LayoutStatus::Failed(error) => {
+            tracing::error!("{error}");
+            state.fail(error, playback);
+        }
+        LayoutStatus::Ready
+            if !startup_ready()
+                && (state.waiting_on_input() || (state.duel_finished)())
+                && !playback.is_active() =>
+        {
+            startup_ready.set(true);
+        }
+        LayoutStatus::Pending | LayoutStatus::Ready => {}
+    }
 }
 
 #[component]

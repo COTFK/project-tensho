@@ -10,11 +10,8 @@ use crate::duel::cards::{Card, CardAddress, CardId, CardPlacement, CardTracker};
 use crate::ocgcore::CardData;
 use crate::ocgcore::CardType;
 use crate::ocgcore::constants::{BattlePosition, CardLocation, Player};
-use crate::state::UIState;
 use crate::ui::card_animation::{AnimationPhase, CardAnimationState, wait_millis};
 use crate::ui::components::CardImage;
-use crate::ui::playback::Playback;
-use crate::ui::view_state::ViewState;
 use crate::utility::{card_image_url, card_thumbnail_url};
 
 #[derive(Clone, PartialEq)]
@@ -38,6 +35,14 @@ struct PreviewGeometry {
     field: Vec<CardAnchor>,
     hand_base: CardAnchor,
     piles: Vec<CardAnchor>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(super) enum LayoutStatus {
+    #[default]
+    Pending,
+    Ready,
+    Failed(String),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -487,32 +492,29 @@ fn targets(
 }
 
 #[component]
-pub(super) fn LayeredField(mut startup_ready: Signal<bool>, deck_codes: Vec<u32>) -> Element {
-    let mut state = use_context::<UIState>();
-    let view = use_context::<ViewState>();
-    let tracking = state.cards;
+pub(super) fn LayeredField(
+    tracking: ReadSignal<Option<CardTracker>>,
+    selected: ReadSignal<Option<CardId>>,
+    animation: ReadSignal<CardAnimationState>,
+    preloading: bool,
+    deck_codes: Vec<u32>,
+    onlayout: EventHandler<LayoutStatus>,
+) -> Element {
     let anchors = use_context::<LayoutAnchors>();
     let revision = use_context::<LayoutRevision>();
     let mut layered_mounted = use_signal(|| false);
     let artwork = use_signal(HashMap::<String, ArtworkStatus>::new);
-    let playback_state = use_context::<Playback>();
-    let playback = playback_state.animation;
     let resource = use_resource(move || {
-        let layout_revision = revision;
         let revision = (revision.0)();
         let anchors = anchors.clone();
         async move {
-            let result = measure_field_when_ready(&anchors).await.map_err(|error| {
-                let error = format!("{error:#}");
-                if *layout_revision.0.peek() == revision {
-                    tracing::error!("Cannot measure card layer: {error}");
-                }
-                error
-            });
+            let result = measure_field_when_ready(&anchors)
+                .await
+                .map_err(|error| format!("{error:#}"));
             (revision, result)
         }
     });
-    let current = snapshot(tracking(), (view.selected_card)());
+    let current = snapshot(tracking(), selected());
     let current_revision = (revision.0)();
     let result = resource.read();
     let geometry = result.as_ref().and_then(|(measured_revision, result)| {
@@ -522,7 +524,7 @@ pub(super) fn LayeredField(mut startup_ready: Signal<bool>, deck_codes: Vec<u32>
         (Some(input), Some(Ok(geometry))) => Some(
             targets(input, geometry)
                 .and_then(|mut targets| {
-                    let playback = playback();
+                    let playback = animation();
                     preserve_pile_images(input, &mut targets, &playback)?;
                     shuffle_source_targets(&mut targets, geometry.hand_base, &playback)?;
                     gather_hand(geometry.hand_base, &mut targets, &playback);
@@ -530,18 +532,8 @@ pub(super) fn LayeredField(mut startup_ready: Signal<bool>, deck_codes: Vec<u32>
                 })
                 .map_err(|error| format!("{error:#}")),
         ),
-        (_, Some(Err(error))) => Some(Err(error.clone())),
         _ => None,
     };
-    let target_failure = if matches!(geometry, Some(Ok(_))) {
-        resolved
-            .as_ref()
-            .and_then(|result| result.as_ref().err())
-            .cloned()
-    } else {
-        None
-    };
-    let targets_ready = resolved.as_ref().is_some_and(Result::is_ok);
     let mut required_artwork = deck_artwork_urls(&deck_codes);
     let field_artwork: BTreeSet<String> = current
         .as_ref()
@@ -561,74 +553,19 @@ pub(super) fn LayeredField(mut startup_ready: Signal<bool>, deck_codes: Vec<u32>
                 .collect()
         })
         .unwrap_or_default();
-    if !startup_ready() {
+    if preloading {
         required_artwork.extend(field_artwork);
     }
     let artwork_state = artwork();
-    let (artwork_failure, artwork_ready) = artwork_status(&required_artwork, &artwork_state);
-    use_effect(move || {
-        let current_revision = (revision.0)();
-        let measured = resource.read();
-        let mounted = layered_mounted();
-        let ready = startup_ready();
-        let waiting = state.waiting_on_input();
-        let finished = (state.duel_finished)();
-        let _ = artwork();
-        let _ = tracking();
-        let playing = playback_state.is_active();
-        if (state.failure)().is_some() || (state.restarting)() {
-            return;
-        }
-        if let Some(error) = &target_failure {
-            tracing::error!("Card layer synchronization failed: {error}");
-            state.fail(error.clone(), playback_state);
-            return;
-        }
-        if !ready {
-            if let Some(url) = &artwork_failure {
-                let error = format!("Cannot load card artwork: {url}");
-                tracing::error!("{error}");
-                state.fail(error, playback_state);
-                return;
-            }
-            if let Some((measured_revision, result)) = measured.as_ref() {
-                if *measured_revision == current_revision {
-                    match result {
-                        Err(error) => {
-                            state
-                                .fail(format!("Cannot measure the field: {error}"), playback_state);
-                            return;
-                        }
-                        Ok(_)
-                            if startup_layout_ready(
-                                mounted,
-                                *measured_revision,
-                                current_revision,
-                                targets_ready,
-                                artwork_ready,
-                                waiting || finished,
-                                playing,
-                            ) =>
-                        {
-                            startup_ready.set(true)
-                        }
-                        Ok(_) => {}
-                    }
-                }
-            }
-        }
-        if let Some((measured_revision, result)) = measured.as_ref() {
-            if *measured_revision == current_revision {
-                match result {
-                    Ok(_) => {}
-                    Err(error) => state.fail(
-                        format!("Cannot remeasure the field: {error}"),
-                        playback_state,
-                    ),
-                }
-            }
-        }
-    });
+    let status = layout_status(
+        layered_mounted(),
+        current_revision,
+        result.as_ref(),
+        resolved.as_ref(),
+        artwork_status(&required_artwork, &artwork_state),
+        preloading,
+    );
+    use_effect(use_reactive(&status, move |status| onlayout.call(status)));
     let layered = matches!(&resolved, Some(Ok(_)));
     let visible_targets = resolved
         .as_ref()
@@ -639,7 +576,7 @@ pub(super) fn LayeredField(mut startup_ready: Signal<bool>, deck_codes: Vec<u32>
         .as_ref()
         .map(|snapshot| snapshot.cards.cards().to_vec())
         .unwrap_or_default();
-    shuffle_source_cards(&mut cards, &playback());
+    shuffle_source_cards(&mut cards, &animation());
     rsx! {
         Field {}
         Hand {}
@@ -688,21 +625,36 @@ fn ArtworkPreloader(
     }
 }
 
-fn startup_layout_ready(
+fn layout_status(
     layered_mounted: bool,
-    measured_revision: u64,
     current_revision: u64,
-    targets_ready: bool,
-    artwork_ready: bool,
-    duel_settled: bool,
-    playback_blocked: bool,
-) -> bool {
-    layered_mounted
-        && measured_revision == current_revision
-        && targets_ready
-        && artwork_ready
-        && duel_settled
-        && !playback_blocked
+    measured: Option<&(u64, Result<PreviewGeometry, String>)>,
+    targets: Option<&Result<Vec<CardTarget>, String>>,
+    artwork: (Option<String>, bool),
+    preloading: bool,
+) -> LayoutStatus {
+    if let Some(Err(error)) = targets {
+        return LayoutStatus::Failed(error.clone());
+    }
+    if preloading && let Some(url) = artwork.0 {
+        return LayoutStatus::Failed(format!("Cannot load card artwork: {url}"));
+    }
+    let geometry = measured
+        .filter(|(revision, _)| *revision == current_revision)
+        .map(|(_, result)| result);
+    if let Some(Err(error)) = geometry {
+        let action = if preloading { "measure" } else { "remeasure" };
+        return LayoutStatus::Failed(format!("Cannot {action} the field: {error}"));
+    }
+    if layered_mounted
+        && geometry.is_some_and(Result::is_ok)
+        && targets.is_some_and(Result::is_ok)
+        && (!preloading || artwork.1)
+    {
+        LayoutStatus::Ready
+    } else {
+        LayoutStatus::Pending
+    }
 }
 
 #[cfg(test)]
