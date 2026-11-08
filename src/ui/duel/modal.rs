@@ -5,6 +5,7 @@ use dioxus::prelude::*;
 
 use super::effect_pile::EffectPileModal;
 use super::extra_deck::ExtraDeckModal;
+use super::pile_cards::PileCard;
 use crate::ocgcore::constants::{BattlePosition, CardLocation, Player};
 use crate::ocgcore::messages::{
     AnnounceNumberMessageData, SelectCardMessageData, SelectOptionMessageData,
@@ -85,12 +86,6 @@ pub fn ModalContainer() -> Element {
             onresponse,
         }
     )
-}
-
-#[derive(Clone, PartialEq)]
-pub(super) struct PileCard {
-    pub data: CardData,
-    pub links: Vec<u32>,
 }
 
 fn pile_cards(

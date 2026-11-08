@@ -1,16 +1,12 @@
 use dioxus::prelude::*;
 
-use super::chain_badges::ChainBadges;
 use super::constants::ZONE_SIZE;
-use super::modal::PileCard;
+use super::pile_cards::{PILE_LIST_CLASS, PileCard, PileCardRow};
 use crate::duel::cards::CardAddress;
 use crate::duel::input::CardAction;
 use crate::ocgcore::CardData;
 use crate::ocgcore::constants::CardLocation;
 use crate::ui::components::ActionButton;
-use crate::ui::components::Card;
-use crate::ui::components::CardActionMenu;
-use crate::ui::components::CardImage;
 use crate::ui::components::OptionButton;
 use crate::ui::components::PickerModal;
 use crate::ui::components::svg::SummonIcon;
@@ -53,54 +49,39 @@ pub fn ExtraDeckModal(
             trigger: open_pile() == Some(CardLocation::ExtraDeck),
             retain_on_close: true,
             div {
-                class: "flex flex-row min-w-[40vw] w-full max-w-[77vw] h-max gap-0.5 px-2",
-                class: "overflow-x-auto scroll-smooth scrollbar-thin",
+                class: PILE_LIST_CLASS,
                 for (index, card) in extra_deck.iter().enumerate() {
                     {
-                        let links = card.links.clone();
-                        let card = card.data;
-                        let special_summon_index = available_special_summons
+                        let data = card.data;
+                        let is_special_summonable = available_special_summons
                             .iter()
-                            .position(|summon| {
+                            .any(|summon| {
                                 summon.location == CardLocation::ExtraDeck
-                                    && summon.sequence == card.sequence
-                            })
-                            .map(|index| index as u8);
-                        let is_special_summonable = special_summon_index.is_some();
+                                    && summon.sequence == data.sequence
+                            });
 
                         rsx!(
-                            div {
-                                class: "relative py-2",
-                                Card {
-                                    image: CardImage::Face(card),
-                                    class: "w-[12vw]",
-                                    is_selected: selected_card() == Some(index),
-                                    show_highlight_on_select: true,
-                                    show_dotted_highlight: false,
-                                    show_blue_aura: false,
-                                    show_orange_aura: is_special_summonable && !suppress_actions,
-                                    onclick: move |_| selected_card.set(Some(index))
-                                }
-                                ChainBadges { links }
-                                CardActionMenu {
-                                    class: "absolute left-1/2 bottom-1/2 -translate-x-[50%] translate-y-[50%] px-3 py-2 md:px-6 z-20",
-                                    trigger: selected_card() == Some(index) && is_special_summonable && !suppress_actions,
-                                    ActionButton {
-                                        label: "Summon",
-                                        class: "border-yellow-500 text-yellow-300",
-                                        onclick: move |_| {
-                                            if is_special_summonable {
-                                                onaction.call(CardAction::SpecialSummon(CardAddress {
-                                                    controller: card.controller,
-                                                    location: CardLocation::ExtraDeck,
-                                                    sequence: u32::from(card.sequence),
-                                                }));
-                                            }
-                                            selected_card.set(None);
-                                            open_pile.set(None);
-                                        },
-                                        SummonIcon {  }
-                                    }
+                            PileCardRow {
+                                card: card.clone(),
+                                is_selected: selected_card() == Some(index),
+                                highlighted: is_special_summonable && !suppress_actions,
+                                show_actions: selected_card() == Some(index) && is_special_summonable && !suppress_actions,
+                                onselect: move |_| selected_card.set(Some(index)),
+                                ActionButton {
+                                    label: "Summon",
+                                    class: "border-yellow-500 text-yellow-300",
+                                    onclick: move |_| {
+                                        if is_special_summonable {
+                                            onaction.call(CardAction::SpecialSummon(CardAddress {
+                                                controller: data.controller,
+                                                location: CardLocation::ExtraDeck,
+                                                sequence: u32::from(data.sequence),
+                                            }));
+                                        }
+                                        selected_card.set(None);
+                                        open_pile.set(None);
+                                    },
+                                    SummonIcon {  }
                                 }
                             }
                         )

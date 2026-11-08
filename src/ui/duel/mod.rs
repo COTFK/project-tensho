@@ -12,6 +12,7 @@ mod layout_anchors;
 mod main_deck;
 mod modal;
 mod persistent_card_layer;
+mod pile_cards;
 
 use dioxus::prelude::*;
 use web_sys::window;

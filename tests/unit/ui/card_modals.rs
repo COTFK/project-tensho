@@ -13,6 +13,9 @@ use std::cell::RefCell;
 #[path = "events.rs"]
 mod events;
 
+#[path = "pile_modals.rs"]
+mod pile_modals;
+
 thread_local! {
     static STATE: RefCell<Option<UIState>> = const { RefCell::new(None) };
     static PLAYBACK: RefCell<Option<Signal<CardAnimationState>>> = const { RefCell::new(None) };

@@ -1,16 +1,12 @@
 use dioxus::prelude::*;
 
-use super::chain_badges::ChainBadges;
 use super::constants::ZONE_SIZE;
-use super::modal::PileCard;
+use super::pile_cards::{PILE_LIST_CLASS, PileCard, PileCardRow};
 use crate::duel::cards::CardAddress;
 use crate::duel::input::CardAction;
 use crate::ocgcore::CardData;
 use crate::ocgcore::constants::CardLocation;
 use crate::ui::components::ActionButton;
-use crate::ui::components::Card;
-use crate::ui::components::CardActionMenu;
-use crate::ui::components::CardImage;
 use crate::ui::components::OptionButton;
 use crate::ui::components::PickerModal;
 use crate::ui::components::svg::LightningTrioIcon;
@@ -73,8 +69,7 @@ pub fn EffectPileModal(
             trigger: open_pile() == Some(location),
             retain_on_close: true,
             div {
-                class: "flex flex-row min-w-[40vw] w-full max-w-[77vw] h-max gap-0.5 px-2",
-                class: "overflow-x-auto scroll-smooth scrollbar-thin",
+                class: PILE_LIST_CLASS,
                 for (index, card) in cards.iter().enumerate() {
                     {
                         let prompted_card = cards_prompting_to_activate
@@ -88,33 +83,22 @@ pub fn EffectPileModal(
                         };
 
                         rsx!(
-                            div {
-                                class: "relative py-2",
-                                Card {
-                                    image: CardImage::Face(card.data),
-                                    class: "w-[12vw]",
-                                    is_selected: selected_card() == Some(index),
-                                    show_highlight_on_select: true,
-                                    show_dotted_highlight: false,
-                                    show_blue_aura: false,
-                                    show_orange_aura: prompted_card.is_some() && !suppress_actions,
-                                    onclick: move |_| selected_card.set(Some(index))
-                                }
-                                ChainBadges { links: card.links.clone() }
-                                CardActionMenu {
-                                    class: "absolute left-1/2 bottom-1/2 -translate-x-[50%] translate-y-[50%] px-3 py-2 md:px-6 z-20",
-                                    trigger: selected_card() == Some(index) && prompted_card.is_some() && !suppress_actions,
-                                    ActionButton {
-                                        label: "Activate",
-                                        class: "border-yellow-500 text-yellow-300",
-                                        onclick: move |_| {
-                                            if prompted_card.is_some() && !suppress_actions {
-                                                onaction.call(CardAction::Activate(address));
-                                                selected_card.set(None);
-                                            }
-                                        },
-                                        LightningTrioIcon {  }
-                                    }
+                            PileCardRow {
+                                card: card.clone(),
+                                is_selected: selected_card() == Some(index),
+                                highlighted: prompted_card.is_some() && !suppress_actions,
+                                show_actions: selected_card() == Some(index) && prompted_card.is_some() && !suppress_actions,
+                                onselect: move |_| selected_card.set(Some(index)),
+                                ActionButton {
+                                    label: "Activate",
+                                    class: "border-yellow-500 text-yellow-300",
+                                    onclick: move |_| {
+                                        if prompted_card.is_some() && !suppress_actions {
+                                            onaction.call(CardAction::Activate(address));
+                                            selected_card.set(None);
+                                        }
+                                    },
+                                    LightningTrioIcon {  }
                                 }
                             }
                         )
