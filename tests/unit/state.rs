@@ -8,7 +8,7 @@ fn pending_input_and_view_resets_are_independent() {
     fn app() -> Element {
         let mut state = use_context_provider(UIState::default);
         let mut view = use_context_provider(ViewState::default);
-        let mut cards = CardLayer::default();
+        let mut cards = CardTracker::default();
         let id = cards
             .insert(
                 CardAddress {
@@ -65,7 +65,7 @@ fn view_reset_preserves_tracking_and_shared_tribute_progress() {
     fn app() -> Element {
         let mut state = use_context_provider(UIState::default);
         let mut view = use_context_provider(ViewState::default);
-        let mut cards = CardLayer::default();
+        let mut cards = CardTracker::default();
         let address = CardAddress {
             controller: Player::Player,
             location: CardLocation::MonsterZone,
@@ -114,12 +114,12 @@ fn view_reset_preserves_tracking_and_shared_tribute_progress() {
 
 #[test]
 fn selection_tracks_moves_and_invalidates_on_shuffle_or_failure() {
+    use crate::duel::cards::CardAddress;
     use crate::ocgcore::location_info::{
         CardLocationInfo, CardLocationKind, CardLocationPosition, CardPositionFlags,
     };
     use crate::ocgcore::messages::move_card::MoveReason;
     use crate::ocgcore::messages::{MoveMessageData, ShuffleCardsMessageData};
-    use crate::ui::card_layer::CardAddress;
 
     thread_local! {
         static COMPLETED: Cell<bool> = const { Cell::new(false) };
@@ -128,7 +128,7 @@ fn selection_tracks_moves_and_invalidates_on_shuffle_or_failure() {
     fn app() -> Element {
         let mut state = use_context_provider(UIState::default);
         let mut view = use_context_provider(ViewState::default);
-        let mut layer = CardLayer::default();
+        let mut layer = CardTracker::default();
         let hand = CardAddress {
             controller: Player::Player,
             location: CardLocation::Hand,
@@ -210,7 +210,7 @@ fn selection_tracks_moves_and_invalidates_on_shuffle_or_failure() {
 
 #[test]
 fn selected_card_is_cleared_when_it_disappears() {
-    use crate::ui::card_layer::CardAddress;
+    use crate::duel::cards::CardAddress;
 
     fn app() -> Element {
         let mut view = use_context_provider(ViewState::default);
@@ -219,10 +219,10 @@ fn selected_card_is_cleared_when_it_disappears() {
             location: CardLocation::MonsterZone,
             sequence: 0,
         };
-        let mut layer = CardLayer::default();
+        let mut layer = CardTracker::default();
         let id = layer.insert(address, 42).unwrap();
         view.selected_card.set(Some(id));
-        let empty = CardLayer::default();
+        let empty = CardTracker::default();
         view.reconcile_selection(&empty);
         assert!(view.selected_card.peek().is_none());
         rsx! {}
@@ -233,8 +233,8 @@ fn selected_card_is_cleared_when_it_disappears() {
 
 #[test]
 #[cfg(not(target_arch = "wasm32"))]
-fn card_layer_initializer_matches_native_decks_and_custom_hand() {
-    use crate::ui::card_layer::{CardLayer, CardPlacement};
+fn card_tracker_initializer_matches_native_decks_and_custom_hand() {
+    use crate::duel::cards::{CardPlacement, CardTracker};
     use ocgcore_ffi::constants::{TYPE_FUSION, TYPE_MONSTER, TYPE_NORMAL};
     use ocgcore_ffi::types::OCG_CardData;
 
@@ -268,7 +268,7 @@ fn card_layer_initializer_matches_native_decks_and_custom_hand() {
     pull_ids_to_front(&mut deck, &[11, 11, 14]);
     deck.reverse();
     let extra = [100, 101, 100];
-    let mut layer = CardLayer::from_decks(&deck, &extra).unwrap();
+    let mut layer = CardTracker::from_decks(&deck, &extra).unwrap();
 
     for code in deck {
         duel.add_card(
@@ -408,7 +408,7 @@ fn failure_and_restart_block_input_and_cancel_playback() {
     fn app() -> Element {
         let mut state = use_context_provider(UIState::default);
         let mut playback = use_context_provider(|| Signal::new(CardAnimationState::default()));
-        playback.write().begin(vec![], CardLayer::default());
+        playback.write().begin(vec![], CardTracker::default());
         let generation = playback.peek().generation;
         state.fail("layout failed".into(), Some(playback));
         assert_eq!(state.failure.peek().as_deref(), Some("layout failed"));
@@ -445,7 +445,7 @@ fn tracking_failure_discards_partial_state_and_stops_messages() {
             location: CardLocation::Hand,
             sequence: 0,
         };
-        let mut layer = CardLayer::default();
+        let mut layer = CardTracker::default();
         let id = layer.insert(address, 42).unwrap();
         state.cards.set(Some(layer));
         view.selected_card.set(Some(id));
@@ -533,7 +533,7 @@ fn request_messages_replace_actions_and_selection_progress() {
         let mut state = use_context_provider(UIState::default);
         let mut view = use_context_provider(ViewState::default);
         use_context_provider(|| Signal::new(Some(duel)));
-        state.cards.set(Some(CardLayer::default()));
+        state.cards.set(Some(CardTracker::default()));
         let card = CardData {
             card_code: 42,
             action_index: Some(7),
@@ -690,7 +690,7 @@ fn consuming_a_response_clears_input_and_view_but_preserves_duel_state() {
         let core = test_core();
         let duel = core.create_duel(0).unwrap();
         duel.add_card(Player::Player, 10, Player::Player, CardLocation::Hand, 0, 0);
-        let mut cards = CardLayer::default();
+        let mut cards = CardTracker::default();
         let id = cards
             .insert(
                 CardAddress {
@@ -759,7 +759,7 @@ fn responses_are_blocked_during_playback_and_after_a_prompt_is_consumed() {
         state
             .pending_input
             .set(Some(PendingInput::YesNo("Activate?".into())));
-        playback.write().begin(vec![], CardLayer::default());
+        playback.write().begin(vec![], CardTracker::default());
         send_response(Response::No);
         assert!(state.waiting_on_input());
         let generation = playback.peek().generation;
@@ -771,7 +771,7 @@ fn responses_are_blocked_during_playback_and_after_a_prompt_is_consumed() {
             location: CardLocation::Hand,
             sequence: 0,
         };
-        let id = CardLayer::default().insert(address, 1).unwrap();
+        let id = CardTracker::default().insert(address, 1).unwrap();
         view.selected_card.set(Some(id));
         send_response(Response::Yes);
         assert!(view.selected_card.peek().is_some());
@@ -830,7 +830,7 @@ fn layered_loop_pauses_on_a_real_draw_and_resumes_to_the_prompt() {
         use_context_provider(|| Signal::new(Some(duel)));
         state
             .cards
-            .set(Some(CardLayer::from_decks(&deck, &[]).unwrap()));
+            .set(Some(CardTracker::from_decks(&deck, &[]).unwrap()));
         let tracking = state.cards;
         let mut playback = use_context_provider(|| Signal::new(CardAnimationState::default()));
         run_game_loop();
@@ -923,7 +923,7 @@ fn layered_loop_starts_gathering_for_a_real_hand_shuffle() {
         use_context_provider(|| Signal::new(Some(duel)));
         state
             .cards
-            .set(Some(CardLayer::from_decks(&deck, &[]).unwrap()));
+            .set(Some(CardTracker::from_decks(&deck, &[]).unwrap()));
         let mut playback = use_context_provider(|| Signal::new(CardAnimationState::default()));
         for _ in 0..100 {
             run_game_loop();
@@ -996,7 +996,7 @@ fn batched_chain_messages_pause_the_loop_and_track_source_cards() {
             0,
             POS_FACEUP_ATTACK,
         );
-        let mut layer = CardLayer::default();
+        let mut layer = CardTracker::default();
         let card = layer.insert(address, 10).unwrap();
         let mut state = use_context_provider(UIState::default);
         use_context_provider(ViewState::default);
@@ -1044,7 +1044,7 @@ fn handles_real_duel_messages_until_input() {
         let mut state = use_context_provider(UIState::default);
         use_context_provider(ViewState::default);
         use_context_provider(|| Signal::new(Some(duel.clone())));
-        state.cards.set(Some(CardLayer::default()));
+        state.cards.set(Some(CardTracker::default()));
         let tracking = state.cards;
 
         let mut phases = Vec::new();
@@ -1080,7 +1080,7 @@ fn failed_tracking_stops_processing_without_playback_context() {
     fn app() -> Element {
         let mut state = use_context_provider(UIState::default);
         let mut view = use_context_provider(ViewState::default);
-        state.cards.set(Some(CardLayer::default()));
+        state.cards.set(Some(CardTracker::default()));
         state.tracking_failed(&mut view, "test failure".to_owned(), None);
         assert!(state.cards.peek().is_none());
         assert_eq!(state.failure.peek().as_deref(), Some("test failure"));
@@ -1095,7 +1095,7 @@ fn failed_tracking_stops_processing_without_playback_context() {
 
 #[test]
 fn ignores_nonstructural_messages_and_rejects_unsupported_structure() {
-    let mut layer = CardLayer::default();
+    let mut layer = CardTracker::default();
     layer.apply(&CoreMessage::NewTurn).unwrap();
     let error = layer
         .apply(&CoreMessage::Unsupported(MSG_TAG_SWAP as u8))
@@ -1129,7 +1129,7 @@ fn applies_ordered_moves_once_and_stops_on_invalid_input() {
             reason: MoveReason::EFFECT,
         })
     };
-    let mut layer = CardLayer::default();
+    let mut layer = CardTracker::default();
     layer
         .apply(&movement(
             info(CardLocationKind::None, 0),
@@ -1217,7 +1217,7 @@ fn refreshes_public_graveyard_codes_without_revealing_hidden_deck_order() {
         0,
         0,
     );
-    let mut layer = CardLayer::default();
+    let mut layer = CardTracker::default();
     let deck = CardAddress {
         controller: Player::Player,
         location: CardLocation::Deck,
@@ -1246,7 +1246,7 @@ fn refreshes_public_graveyard_codes_without_revealing_hidden_deck_order() {
 fn reports_missing_data_for_tracked_cards() {
     let core = test_core();
     let duel = core.create_duel(0).unwrap();
-    let mut layer = CardLayer::default();
+    let mut layer = CardTracker::default();
     layer
         .insert(
             CardAddress {
@@ -1269,7 +1269,7 @@ fn refreshes_only_tracked_cards_and_queries_stats_only_on_field() {
     for location in [CardLocation::Deck, CardLocation::MonsterZone] {
         duel.add_card(Player::Player, 10, Player::Player, location, 0, 0);
     }
-    let mut layer = CardLayer::default();
+    let mut layer = CardTracker::default();
     let address = CardAddress {
         controller: Player::Player,
         location: CardLocation::MonsterZone,
@@ -1327,7 +1327,7 @@ fn tracks_native_set_summon_creation_and_movement_batches() {
     ))
     .unwrap();
     let duel = core.create_duel(0).unwrap();
-    let mut layer = CardLayer::default();
+    let mut layer = CardTracker::default();
     for (player, location, codes) in [
         (Player::Player, CardLocation::Deck, vec![1; 12]),
         (Player::Opponent, CardLocation::Deck, vec![2; 12]),

@@ -6,8 +6,8 @@ use anyhow::{Context, ensure};
 use dioxus::html::geometry::PixelsRect;
 use dioxus::prelude::*;
 
+use crate::duel::cards::CardAddress;
 use crate::ocgcore::constants::{CardLocation, Player};
-use crate::ui::card_layer::CardAddress;
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub(super) enum Anchor {

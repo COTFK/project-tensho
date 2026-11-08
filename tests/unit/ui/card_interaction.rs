@@ -130,13 +130,13 @@ fn resolves_selection_and_tribute_by_controller_and_response_order() {
 
 #[test]
 fn menu_actions_are_suppressed_and_resolved_from_current_prompt() {
-    use crate::ui::card_layer::CardLayer;
+    use crate::duel::cards::CardTracker;
 
     fn app() -> Element {
         let mut state = use_context_provider(UIState::default);
         let mut view = use_context_provider(ViewState::default);
         let hand = address(Player::Player, CardLocation::Hand, 0);
-        let mut layer = CardLayer::default();
+        let mut layer = CardTracker::default();
         layer.insert(hand, 42).unwrap();
         state.cards.set(Some(layer));
         select_card(hand);

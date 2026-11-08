@@ -43,12 +43,12 @@ pub(crate) struct Card {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub(crate) struct CardLayer {
+pub(crate) struct CardTracker {
     cards: Vec<Card>,
     next_id: u64,
 }
 
-impl CardLayer {
+impl CardTracker {
     pub fn from_decks(main_deck: &[u32], extra_deck: &[u32]) -> anyhow::Result<Self> {
         let mut layer = Self::default();
         for (location, codes) in [
@@ -794,5 +794,5 @@ impl CardLayer {
 }
 
 #[cfg(test)]
-#[path = "../../tests/unit/ui/card_layer.rs"]
+#[path = "../../tests/unit/duel/cards.rs"]
 mod tests;

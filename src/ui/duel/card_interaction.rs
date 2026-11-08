@@ -1,11 +1,11 @@
 use dioxus::prelude::*;
 
+use crate::duel::cards::CardAddress;
 use crate::duel::input::{CardActions, PendingInput};
 use crate::ocgcore::CardData;
 use crate::ocgcore::Response;
 use crate::ocgcore::constants::{BattlePosition, CardLocation};
 use crate::state::{UIState, select_card, send_response};
-use crate::ui::card_layer::CardAddress;
 use crate::ui::components::svg::{BoltShieldIcon, LightningTrioIcon, SummonIcon};
 use crate::ui::components::{ActionButton, Card, CardActionMenu, CardImage};
 use crate::ui::view_state::ViewState;

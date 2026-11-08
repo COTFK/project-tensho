@@ -1,6 +1,6 @@
 use super::*;
+use crate::duel::cards::{CardAddress, CardTracker};
 use crate::state::UIState;
-use crate::ui::card_layer::{CardAddress, CardLayer};
 use dioxus::core::{AttributeValue, ElementId, Mutation};
 use std::cell::RefCell;
 
@@ -13,7 +13,7 @@ fn fixture(
         location,
         sequence: 0,
     };
-    let mut layer = CardLayer::default();
+    let mut layer = CardTracker::default();
     let id = layer.insert(address, 12345).unwrap();
     let mut card = *layer.card_at(address).unwrap();
     card.position = position;
@@ -102,7 +102,7 @@ fn startup_artwork_matches_visible_card_images() {
 
 #[test]
 fn chain_indicators_follow_cards_and_collect_buried_pile_links() {
-    let mut layer = CardLayer::default();
+    let mut layer = CardTracker::default();
     let field = layer
         .insert(address(CardLocation::MonsterZone), 10)
         .unwrap();
@@ -159,7 +159,7 @@ fn chain_indicators_follow_cards_and_collect_buried_pile_links() {
 
 #[test]
 fn chain_indicators_for_overlay_materials_use_the_host() {
-    let mut layer = CardLayer::default();
+    let mut layer = CardTracker::default();
     let host = layer
         .insert(address(CardLocation::MonsterZone), 10)
         .unwrap();
@@ -249,7 +249,7 @@ fn field_app() -> Element {
         CardLocation::MonsterZone,
         Some(CardPositionFlags::FACE_UP_ATTACK),
     );
-    let mut layer = CardLayer::default();
+    let mut layer = CardTracker::default();
     layer.insert(target.address, card.code).unwrap();
     state.cards.set(Some(layer));
     TEST_SELECTION.with(|slot| *slot.borrow_mut() = Some(view.selected_card));
@@ -265,7 +265,7 @@ fn two_field_cards_app() -> Element {
         CardLocation::MonsterZone,
         Some(CardPositionFlags::FACE_UP_ATTACK),
     );
-    let mut layer = CardLayer::default();
+    let mut layer = CardTracker::default();
     layer.insert(first_target.address, first.code).unwrap();
     let second_address = CardAddress {
         sequence: 1,
@@ -306,7 +306,7 @@ fn stats_root(edits: &[Mutation], card: CardId) -> ElementId {
 
 #[test]
 fn animation_hides_only_moving_field_card_stats_and_restores_them() {
-    let mut layer = CardLayer::default();
+    let mut layer = CardTracker::default();
     let first = layer
         .insert(address(CardLocation::MonsterZone), 12345)
         .unwrap();
@@ -401,7 +401,7 @@ fn selected_field_card_is_above_other_cards_and_respects_movement_layering() {
         slot.borrow()
             .unwrap()
             .write()
-            .begin(vec![card.id], CardLayer::default());
+            .begin(vec![card.id], CardTracker::default());
     });
     let moving = dom.render_immediate_to_vec();
     assert!(
@@ -636,7 +636,7 @@ fn address(location: CardLocation) -> CardAddress {
 #[test]
 fn all_cards_keep_keyed_roots_when_reordered_and_piles_are_hidden() {
     let (card, target) = fixture(CardLocation::Hand, None);
-    let mut layer = CardLayer::default();
+    let mut layer = CardTracker::default();
     layer.insert(address(CardLocation::Hand), 12345).unwrap();
     let deck_address = address(CardLocation::Deck);
     layer.insert(deck_address, 98765).unwrap();
@@ -660,7 +660,7 @@ fn all_cards_keep_keyed_roots_when_reordered_and_piles_are_hidden() {
 #[test]
 fn moving_between_hand_and_pile_does_not_reinsert_existing_roots() {
     let (mut card, mut target) = fixture(CardLocation::Hand, None);
-    let mut layer = CardLayer::default();
+    let mut layer = CardTracker::default();
     layer.insert(address(CardLocation::Hand), 12345).unwrap();
     layer.insert(address(CardLocation::Deck), 98765).unwrap();
     let deck = *layer.card_at(address(CardLocation::Deck)).unwrap();

@@ -1,10 +1,10 @@
 use super::*;
+use crate::duel::cards::{Card, CardAddress, CardId, CardPlacement, CardTracker};
 use crate::ocgcore::CardType;
 use crate::ocgcore::Response;
 use crate::ocgcore::constants::{BattlePosition, CardLocation, Phase, Player, WinReason, Winner};
 use crate::ocgcore::location_info::{CardLocationKind, CardPositionFlags};
 use crate::ocgcore::messages::{CoreMessage, Hint, HintMessageData, WinMessageData};
-use crate::ui::card_layer::{Card, CardAddress, CardId, CardLayer, CardPlacement};
 use ocgcore_ffi::constants::{POS_FACEUP_ATTACK, TYPE_MONSTER, TYPE_NORMAL};
 use ocgcore_ffi::enums::OCG_DuelStatus;
 use ocgcore_ffi::types::{OCG_CardData, OCG_NewCardInfo};
@@ -13,7 +13,7 @@ trait Materials {
     fn material_at(&self, host: CardId, sequence: u32) -> Option<&Card>;
 }
 
-impl Materials for CardLayer {
+impl Materials for CardTracker {
     fn material_at(&self, host: CardId, sequence: u32) -> Option<&Card> {
         self.cards()
             .iter()
@@ -96,7 +96,7 @@ fn tracks_native_deck_reversal_top_confirmations_and_draw() {
     ))
     .unwrap();
     let duel = core.create_duel(0).unwrap();
-    let mut layer = CardLayer::default();
+    let mut layer = CardTracker::default();
     for (player, location, count, base) in [
         (Player::Player, CardLocation::Deck, 12, 100),
         (Player::Opponent, CardLocation::Deck, 12, 200),
@@ -245,7 +245,7 @@ fn tracks_native_graveyard_deck_exchange_and_shuffle() {
     ))
     .unwrap();
     let duel = core.create_duel(0).unwrap();
-    let mut layer = CardLayer::default();
+    let mut layer = CardTracker::default();
     for (player, location, codes) in [
         (Player::Player, CardLocation::Deck, vec![1; 12]),
         (Player::Opponent, CardLocation::Deck, vec![2; 12]),
@@ -435,7 +435,7 @@ fn native_exchange_single_survivor_retains_its_old_sequence() {
     duel.start();
     let mut found = false;
     let mut rejected = false;
-    let mut layer = CardLayer::default();
+    let mut layer = CardTracker::default();
     for (sequence, code) in [300, 10].into_iter().enumerate() {
         layer
             .insert(
@@ -583,7 +583,7 @@ fn startup_messages_include_phase_changes_before_idle() {
 fn normal_summon_emits_move_summoning_and_summoned() {
     let core = test_core();
     let duel = core.create_duel(5).unwrap();
-    let mut layer = CardLayer::default();
+    let mut layer = CardTracker::default();
     for team in 0..=1 {
         for code in 1..=10 {
             let card = OCG_NewCardInfo {
@@ -778,7 +778,7 @@ fn normal_summon_emits_move_summoning_and_summoned() {
 fn tracks_native_overlay_moves_and_host_removal() {
     let core = test_core();
     let duel = core.create_duel(5).unwrap();
-    let mut layer = CardLayer::default();
+    let mut layer = CardTracker::default();
     for (team, player) in [(0, Player::Player), (1, Player::Opponent)] {
         for code in 1..=10 {
             let card = OCG_NewCardInfo {
@@ -969,7 +969,7 @@ fn tracks_native_set_card_shuffle_with_materials() {
         location: CardLocation::SpellTrapZone,
         sequence: 0,
     };
-    let mut layer = CardLayer::default();
+    let mut layer = CardTracker::default();
     let mut ids = Vec::new();
     for (code, sequence) in [(100, 0), (101, 1), (102, 2), (103, 3), (104, 4), (105, 5)] {
         duel.add_card(
@@ -1107,7 +1107,7 @@ fn tracks_native_group_spell_sets_with_hidden_destinations() {
         location,
         sequence,
     };
-    let mut layer = CardLayer::default();
+    let mut layer = CardTracker::default();
     for (sequence, code) in [201, 202, 203].into_iter().enumerate() {
         duel.add_card(
             Player::Player,
@@ -1245,7 +1245,7 @@ fn tracks_native_hidden_shuffles_and_subsequent_draw() {
         location,
         sequence,
     };
-    let mut layer = CardLayer::default();
+    let mut layer = CardTracker::default();
     for (location, codes) in [
         (CardLocation::Deck, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
         (CardLocation::Hand, vec![101, 101, 102]),
@@ -1378,7 +1378,7 @@ fn tracks_native_bulk_removal_and_later_material_move() {
         location,
         sequence,
     };
-    let mut layer = CardLayer::default();
+    let mut layer = CardTracker::default();
     let mut grave_ids = Vec::new();
     for (code, sequence) in [(1, 0), (2, 1), (3, 2)] {
         duel.add_card(
@@ -1506,7 +1506,7 @@ fn tracks_native_bulk_removal_and_later_material_move() {
 fn rejects_native_full_removal_chunk() {
     let core = test_core();
     let duel = core.create_duel(0).unwrap();
-    let mut layer = CardLayer::default();
+    let mut layer = CardTracker::default();
     for sequence in 0..255 {
         let code = sequence + 1;
         duel.add_card(
@@ -1570,7 +1570,7 @@ fn rejects_native_direct_overlay_removal() {
         location: CardLocation::MonsterZone,
         sequence,
     };
-    let mut layer = CardLayer::default();
+    let mut layer = CardTracker::default();
     for (code, sequence) in [(100, 0), (101, 1)] {
         duel.add_card(
             Player::Player,
@@ -1669,7 +1669,7 @@ fn tracks_native_material_after_token_host_disappears() {
     ))
     .unwrap();
     let duel = core.create_duel(0).unwrap();
-    let mut layer = CardLayer::default();
+    let mut layer = CardTracker::default();
     let field = |sequence| CardAddress {
         controller: Player::Player,
         location: CardLocation::MonsterZone,
@@ -1764,7 +1764,7 @@ fn tracks_native_swap_with_overlay_materials() {
         location: CardLocation::MonsterZone,
         sequence,
     };
-    let mut layer = CardLayer::default();
+    let mut layer = CardTracker::default();
     let mut ids = Vec::new();
     for (code, sequence) in [(100, 0), (101, 1), (102, 2), (103, 3)] {
         duel.add_card(
@@ -1837,7 +1837,7 @@ fn tracks_native_control_swap() {
         location: CardLocation::MonsterZone,
         sequence,
     };
-    let mut layer = CardLayer::default();
+    let mut layer = CardTracker::default();
     let mut ids = Vec::new();
     for (team, code, sequence) in [(0, 100, 1), (1, 200, 3)] {
         let player = Player::try_from(team).unwrap();
@@ -1959,7 +1959,7 @@ fn tracks_native_position_changes_and_reveals() {
         0,
         POS_FACEUP_ATTACK,
     );
-    let mut layer = CardLayer::default();
+    let mut layer = CardTracker::default();
     let id = layer.insert(field, 100).unwrap();
     core.load_script(
         &duel,
@@ -2042,7 +2042,7 @@ fn tracks_native_flip_summon() {
         0,
         ocgcore_ffi::constants::POS_FACEDOWN_DEFENSE,
     );
-    let mut layer = CardLayer::default();
+    let mut layer = CardTracker::default();
     let id = layer.insert(field, 100).unwrap();
     duel.start();
     let mut requested = false;

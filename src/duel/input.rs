@@ -1,3 +1,4 @@
+use crate::duel::cards::CardAddress;
 use crate::ocgcore::constants::{BattlePosition, CardLocation};
 use crate::ocgcore::messages::{
     AnnounceNumberMessageData, IdleMessageData, SelectCardMessageData, SelectChainMessageData,
@@ -5,7 +6,6 @@ use crate::ocgcore::messages::{
     SortCardMessageData,
 };
 use crate::ocgcore::{CardData, Response, Zone};
-use crate::ui::card_layer::CardAddress;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum PendingInput {

@@ -1,6 +1,6 @@
+use crate::duel::cards::{CardId, CardPlacement, CardTracker};
 use crate::ocgcore::constants::{CardLocation, Player};
 use crate::ocgcore::messages::CoreMessage;
-use crate::ui::card_layer::{CardId, CardLayer, CardPlacement};
 use dioxus::prelude::*;
 
 pub(crate) const ANIMATION_MILLIS: u32 = 300;
@@ -24,7 +24,7 @@ pub(crate) struct CardAnimationState {
     pub generation: u64,
     pub moving: Vec<CardId>,
     // Previous state for preserving pile images during movement.
-    pub source: Option<CardLayer>,
+    pub source: Option<CardTracker>,
 }
 
 impl CardAnimationState {
@@ -39,14 +39,14 @@ impl CardAnimationState {
         self.source = None;
     }
 
-    pub fn begin(&mut self, moving: Vec<CardId>, source: CardLayer) {
+    pub fn begin(&mut self, moving: Vec<CardId>, source: CardTracker) {
         self.generation = self.generation.wrapping_add(1);
         self.moving = moving;
         self.source = Some(source);
         self.phase = AnimationPhase::Moving;
     }
 
-    pub fn begin_gather(&mut self, mut moving: Vec<CardId>, source: CardLayer) {
+    pub fn begin_gather(&mut self, mut moving: Vec<CardId>, source: CardTracker) {
         moving.extend(source.cards().iter().filter_map(|card| {
             matches!(card.placement, CardPlacement::Zone(address)
                 if address.controller == Player::Player && address.location == CardLocation::Hand)
@@ -83,7 +83,7 @@ impl CardAnimationState {
     }
 }
 
-fn visible(layer: &CardLayer, placement: CardPlacement) -> bool {
+fn visible(layer: &CardTracker, placement: CardPlacement) -> bool {
     let address = match placement {
         CardPlacement::Zone(address) => address,
         CardPlacement::Overlay { host, .. } => {
@@ -116,7 +116,7 @@ pub(crate) enum CardAnimation {
 }
 
 impl CardAnimation {
-    pub fn begin(self, state: &mut CardAnimationState, source: CardLayer) {
+    pub fn begin(self, state: &mut CardAnimationState, source: CardTracker) {
         match self {
             Self::Movement(moving) => state.begin(moving, source),
             Self::HandShuffle(moving) => state.begin_gather(moving, source),
@@ -126,8 +126,8 @@ impl CardAnimation {
 
 pub(crate) fn plan_animation(
     messages: &[CoreMessage],
-    before: &CardLayer,
-    after: &CardLayer,
+    before: &CardTracker,
+    after: &CardTracker,
 ) -> Option<CardAnimation> {
     let mut moving = movements(before, after);
     if messages.iter().any(|message| {
@@ -142,7 +142,7 @@ pub(crate) fn plan_animation(
     (!moving.is_empty()).then_some(CardAnimation::Movement(moving))
 }
 
-fn movements(before: &CardLayer, after: &CardLayer) -> Vec<CardId> {
+fn movements(before: &CardTracker, after: &CardTracker) -> Vec<CardId> {
     // Animate only cards visible at both ends of a transition.
     before
         .cards()
@@ -157,8 +157,8 @@ fn movements(before: &CardLayer, after: &CardLayer) -> Vec<CardId> {
         .collect()
 }
 
-fn reshuffled_hand(before: &CardLayer, after: &CardLayer) -> Option<Vec<CardId>> {
-    let hand = |layer: &CardLayer| {
+fn reshuffled_hand(before: &CardTracker, after: &CardTracker) -> Option<Vec<CardId>> {
+    let hand = |layer: &CardTracker| {
         layer
             .cards()
             .iter()

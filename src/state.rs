@@ -4,6 +4,7 @@ use rand::seq::SliceRandom;
 use std::future::pending;
 
 use crate::define_ui_state;
+use crate::duel::cards::{CardAddress, CardPlacement, CardTracker};
 use crate::duel::input::PendingInput;
 use crate::ocgcore::CardData;
 use crate::ocgcore::Duel;
@@ -16,7 +17,6 @@ use crate::ocgcore::log_core_message;
 use crate::ocgcore::messages::CoreMessage;
 use crate::settings::CustomHand;
 use crate::ui::card_animation::{CardAnimationState, plan_animation};
-use crate::ui::card_layer::{CardAddress, CardLayer, CardPlacement};
 use crate::ui::chain::ChainPlayback;
 use crate::ui::view_state::ViewState;
 use crate::utility::ARCHETYPE_SCRIPT;
@@ -55,7 +55,7 @@ pub(crate) fn select_card(address: CardAddress) {
 }
 
 define_ui_state!(UIState {
-    cards: Option<CardLayer>,
+    cards: Option<CardTracker>,
     current_phase: Option<Phase>,
     pending_input: Option<PendingInput>,
     duel_finished: bool,
@@ -178,7 +178,7 @@ pub async fn load_core(scripts: Scripts) -> anyhow::Result<OCGCore> {
 #[derive(Clone)]
 pub(crate) struct DuelSetup {
     pub duel: Duel,
-    pub cards: CardLayer,
+    pub cards: CardTracker,
 }
 
 pub(crate) async fn load_duel(
@@ -218,7 +218,7 @@ pub(crate) async fn load_duel(
         main_deck.reverse();
     }
 
-    let cards = CardLayer::from_decks(&main_deck, &EXTRA_DECK_IDS)?;
+    let cards = CardTracker::from_decks(&main_deck, &EXTRA_DECK_IDS)?;
     let duel = core.create_duel(starting_draw_count)?;
 
     for name in ["constant.lua", "utility.lua"] {
@@ -486,7 +486,7 @@ fn handle_core_messages(messages: &[CoreMessage]) -> bool {
     state.waiting_on_input()
 }
 
-fn refresh_data(layer: &mut CardLayer, duel: &Duel) -> anyhow::Result<()> {
+fn refresh_data(layer: &mut CardTracker, duel: &Duel) -> anyhow::Result<()> {
     let player = Player::Player;
     for location in [
         CardLocation::Deck,

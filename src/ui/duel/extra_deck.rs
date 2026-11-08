@@ -3,11 +3,11 @@ use dioxus::prelude::*;
 
 use super::chain_badges::ChainBadges;
 use super::constants::ZONE_SIZE;
+use crate::duel::cards::CardAddress;
 use crate::ocgcore::Response;
 use crate::ocgcore::constants::{CardLocation, Player};
 use crate::state::UIState;
 use crate::state::send_response;
-use crate::ui::card_layer::CardAddress;
 use crate::ui::chain::ChainPlayback;
 use crate::ui::components::ActionButton;
 use crate::ui::components::Card;

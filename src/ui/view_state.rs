@@ -1,9 +1,9 @@
 use dioxus::prelude::*;
 
 use crate::define_ui_state;
+use crate::duel::cards::{CardAddress, CardId, CardPlacement, CardTracker};
 use crate::ocgcore::CardData;
 use crate::ocgcore::constants::{CardLocation, Player};
-use crate::ui::card_layer::{CardAddress, CardId, CardLayer, CardPlacement};
 
 define_ui_state!(ViewState {
     selected_card: Option<CardId>,
@@ -12,14 +12,14 @@ define_ui_state!(ViewState {
 });
 
 impl ViewState {
-    pub(crate) fn is_selected(&self, address: CardAddress, cards: Option<&CardLayer>) -> bool {
+    pub(crate) fn is_selected(&self, address: CardAddress, cards: Option<&CardTracker>) -> bool {
         let selected = (self.selected_card)();
         cards
             .and_then(|cards| cards.card_at(address))
             .is_some_and(|card| Some(card.id) == selected)
     }
 
-    pub(crate) fn reconcile_selection(&mut self, cards: &CardLayer) {
+    pub(crate) fn reconcile_selection(&mut self, cards: &CardTracker) {
         let Some(id) = *self.selected_card.peek() else {
             return;
         };

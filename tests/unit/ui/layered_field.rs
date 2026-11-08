@@ -10,7 +10,7 @@ use std::rc::Rc;
 
 struct TestElement(PixelsRect);
 
-fn set_data(cards: &mut CardLayer, address: CardAddress, data: CardData) {
+fn set_data(cards: &mut CardTracker, address: CardAddress, data: CardData) {
     cards
         .cards_mut()
         .iter_mut()
@@ -44,7 +44,7 @@ impl RenderedElementBacking for TestElement {
 
 fn fixture() -> (PreviewSnapshot, LayoutAnchors) {
     let mut snapshot = PreviewSnapshot {
-        cards: CardLayer::default(),
+        cards: CardTracker::default(),
         selected: None,
     };
     let anchors = LayoutAnchors::default();
@@ -318,7 +318,7 @@ fn hand_and_piles_render_in_sequence_order() {
     let geometry = futures::executor::block_on(measure_field(&anchors)).unwrap();
     for location in [CardLocation::Hand, CardLocation::Graveyard] {
         let mut snapshot = PreviewSnapshot {
-            cards: CardLayer::default(),
+            cards: CardTracker::default(),
             selected: None,
         };
         let address = CardAddress {
@@ -386,7 +386,7 @@ fn duplicate_hand_cards_keep_identity_when_one_moves_and_the_rest_reindex() {
     let (_, anchors) = fixture();
     let geometry = futures::executor::block_on(measure_field(&anchors)).unwrap();
     let mut snapshot = PreviewSnapshot {
-        cards: CardLayer::default(),
+        cards: CardTracker::default(),
         selected: None,
     };
     for sequence in 0..3 {
@@ -403,7 +403,7 @@ fn duplicate_hand_cards_keep_identity_when_one_moves_and_the_rest_reindex() {
         let (_, anchors) = fixture();
         let geometry = futures::executor::block_on(measure_field(&anchors)).unwrap();
         let mut snapshot = PreviewSnapshot {
-            cards: CardLayer::default(),
+            cards: CardTracker::default(),
             selected: None,
         };
         for sequence in 0..2 {
@@ -532,7 +532,7 @@ fn duplicate_hand_cards_keep_identity_when_one_moves_and_the_rest_reindex() {
         let (_, anchors) = fixture();
         let geometry = futures::executor::block_on(measure_field(&anchors)).unwrap();
         let mut snapshot = PreviewSnapshot {
-            cards: CardLayer::default(),
+            cards: CardTracker::default(),
             selected: None,
         };
         let address = |location| CardAddress {
@@ -641,7 +641,7 @@ fn incoming_graveyard_cards_do_not_replace_the_stationary_pile_image() {
     let (_, anchors) = fixture();
     let geometry = futures::executor::block_on(measure_field(&anchors)).unwrap();
     let mut snapshot = PreviewSnapshot {
-        cards: CardLayer::default(),
+        cards: CardTracker::default(),
         selected: None,
     };
     let address = |location, sequence| CardAddress {
@@ -732,7 +732,7 @@ fn gathering_stacks_hand_targets_until_spread() {
     let (_, anchors) = fixture();
     let geometry = futures::executor::block_on(measure_field(&anchors)).unwrap();
     let mut snapshot = PreviewSnapshot {
-        cards: CardLayer::default(),
+        cards: CardTracker::default(),
         selected: None,
     };
     for sequence in 0..3 {
@@ -784,7 +784,7 @@ fn shuffle_gathers_original_cards_then_spreads_shuffled_cards() {
     let (_, anchors) = fixture();
     let geometry = futures::executor::block_on(measure_field(&anchors)).unwrap();
     let mut before = PreviewSnapshot {
-        cards: CardLayer::default(),
+        cards: CardTracker::default(),
         selected: None,
     };
     for (sequence, code) in [10, 20].into_iter().enumerate() {

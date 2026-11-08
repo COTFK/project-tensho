@@ -2,9 +2,9 @@ use std::collections::VecDeque;
 
 use dioxus::prelude::*;
 
+use crate::duel::cards::{CardId, CardTracker};
 use crate::ocgcore::messages::CoreMessage;
 use crate::ui::card_animation::wait_millis;
-use crate::ui::card_layer::{CardId, CardLayer};
 
 const CHAIN_FRAME_MILLIS: u32 = 600;
 
@@ -35,7 +35,7 @@ impl ChainPlayback {
         !self.frames.is_empty()
     }
 
-    pub fn record(&mut self, message: &CoreMessage, cards: &CardLayer) {
+    pub fn record(&mut self, message: &CoreMessage, cards: &CardTracker) {
         match message {
             CoreMessage::Chaining(message) => {
                 let card = match cards.card_at_location(message.location) {

@@ -1,10 +1,10 @@
 use super::*;
+use crate::duel::cards::{CardAddress, CardPlacement};
 use crate::ocgcore::constants::{CardLocation, Player};
 use crate::ocgcore::location_info::{
     CardLocationInfo, CardLocationKind, CardLocationPosition, CardPositionFlags,
 };
 use crate::ocgcore::messages::ChainLinkMessageData;
-use crate::ui::card_layer::{CardAddress, CardPlacement};
 
 fn address(location: CardLocation, sequence: u32) -> CardAddress {
     CardAddress {
@@ -39,7 +39,7 @@ fn solved(number: u8) -> CoreMessage {
 
 #[test]
 fn plays_batched_chain_in_activation_and_resolution_order() {
-    let mut cards = CardLayer::default();
+    let mut cards = CardTracker::default();
     let first = cards
         .insert(address(CardLocation::MonsterZone, 0), 1)
         .unwrap();
@@ -103,7 +103,7 @@ fn duel_failure_cancels_both_playbacks_and_invalidates_their_completions() {
         let mut state = use_context_provider(UIState::default);
         let mut animation = use_context_provider(|| Signal::new(CardAnimationState::default()));
         let mut chain = use_context_provider(|| Signal::new(ChainPlayback::default()));
-        let mut cards = CardLayer::default();
+        let mut cards = CardTracker::default();
         let card = cards.insert(address(CardLocation::Hand, 0), 1).unwrap();
         animation.write().begin(vec![card], cards.clone());
         for number in [1, 2] {
@@ -159,7 +159,7 @@ fn duel_failure_cancels_both_playbacks_and_invalidates_their_completions() {
 
 #[test]
 fn identifies_overlay_material_as_the_chain_source() {
-    let mut cards = CardLayer::default();
+    let mut cards = CardTracker::default();
     let host = cards
         .insert(address(CardLocation::MonsterZone, 0), 1)
         .unwrap();
@@ -194,7 +194,7 @@ fn identifies_overlay_material_as_the_chain_source() {
 
 #[test]
 fn retains_all_links_from_same_card_and_clears_on_chain_end() {
-    let mut cards = CardLayer::default();
+    let mut cards = CardTracker::default();
     let card = cards
         .insert(address(CardLocation::MonsterZone, 0), 1)
         .unwrap();
@@ -227,7 +227,7 @@ fn retains_all_links_from_same_card_and_clears_on_chain_end() {
 
 #[test]
 fn cancelled_or_obsolete_timers_do_not_advance_a_new_chain() {
-    let mut cards = CardLayer::default();
+    let mut cards = CardTracker::default();
     cards.insert(address(CardLocation::Hand, 0), 1).unwrap();
     let mut playback = ChainPlayback::default();
     playback.record(&chaining(1, address(CardLocation::Hand, 0)), &cards);

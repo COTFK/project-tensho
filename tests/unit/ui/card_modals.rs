@@ -1,9 +1,9 @@
 use super::*;
+use crate::duel::cards::CardTracker;
 use crate::duel::input::PendingInput;
 use crate::ocgcore::CardData;
 use crate::ocgcore::messages::{SelectCardMessageData, SortCardMessageData};
 use crate::ui::card_animation::CardAnimationState;
-use crate::ui::card_layer::CardLayer;
 use crate::ui::components::ModalSuppression;
 use dioxus::core::{AttributeValue, Mutation};
 use std::cell::RefCell;
@@ -154,7 +154,7 @@ fn playback_suppression_preserves_pending_requests_and_picker_selections() {
         dom.process_events();
 
         let mut playback = PLAYBACK.with(|slot| slot.borrow().unwrap());
-        playback.write().begin(vec![], CardLayer::default());
+        playback.write().begin(vec![], CardTracker::default());
         let suppressed = dom.render_immediate_to_vec();
         assert!(
             suppressed.edits.iter().any(|edit| matches!(

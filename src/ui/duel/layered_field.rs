@@ -6,23 +6,23 @@ use super::field::Field;
 use super::hand::{Hand, hand_transform};
 use super::layout_anchors::{AnchorNotReady, CardAnchor, LayoutAnchors, LayoutRevision};
 use super::persistent_card_layer::{CardAppearance, CardTarget, PersistentCardLayer, card_image};
+use crate::duel::cards::{Card, CardAddress, CardId, CardPlacement, CardTracker};
 use crate::ocgcore::CardData;
 use crate::ocgcore::CardType;
 use crate::ocgcore::constants::{BattlePosition, CardLocation, Player};
 use crate::state::UIState;
 use crate::ui::card_animation::{AnimationPhase, CardAnimationState, wait_millis};
-use crate::ui::card_layer::{Card, CardAddress, CardId, CardLayer, CardPlacement};
 use crate::ui::components::CardImage;
 use crate::ui::view_state::ViewState;
 use crate::utility::{card_image_url, card_thumbnail_url};
 
 #[derive(Clone, PartialEq)]
 struct PreviewSnapshot {
-    cards: CardLayer,
+    cards: CardTracker,
     selected: Option<CardId>,
 }
 
-fn snapshot(tracking: Option<CardLayer>, selected: Option<CardId>) -> Option<PreviewSnapshot> {
+fn snapshot(tracking: Option<CardTracker>, selected: Option<CardId>) -> Option<PreviewSnapshot> {
     match tracking {
         Some(cards)
             if cards.cards().iter().all(|card| {

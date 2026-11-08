@@ -1,17 +1,17 @@
 use super::*;
+use crate::duel::cards::CardTracker;
 use crate::duel::input::PendingInput;
 use crate::ocgcore::CardData;
-use crate::ui::card_layer::CardLayer;
 
 #[path = "events.rs"]
 mod events;
 
 #[test]
 fn restart_button_cancels_playback_and_clears_pending_input_and_view() {
+    use crate::duel::cards::CardAddress;
     use crate::ocgcore::constants::{CardLocation, Player};
     use crate::ocgcore::messages::CoreMessage;
     use crate::ui::card_animation::AnimationPhase;
-    use crate::ui::card_layer::CardAddress;
     use dioxus::core::{AttributeValue, Mutation};
     use std::cell::RefCell;
 
@@ -64,7 +64,7 @@ fn restart_button_cancels_playback_and_clears_pending_input_and_view() {
     let mut view = VIEW.with(|slot| slot.borrow().unwrap());
     let mut animation = ANIMATION.with(|slot| slot.borrow().unwrap());
     let mut chain = CHAIN.with(|slot| slot.borrow().unwrap());
-    let mut cards = CardLayer::default();
+    let mut cards = CardTracker::default();
     let card = cards
         .insert(
             CardAddress {
@@ -198,7 +198,7 @@ fn replaces_tracking_and_ui_state_when_a_duel_restarts() {
         let mut tracking = state.cards;
         let initial = DuelSetup {
             duel: first.clone(),
-            cards: CardLayer::from_decks(&[1, 2], &[]).unwrap(),
+            cards: CardTracker::from_decks(&[1, 2], &[]).unwrap(),
         };
         install_duel(&mut state, &mut view, &mut duel, Some(initial.clone()));
         let selected = tracking.peek().as_ref().unwrap().cards()[0].id;
@@ -223,7 +223,7 @@ fn replaces_tracking_and_ui_state_when_a_duel_restarts() {
         assert!(!view.effects_to_select_from.peek().is_empty());
         let replacement = DuelSetup {
             duel: second.clone(),
-            cards: CardLayer::from_decks(&[3], &[]).unwrap(),
+            cards: CardTracker::from_decks(&[3], &[]).unwrap(),
         };
         install_duel(&mut state, &mut view, &mut duel, Some(replacement));
         assert!(!state.waiting_on_input());
