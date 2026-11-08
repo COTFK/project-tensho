@@ -28,23 +28,30 @@ fn fixture() -> (PreviewSnapshot, PreviewGeometry) {
         selected: None,
     };
     let mut geometry = PreviewGeometry {
-        field: Vec::with_capacity(13),
+        anchors: HashMap::with_capacity(17),
         hand_base: CardAnchor {
             center_x: 550.0,
             center_y: 473.0,
             width: 100.0,
             height: 146.0,
         },
-        piles: vec![
+    };
+    for location in [
+        CardLocation::Deck,
+        CardLocation::ExtraDeck,
+        CardLocation::Graveyard,
+        CardLocation::Banishment,
+    ] {
+        geometry.anchors.insert(
+            Anchor::Pile(location),
             CardAnchor {
                 center_x: 629.5,
                 center_y: 443.0,
                 width: 59.0,
                 height: 86.0,
-            };
-            4
-        ],
-    };
+            },
+        );
+    }
     for (location, count) in [
         (CardLocation::MonsterZone, 7),
         (CardLocation::SpellTrapZone, 6),
@@ -65,14 +72,42 @@ fn fixture() -> (PreviewSnapshot, PreviewGeometry) {
                 ..Default::default()
             };
             set_data(&mut snapshot.cards, address, data);
-            geometry.field.push(CardAnchor {
-                center_x: f64::from(sequence) * 100.0 + 29.5,
-                center_y: 63.0,
-                width: 59.0,
-                height: 86.0,
-            });
+            geometry.anchors.insert(
+                Anchor::Zone(location, sequence),
+                CardAnchor {
+                    center_x: f64::from(sequence) * 100.0 + 29.5,
+                    center_y: 63.0,
+                    width: 59.0,
+                    height: 86.0,
+                },
+            );
         }
     }
+    (snapshot, geometry)
+}
+
+fn all_locations_fixture() -> (PreviewSnapshot, PreviewGeometry) {
+    let (mut snapshot, geometry) = fixture();
+    for location in [
+        CardLocation::Hand,
+        CardLocation::Deck,
+        CardLocation::ExtraDeck,
+        CardLocation::Graveyard,
+        CardLocation::Banishment,
+    ] {
+        snapshot
+            .cards
+            .insert(
+                CardAddress {
+                    controller: Player::Player,
+                    location,
+                    sequence: 0,
+                },
+                42,
+            )
+            .unwrap();
+    }
+    refresh_data(&mut snapshot);
     (snapshot, geometry)
 }
 
@@ -83,15 +118,14 @@ fn field_targets_preserve_identity_geometry_and_queried_data() {
         .cards
         .cards()
         .iter()
-        .enumerate()
-        .map(|(index, card)| {
+        .map(|card| {
             let CardPlacement::Zone(address) = card.placement else {
                 unreachable!()
             };
             CardTarget {
                 id: card.id,
                 address,
-                anchor: geometry.field[index],
+                anchor: geometry.anchors[&Anchor::Zone(address.location, address.sequence)],
                 data: card.data.unwrap(),
                 rotation: 0.0,
                 stack_order: 2,
@@ -101,6 +135,98 @@ fn field_targets_preserve_identity_geometry_and_queried_data() {
         .collect();
     assert_eq!(expected.len(), 13);
     assert_eq!(targets(&snapshot, &geometry).unwrap(), expected);
+}
+
+#[test]
+fn geometry_identity_and_target_order_do_not_depend_on_map_insertion_order() {
+    let (input, mut geometry) = all_locations_fixture();
+    let keys: Vec<_> = input
+        .cards
+        .cards()
+        .iter()
+        .filter_map(|card| {
+            let CardPlacement::Zone(address) = card.placement else {
+                unreachable!()
+            };
+            (address.location != CardLocation::Hand).then(|| Anchor::try_from(address).unwrap())
+        })
+        .collect();
+    assert_eq!(keys.len(), 17);
+    let entries: Vec<_> = keys
+        .into_iter()
+        .enumerate()
+        .map(|(index, anchor)| {
+            let index = index as f64;
+            (
+                anchor,
+                CardAnchor {
+                    center_x: 100.0 * index,
+                    center_y: 20.0 + index,
+                    width: 59.0 + index,
+                    height: 86.0 + index,
+                },
+            )
+        })
+        .collect();
+    let mut expected_targets = None::<Vec<CardTarget>>;
+    for order in 0..3 {
+        let mut ordered = entries.clone();
+        match order {
+            0 => {}
+            1 => ordered.reverse(),
+            _ => ordered.rotate_left(5),
+        }
+        geometry.anchors = ordered.into_iter().collect();
+        let actual = targets(&input, &geometry).unwrap();
+        assert_eq!(actual.len(), 18);
+        for card in input.cards.cards() {
+            let CardPlacement::Zone(address) = card.placement else {
+                unreachable!()
+            };
+            let expected_anchor = if address.location == CardLocation::Hand {
+                geometry.hand_base
+            } else {
+                let key = Anchor::try_from(address).unwrap();
+                entries.iter().find(|(anchor, _)| *anchor == key).unwrap().1
+            };
+            let target = actual.iter().find(|target| target.id == card.id).unwrap();
+            assert_eq!(target.address, address);
+            assert_eq!(target.anchor, expected_anchor);
+            assert_eq!(
+                target.rotation,
+                if address.location == CardLocation::Banishment {
+                    -90.0
+                } else {
+                    0.0
+                }
+            );
+        }
+        if let Some(expected) = &expected_targets {
+            assert_eq!(&actual, expected);
+        } else {
+            expected_targets = Some(actual);
+        }
+    }
+}
+
+#[test]
+fn missing_geometry_preserves_field_and_pile_errors() {
+    let (input, mut geometry) = all_locations_fixture();
+    let keys: Vec<_> = geometry.anchors.keys().copied().collect();
+    assert_eq!(keys.len(), 17);
+    for anchor in keys {
+        let removed = geometry.anchors.remove(&anchor).unwrap();
+        let error = targets(&input, &geometry).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            match anchor {
+                Anchor::Zone(_, _) => "Field anchor missing",
+                Anchor::Pile(_) => "Pile anchor missing",
+                Anchor::HandBase => unreachable!(),
+            }
+        );
+        geometry.anchors.insert(anchor, removed);
+    }
 }
 
 #[test]
@@ -124,24 +250,27 @@ fn invalid_or_missing_tracking_never_produces_a_snapshot() {
 
 #[test]
 fn unsupported_occupied_field_slots_fail_instead_of_disappearing() {
-    let (mut input, geometry) = fixture();
-    let address = CardAddress {
-        controller: Player::Player,
-        location: CardLocation::SpellTrapZone,
-        sequence: 6,
-    };
-    input.cards.insert(address, 1).unwrap();
-    set_data(
-        &mut input.cards,
-        address,
-        CardData {
-            card_code: 1,
-            location: CardLocation::SpellTrapZone,
-            sequence: 6,
-            ..Default::default()
-        },
-    );
-    assert!(targets(&input, &geometry).is_err());
+    for (location, sequence) in [
+        (CardLocation::MonsterZone, 7),
+        (CardLocation::SpellTrapZone, 6),
+    ] {
+        let (mut input, mut geometry) = fixture();
+        let address = CardAddress {
+            controller: Player::Player,
+            location,
+            sequence,
+        };
+        input.cards.insert(address, 1).unwrap();
+        refresh_data(&mut input);
+        geometry
+            .anchors
+            .insert(Anchor::Zone(location, sequence), geometry.hand_base);
+        let error = targets(&input, &geometry).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            format!("No visible field zone for {address:?}")
+        );
+    }
 }
 
 #[test]

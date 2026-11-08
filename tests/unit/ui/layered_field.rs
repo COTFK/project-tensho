@@ -1,5 +1,5 @@
 use super::super::card_layout::{CardAppearance, PreviewSnapshot};
-use super::super::layout_anchors::Anchor;
+use super::super::layout_anchors::{Anchor, CardAnchor};
 use super::*;
 use crate::duel::cards::CardPlacement;
 use crate::ocgcore::CardData;
@@ -109,6 +109,82 @@ fn measures_all_normal_extra_and_spell_trap_zones() {
         assert_eq!(target.anchor.center_y, 63.0);
         assert_eq!(target.rotation, 0.0);
         assert_eq!(target.appearance, CardAppearance::Interactive);
+    }
+}
+
+#[test]
+fn measurement_order_and_keyed_geometry_ignore_registration_order() {
+    use std::cell::RefCell;
+
+    struct RecordingElement {
+        anchor: Anchor,
+        rect: PixelsRect,
+        calls: Rc<RefCell<Vec<Anchor>>>,
+    }
+
+    impl RenderedElementBacking for RecordingElement {
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+
+        fn get_client_rect(&self) -> Pin<Box<dyn Future<Output = MountedResult<PixelsRect>>>> {
+            self.calls.borrow_mut().push(self.anchor);
+            let rect = self.rect;
+            Box::pin(async move { Ok(rect) })
+        }
+    }
+
+    let expected: Vec<_> = [
+        (CardLocation::MonsterZone, 7),
+        (CardLocation::SpellTrapZone, 6),
+    ]
+    .into_iter()
+    .flat_map(|(location, count)| (0..count).map(move |index| Anchor::Zone(location, index)))
+    .chain([
+        Anchor::Pile(CardLocation::Deck),
+        Anchor::Pile(CardLocation::ExtraDeck),
+        Anchor::Pile(CardLocation::Graveyard),
+        Anchor::Pile(CardLocation::Banishment),
+        Anchor::HandBase,
+    ])
+    .collect();
+    assert_eq!(expected.len(), 18);
+    let calls = Rc::new(RefCell::new(Vec::new()));
+    let anchors = LayoutAnchors::default();
+    for (index, &anchor) in expected.iter().enumerate().rev() {
+        let index = index as f64;
+        anchors.insert(
+            anchor,
+            Rc::new(()),
+            Rc::new(MountedData::new(RecordingElement {
+                anchor,
+                rect: PixelsRect::new(
+                    point2(100.0 * index, 20.0 + index),
+                    PixelsSize::new(59.0 + index, 86.0 + index),
+                ),
+                calls: calls.clone(),
+            })),
+        );
+    }
+    let geometry = futures::executor::block_on(measure_field(&anchors)).unwrap();
+    assert_eq!(*calls.borrow(), expected);
+    assert_eq!(geometry.anchors.len(), 17);
+    for (index, anchor) in expected.iter().enumerate() {
+        let index = index as f64;
+        let expected_rect = CardAnchor {
+            center_x: 100.0 * index + (59.0 + index) / 2.0,
+            center_y: 20.0 + index + (86.0 + index) / 2.0,
+            width: 59.0 + index,
+            height: 86.0 + index,
+        };
+        assert_eq!(
+            if *anchor == Anchor::HandBase {
+                geometry.hand_base
+            } else {
+                geometry.anchors[anchor]
+            },
+            expected_rect
+        );
     }
 }
 

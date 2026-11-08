@@ -1,6 +1,7 @@
 use anyhow::{Context, ensure};
+use std::collections::HashMap;
 
-use super::layout_anchors::CardAnchor;
+use super::layout_anchors::{Anchor, CardAnchor};
 use crate::duel::cards::{Card, CardAddress, CardId, CardPlacement, CardTracker};
 use crate::ocgcore::CardData;
 use crate::ocgcore::CardType;
@@ -47,9 +48,8 @@ pub(super) fn snapshot(
 }
 
 pub(super) struct PreviewGeometry {
-    pub field: Vec<CardAnchor>,
+    pub anchors: HashMap<Anchor, CardAnchor>,
     pub hand_base: CardAnchor,
-    pub piles: Vec<CardAnchor>,
 }
 
 fn hand_transform(index: usize, hand_size: usize) -> (i32, i32) {
@@ -298,17 +298,19 @@ pub(super) fn targets(
                 .with_context(|| format!("Card data is missing at {address:?}"))?;
             let (anchor, rotation, stack_order, appearance) = match location {
                 CardLocation::MonsterZone | CardLocation::SpellTrapZone => {
-                    let sequence = usize::try_from(address.sequence)?;
-                    let (offset, count) = if location == CardLocation::MonsterZone {
-                        (0, 7)
+                    let count = if location == CardLocation::MonsterZone {
+                        7
                     } else {
-                        (7, 6)
+                        6
                     };
-                    ensure!(sequence < count, "No visible field zone for {address:?}");
+                    ensure!(
+                        address.sequence < count,
+                        "No visible field zone for {address:?}"
+                    );
                     (
                         *geometry
-                            .field
-                            .get(offset + sequence)
+                            .anchors
+                            .get(&Anchor::Zone(location, address.sequence))
                             .context("Field anchor missing")?,
                         0.0,
                         2,
@@ -329,28 +331,19 @@ pub(super) fn targets(
                         CardAppearance::Interactive,
                     )
                 }
-                _ => {
-                    let pile_index = match location {
-                        CardLocation::Deck => 0,
-                        CardLocation::ExtraDeck => 1,
-                        CardLocation::Graveyard => 2,
-                        CardLocation::Banishment => 3,
-                        _ => unreachable!(),
-                    };
-                    (
-                        *geometry
-                            .piles
-                            .get(pile_index)
-                            .context("Pile anchor missing")?,
-                        if location == CardLocation::Banishment {
-                            -90.0
-                        } else {
-                            0.0
-                        },
-                        1,
-                        CardAppearance::Pile(pile_image.context("Pile image is missing")?),
-                    )
-                }
+                _ => (
+                    *geometry
+                        .anchors
+                        .get(&Anchor::Pile(location))
+                        .context("Pile anchor missing")?,
+                    if location == CardLocation::Banishment {
+                        -90.0
+                    } else {
+                        0.0
+                    },
+                    1,
+                    CardAppearance::Pile(pile_image.context("Pile image is missing")?),
+                ),
             };
             let interactive = appearance == CardAppearance::Interactive;
             targets.push(CardTarget {

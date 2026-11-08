@@ -8,7 +8,7 @@ use super::card_layout::{
 };
 use super::field::Field;
 use super::hand::Hand;
-use super::layout_anchors::{AnchorNotReady, LayoutAnchors, LayoutRevision};
+use super::layout_anchors::{Anchor, AnchorNotReady, LayoutAnchors, LayoutRevision};
 use super::persistent_card_layer::{PersistentCardLayer, card_image};
 use crate::duel::cards::{CardAddress, CardId, CardTracker};
 use crate::duel::controller::ChainLink;
@@ -55,7 +55,7 @@ fn artwork_status(
 }
 
 async fn measure_field(anchors: &LayoutAnchors) -> anyhow::Result<PreviewGeometry> {
-    let mut field = Vec::with_capacity(13);
+    let mut measured = HashMap::with_capacity(17);
     for (location, count) in [
         (CardLocation::MonsterZone, 7),
         (CardLocation::SpellTrapZone, 6),
@@ -66,7 +66,8 @@ async fn measure_field(anchors: &LayoutAnchors) -> anyhow::Result<PreviewGeometr
                 location,
                 sequence,
             };
-            field.push(
+            measured.insert(
+                Anchor::Zone(location, sequence),
                 anchors
                     .measure(address)
                     .await
@@ -74,7 +75,6 @@ async fn measure_field(anchors: &LayoutAnchors) -> anyhow::Result<PreviewGeometr
             );
         }
     }
-    let mut piles = Vec::new();
     for location in [
         CardLocation::Deck,
         CardLocation::ExtraDeck,
@@ -86,7 +86,8 @@ async fn measure_field(anchors: &LayoutAnchors) -> anyhow::Result<PreviewGeometr
             location,
             sequence: 0,
         };
-        piles.push(
+        measured.insert(
+            Anchor::Pile(location),
             anchors
                 .measure(address)
                 .await
@@ -94,8 +95,7 @@ async fn measure_field(anchors: &LayoutAnchors) -> anyhow::Result<PreviewGeometr
         );
     }
     Ok(PreviewGeometry {
-        field,
-        piles,
+        anchors: measured,
         hand_base: anchors
             .measure_hand_base()
             .await
